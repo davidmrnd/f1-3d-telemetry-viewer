@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>F1 VR Replay</title>
+    <meta
+      name="description"
+      content="Experiencia 3D inmersiva de un tramo de F1 a escala real, con datos de OpenF1. Pensado para WebXR/VR."
+    />
+  </head>
+  <body>
+    <div id="app" class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">F1 Replay</p>
+          <h1>Visualizador 3D de carrera</h1>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="viewport-card">
+          <div class="scene-shell">
+            <canvas id="race-canvas"></canvas>
+            <div class="scene-gradient"></div>
+            <div class="scene-overlay">
+              <div class="scene-overlay-left">
+                <div class="status-pill" id="status-pill">Preparando demo...</div>
+                <div class="camera-pill" id="camera-pill" hidden></div>
+              </div>
+              <div class="event-pill" id="event-pill" hidden></div>
+            </div>
+          </div>
+
+          <div class="controls">
+            <button id="play-toggle" class="control-button">Pausar</button>
+            <button id="reset-button" class="control-button secondary">Reiniciar</button>
+            <label class="timeline-wrap">
+              <span id="time-readout">00:00.0 / 00:00.0</span>
+              <input id="timeline" type="range" min="0" max="1000" value="0" />
+            </label>
+            <label class="speed-wrap">
+              <span>Velocidad</span>
+              <select id="speed-select">
+                <option value="0.5">0.5x</option>
+                <option value="1" selected>1x</option>
+                <option value="1.5">1.5x</option>
+                <option value="2">2x</option>
+              </select>
+            </label>
+            <label class="camera-wrap">
+              <span>Cámara</span>
+              <select id="camera-mode-select">
+                <option value="broadcast" selected>Retransmisión</option>
+                <option value="onboard">On-board piloto</option>
+                <option value="orbit">Libre (orbit)</option>
+              </select>
+            </label>
+            <label class="camera-wrap" id="camera-driver-wrap" hidden>
+              <span>Piloto</span>
+              <select id="camera-driver-select"></select>
+            </label>
+          </div>
+        </section>
+
+        <aside class="sidebar">
+          <section class="panel">
+            <p class="panel-kicker">Sesion</p>
+            <h2 id="session-title">Cargando meeting...</h2>
+            <dl class="facts">
+              <div>
+                <dt>Circuito</dt>
+                <dd id="session-circuit">-</dd>
+              </div>
+              <div>
+                <dt>Ventana</dt>
+                <dd id="session-window">-</dd>
+              </div>
+              <div>
+                <dt>Evento</dt>
+                <dd id="session-event">Buscando cambio de posicion...</dd>
+              </div>
+              <div>
+                <dt>Calidad</dt>
+                <dd>Coordenadas aproximadas, utiles para analisis visual.</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <p class="panel-kicker">Telemetria</p>
+                <h2>Drivers en pista</h2>
+              </div>
+              <div class="mini-tag" id="car-count-tag">- coches</div>
+            </div>
+            <div id="driver-list" class="driver-list"></div>
+          </section>
+        </aside>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
