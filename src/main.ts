@@ -24,6 +24,8 @@ const ui = {
   cameraModeSelect: mustQuery<HTMLSelectElement>("#camera-mode-select"),
   cameraDriverSelect: mustQuery<HTMLSelectElement>("#camera-driver-select"),
   cameraDriverWrap: mustQuery<HTMLElement>("#camera-driver-wrap"),
+  fullscreenButton: mustQuery<HTMLButtonElement>("#fullscreen-button"),
+  sceneShell: mustQuery<HTMLElement>(".scene-shell"),
   timeline: mustQuery<HTMLInputElement>("#timeline"),
   timeReadout: mustQuery<HTMLSpanElement>("#time-readout"),
   sessionTitle: mustQuery<HTMLElement>("#session-title"),

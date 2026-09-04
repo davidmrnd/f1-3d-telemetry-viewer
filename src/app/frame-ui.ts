@@ -23,7 +23,7 @@ export function paintFrame(
 
   const cameraLabel = scene.getActiveCameraLabel();
   const mode = scene.getCameraMode();
-  if ((mode === "broadcast" || mode === "onboard") && cameraLabel) {
+  if ((mode === "broadcast" || mode === "onboard" || mode === "orbit") && cameraLabel) {
     elements.cameraPill.hidden = false;
     elements.cameraPill.textContent = cameraLabel;
   } else {

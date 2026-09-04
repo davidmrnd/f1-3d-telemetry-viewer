@@ -3,6 +3,7 @@ import type { ReplayFrame } from "../types";
 import type { ReplayApp } from "./replay-app";
 import type { RaceScene } from "../scene/race-scene";
 import { syncCameraDriverSelectVisibility } from "./camera-controls";
+import { bindViewportFullscreen } from "./viewport-fullscreen";
 
 export type ControlElements = {
   playToggle: HTMLButtonElement;
@@ -12,6 +13,8 @@ export type ControlElements = {
   cameraModeSelect: HTMLSelectElement;
   cameraDriverSelect: HTMLSelectElement;
   cameraDriverWrap: HTMLElement;
+  fullscreenButton: HTMLButtonElement;
+  sceneShell: HTMLElement;
 };
 
 export function bindControls(
@@ -29,11 +32,24 @@ export function bindControls(
     cameraModeSelect,
     cameraDriverSelect,
     cameraDriverWrap,
+    fullscreenButton,
+    sceneShell,
   } = elements;
+
+  const fullscreen = bindViewportFullscreen(sceneShell, fullscreenButton);
+
+  const syncFreeModeChrome = (mode: CameraMode) => {
+    const free = mode === "orbit";
+    fullscreenButton.hidden = !free;
+    if (!free && fullscreen.isActive()) {
+      void fullscreen.exit();
+    }
+  };
 
   const applyCameraMode = (mode: CameraMode) => {
     scene.setCameraMode(mode);
     syncCameraDriverSelectVisibility(mode, cameraDriverWrap);
+    syncFreeModeChrome(mode);
     const controller = replay.getController();
     if (controller) {
       onFrame(controller.getFrame(replay.currentTime));

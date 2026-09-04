@@ -28,7 +28,18 @@
                 <div class="status-pill" id="status-pill">Preparando demo...</div>
                 <div class="camera-pill" id="camera-pill" hidden></div>
               </div>
-              <div class="event-pill" id="event-pill" hidden></div>
+              <div class="scene-overlay-right">
+                <div class="event-pill" id="event-pill" hidden></div>
+                <button
+                  id="fullscreen-button"
+                  class="scene-chrome-button"
+                  type="button"
+                  title="Pantalla completa"
+                  hidden
+                >
+                  Pantalla completa
+                </button>
+              </div>
             </div>
           </div>
 
@@ -53,7 +64,7 @@
               <select id="camera-mode-select">
                 <option value="broadcast" selected>Retransmisión</option>
                 <option value="onboard">On-board piloto</option>
-                <option value="orbit">Libre (orbit)</option>
+                <option value="orbit">Libre (vuelo)</option>
               </select>
             </label>
             <label class="camera-wrap" id="camera-driver-wrap" hidden>

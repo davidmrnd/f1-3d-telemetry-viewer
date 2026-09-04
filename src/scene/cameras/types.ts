@@ -7,7 +7,7 @@ export type CameraMode = "broadcast" | "orbit" | "onboard";
 
 export const CAMERA_MODE_LABELS: Record<CameraMode, string> = {
   broadcast: "Retransmisión",
-  orbit: "Libre (orbit)",
+  orbit: "Libre (vuelo)",
   onboard: "On-board piloto",
 };
 
