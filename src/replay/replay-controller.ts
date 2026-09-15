@@ -131,7 +131,7 @@ export class ReplayController {
         return {
           driver,
           sample,
-          heading: resolveCarHeading(samples, previous, next, sample, previousIndex, nextIndex),
+          heading: resolveCarHeading(samples, previousIndex, nextIndex, ratio),
         };
       })
       .filter(Boolean) as FrameCarState[];
