@@ -197,7 +197,7 @@ input {
 
 .controls {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto auto auto;
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto auto auto;
   gap: 12px;
   align-items: center;
   padding: 14px;
@@ -218,6 +218,18 @@ input {
 .control-button.secondary {
   color: #dce6f0;
   background: #1b2733;
+}
+
+.control-button.vr-button {
+  border-color: #4a7a9a;
+  background: #1a3348;
+  color: #d7ecff;
+}
+
+.control-button.vr-button.is-xr-active {
+  border-color: #6a9a5a;
+  background: #243a28;
+  color: #e8f5e4;
 }
 
 .timeline-wrap,

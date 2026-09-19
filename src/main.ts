@@ -1,6 +1,7 @@
 import "./style.css";
 
 import { bindControls } from "./app/bind-controls";
+import { bindXr } from "./app/bind-xr";
 import { populateCameraDriverSelect } from "./app/camera-controls";
 import { mustQuery } from "./app/dom";
 import { DriverListView } from "./app/driver-list-view";
@@ -20,6 +21,7 @@ const ui = {
   cameraPill: mustQuery<HTMLDivElement>("#camera-pill"),
   playToggle: mustQuery<HTMLButtonElement>("#play-toggle"),
   resetButton: mustQuery<HTMLButtonElement>("#reset-button"),
+  enterVrButton: mustQuery<HTMLButtonElement>("#enter-vr"),
   speedSelect: mustQuery<HTMLSelectElement>("#speed-select"),
   cameraModeSelect: mustQuery<HTMLSelectElement>("#camera-mode-select"),
   cameraDriverSelect: mustQuery<HTMLSelectElement>("#camera-driver-select"),
@@ -48,12 +50,21 @@ const render = (frame: Parameters<typeof paintFrame>[0]) => {
   const controller = replay.getController();
   if (!controller) return;
   paintFrame(frame, controller.getDuration(), scene, driverList, ui);
+  const duration = controller.getDuration();
+  scene.syncVrMenuState({
+    normalizedTime: duration > 0 ? frame.now / duration : 0,
+    timeLabel: ui.timeReadout.textContent ?? "",
+    playing: replay.playing,
+    speed: replay.speed,
+    cameraMode: scene.getCameraMode(),
+    followDriver: scene.getFollowDriver(),
+  });
 };
 
-function loop(now: number) {
-  requestAnimationFrame(loop);
+function tick(now: number) {
   if (!replay.getController()) {
     scene.update({ now: 0, normalized: 0, cars: [], activeEvent: null });
+    scene.render();
     return;
   }
   const frame = replay.tick(now - lastTick);
@@ -61,11 +72,14 @@ function loop(now: number) {
   if (frame) {
     render(frame);
     syncPlayButton(replay.playing);
+  } else {
+    scene.render();
   }
 }
 
 async function bootstrap() {
   bindControls(replay, scene, ui, render, syncPlayButton);
+  bindXr(replay, scene, ui, render, syncPlayButton);
   window.addEventListener("resize", () => scene.resize());
   ui.statusPill.textContent = "Cargando datos del replay...";
 
@@ -98,4 +112,6 @@ async function bootstrap() {
 }
 
 void bootstrap();
-requestAnimationFrame(loop);
+scene.setAnimationLoop((time) => {
+  tick(time);
+});

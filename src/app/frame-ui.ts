@@ -12,11 +12,17 @@ export type FrameUiElements = {
 export function paintFrame(
   frame: ReplayFrame,
   duration: number,
-  scene: { update(frame: ReplayFrame): void; getActiveCameraLabel(): string; getCameraMode(): string },
+  scene: {
+    update(frame: ReplayFrame): void;
+    render(): void;
+    getActiveCameraLabel(): string;
+    getCameraMode(): string;
+  },
   driverList: DriverListView,
   elements: FrameUiElements,
 ) {
   scene.update(frame);
+  scene.render();
   driverList.update(frame);
   elements.timeline.value = String(Math.round(frame.normalized * 1000));
   elements.timeReadout.textContent = `${formatReplayTime(frame.now)} / ${formatReplayTime(duration)}`;

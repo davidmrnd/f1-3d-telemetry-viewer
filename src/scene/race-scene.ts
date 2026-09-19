@@ -25,11 +25,28 @@ import {
 import { RaceCameraController } from "./cameras/race-camera-controller";
 import type { CameraMode } from "./cameras/types";
 import type { FrameCarState, ReplayFrame, ReplaySegment } from "../types";
+import { XrRig } from "./xr/xr-rig";
+import { XrSessionController } from "./xr/xr-session";
+import { XrControllers } from "./xr/xr-controllers";
+import { VrMenu, type VrMenuDriverOption, type VrMenuState } from "./xr/vr-menu";
+import { tryTeleportAlongRay } from "./xr/xr-teleport";
 
 interface CarVisual {
   group: THREE.Group;
   label: THREE.Sprite;
 }
+
+export type RaceSceneXrHooks = {
+  onSessionStart?: () => void;
+  onSessionEnd?: () => void;
+  getMenuState?: () => VrMenuState;
+  onTogglePlay?: () => void;
+  onReset?: () => void;
+  onSeek?: (ratio: number) => void;
+  onSetSpeed?: (speed: number) => void;
+  onSetCameraMode?: (mode: CameraMode) => void;
+  onSetFollowDriver?: (driverNumber: number) => void;
+};
 
 export class RaceScene {
   private readonly scene = new THREE.Scene();
@@ -45,6 +62,14 @@ export class RaceScene {
   private transform: SceneTransform | null = null;
   private readonly cameraController = new RaceCameraController();
   private lastUpdateMs = performance.now();
+
+  private readonly xrRig = new XrRig();
+  private readonly xrSession: XrSessionController;
+  private readonly xrControllers: XrControllers;
+  private vrMenu: VrMenu | null = null;
+  private xrHooks: RaceSceneXrHooks = {};
+  private selectHeld = [false, false];
+  private driversForMenu: VrMenuDriverOption[] = [];
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -63,11 +88,13 @@ export class RaceScene {
     this.controls.minDistance = 2;
     this.controls.maxDistance = 1800;
 
+    this.scene.add(this.xrRig.worldRoot);
+
     const ambient = new THREE.AmbientLight("#eef2f8", 0.45);
-    this.scene.add(ambient);
+    this.xrRig.worldRoot.add(ambient);
 
     const hemi = new THREE.HemisphereLight("#dbeafe", "#4a5568", 0.75);
-    this.scene.add(hemi);
+    this.xrRig.worldRoot.add(hemi);
 
     const key = new THREE.DirectionalLight("#fff8f0", 2.2);
     key.position.set(180, 320, 120);
@@ -79,11 +106,11 @@ export class RaceScene {
     key.shadow.camera.right = 400;
     key.shadow.camera.top = 400;
     key.shadow.camera.bottom = -400;
-    this.scene.add(key);
+    this.xrRig.worldRoot.add(key);
 
     const fill = new THREE.DirectionalLight("#c8d8f0", 0.55);
     fill.position.set(-120, 80, -160);
-    this.scene.add(fill);
+    this.xrRig.worldRoot.add(fill);
 
     const fallbackGroundMaterial = new THREE.MeshStandardMaterial({
       color: "#3d5a40",
@@ -103,12 +130,12 @@ export class RaceScene {
     this.groundBase.position.y = -3;
     this.groundBase.receiveShadow = true;
     this.groundBase.renderOrder = -1;
-    this.scene.add(this.groundBase);
+    this.xrRig.worldRoot.add(this.groundBase);
 
     this.ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), fallbackGroundMaterial.clone());
     this.ground.receiveShadow = true;
     this.ground.renderOrder = 0;
-    this.scene.add(this.ground);
+    this.xrRig.worldRoot.add(this.ground);
 
     this.eventBeacon = new THREE.Mesh(
       new THREE.TorusGeometry(2.2, 0.12, 16, 64),
@@ -120,10 +147,49 @@ export class RaceScene {
     );
     this.eventBeacon.rotation.x = Math.PI / 2;
     this.eventBeacon.visible = false;
-    this.scene.add(this.eventBeacon);
-    this.scene.add(this.root);
+    this.xrRig.worldRoot.add(this.eventBeacon);
+    this.xrRig.worldRoot.add(this.root);
+
+    this.xrSession = new XrSessionController(this.renderer, {
+      onSessionStart: () => this.handleXrSessionStart(),
+      onSessionEnd: () => this.handleXrSessionEnd(),
+    });
+
+    this.xrControllers = new XrControllers(this.renderer, {
+      onMenuButton: () => this.toggleVrMenu(),
+      onSelectStart: (index) => this.handleSelectStart(index),
+      onSelectEnd: (index) => {
+        this.selectHeld[index] = false;
+      },
+    });
+    this.xrControllers.setVisible(false);
+    this.scene.add(this.xrControllers.group);
 
     this.cameraController.setMode("broadcast", this.controls);
+  }
+
+  setXrHooks(hooks: RaceSceneXrHooks) {
+    this.xrHooks = hooks;
+  }
+
+  getRenderer(): THREE.WebGLRenderer {
+    return this.renderer;
+  }
+
+  isXrPresenting(): boolean {
+    return this.xrSession.isPresenting();
+  }
+
+  async enterVr(): Promise<void> {
+    await this.xrSession.enterVr();
+  }
+
+  async exitVr(): Promise<void> {
+    await this.xrSession.exitVr();
+  }
+
+  setAnimationLoop(callback: XRFrameRequestCallback | null) {
+    this.renderer.setAnimationLoop(callback);
   }
 
   initTrackEnvironment() {
@@ -222,6 +288,9 @@ export class RaceScene {
   }
 
   resize() {
+    if (this.renderer.xr.isPresenting) {
+      return;
+    }
     const width = this.canvas.clientWidth;
     const height = this.canvas.clientHeight;
     if (width === 0 || height === 0) {
@@ -258,6 +327,11 @@ export class RaceScene {
     this.carVisuals.clear();
     const transform = buildTransform(segment);
     this.transform = transform;
+
+    this.driversForMenu = segment.drivers.map((driver) => ({
+      driverNumber: driver.driverNumber,
+      label: driver.acronym || driver.fullName || `#${driver.driverNumber}`,
+    }));
 
     const { path: pathPoints, closed } = buildVisualCircuitPath(
       buildTrackCenterline(segment).map((point) => vectorFromPoint(point, transform)),
@@ -318,14 +392,20 @@ export class RaceScene {
     if (this.cameraController.getMode() === "orbit") {
       this.framePreviewCamera(samplePoints);
     }
+
+    if (this.vrMenu) {
+      this.vrMenu.setState({ drivers: this.driversForMenu });
+    }
   }
 
   setCameraMode(mode: CameraMode) {
     this.cameraController.setMode(mode, this.controls);
+    this.vrMenu?.setState({ cameraMode: mode });
   }
 
   setFollowDriver(driverNumber: number) {
     this.cameraController.setFollowDriver(driverNumber);
+    this.vrMenu?.setState({ followDriver: driverNumber });
   }
 
   getFollowDriver(): number | null {
@@ -340,15 +420,20 @@ export class RaceScene {
     return this.cameraController.getActiveLabel();
   }
 
+  syncVrMenuState(partial: Partial<VrMenuState>) {
+    this.vrMenu?.setState(partial);
+  }
+
+  /** Actualiza simulación y cámara; no renderiza (usar con setAnimationLoop). */
   update(frame: ReplayFrame) {
     const nowMs = performance.now();
     const deltaSeconds = Math.min((nowMs - this.lastUpdateMs) / 1000, 0.1);
     this.lastUpdateMs = nowMs;
 
     this.resize();
+    const xrPresenting = this.renderer.xr.isPresenting;
     const transform = this.transform;
     if (!transform) {
-      this.renderer.render(this.scene, this.camera);
       return;
     }
 
@@ -385,7 +470,139 @@ export class RaceScene {
       this.eventBeacon.visible = false;
     }
 
-    this.cameraController.update(visualPlacements, this.camera, this.controls, deltaSeconds);
+    if (xrPresenting) {
+      this.controls.enabled = false;
+    }
+
+    this.cameraController.update(
+      visualPlacements,
+      this.camera,
+      this.controls,
+      deltaSeconds,
+      xrPresenting,
+    );
+
+    if (xrPresenting) {
+      this.xrRig.applyDesiredCamera(this.camera);
+      this.xrControllers.update();
+      this.updateSelectHold();
+      this.vrMenu?.update();
+    }
+  }
+
+  render() {
     this.renderer.render(this.scene, this.camera);
+  }
+
+  private ensureVrMenu() {
+    if (this.vrMenu) {
+      return this.vrMenu;
+    }
+
+    const initial: VrMenuState = this.xrHooks.getMenuState?.() ?? {
+      playing: true,
+      normalizedTime: 0,
+      timeLabel: "00:00.0 / 00:00.0",
+      speed: 1,
+      cameraMode: this.getCameraMode(),
+      followDriver: this.getFollowDriver(),
+      drivers: this.driversForMenu,
+    };
+
+    this.vrMenu = new VrMenu(
+      {
+        onTogglePlay: () => this.xrHooks.onTogglePlay?.(),
+        onReset: () => this.xrHooks.onReset?.(),
+        onSeek: (ratio) => this.xrHooks.onSeek?.(ratio),
+        onSetSpeed: (speed) => this.xrHooks.onSetSpeed?.(speed),
+        onSetCameraMode: (mode) => this.xrHooks.onSetCameraMode?.(mode),
+        onSetFollowDriver: (driverNumber) => this.xrHooks.onSetFollowDriver?.(driverNumber),
+        onClose: () => this.vrMenu?.setOpen(false),
+      },
+      initial,
+    );
+    this.scene.add(this.vrMenu.group);
+    return this.vrMenu;
+  }
+
+  private toggleVrMenu() {
+    if (!this.isXrPresenting()) {
+      return;
+    }
+    const menu = this.ensureVrMenu();
+    const opening = !menu.isOpen();
+    if (opening) {
+      const state = this.xrHooks.getMenuState?.();
+      if (state) {
+        menu.setState(state);
+      }
+      const xrCamera = this.renderer.xr.getCamera();
+      menu.placeInFrontOf(xrCamera);
+    }
+    menu.setOpen(opening);
+  }
+
+  private handleSelectStart(controllerIndex: number) {
+    this.selectHeld[controllerIndex] = true;
+    if (!this.isXrPresenting()) {
+      return;
+    }
+
+    const raycaster = this.xrControllers.getRaycaster(controllerIndex);
+    if (!raycaster) {
+      return;
+    }
+
+    const menu = this.vrMenu;
+    if (menu?.isOpen()) {
+      if (menu.handleRaycast(raycaster)) {
+        return;
+      }
+    }
+
+    if (this.getCameraMode() === "orbit" && !menu?.isOpen()) {
+      this.xrRig.worldRoot.updateMatrixWorld(true);
+      tryTeleportAlongRay(raycaster, this.camera, [this.ground, this.groundBase, this.root]);
+      this.xrRig.applyDesiredCamera(this.camera);
+    }
+  }
+
+  private updateSelectHold() {
+    const menu = this.vrMenu;
+    if (!menu?.isOpen()) {
+      return;
+    }
+    for (let i = 0; i < this.selectHeld.length; i += 1) {
+      if (!this.selectHeld[i]) {
+        continue;
+      }
+      const raycaster = this.xrControllers.getRaycaster(i);
+      if (raycaster) {
+        menu.handleRaycastHold(raycaster);
+      }
+    }
+  }
+
+  private handleXrSessionStart() {
+    this.xrRig.setActive(true);
+    this.xrControllers.setVisible(true);
+    this.controls.enabled = false;
+    this.ensureVrMenu();
+    this.xrHooks.onSessionStart?.();
+  }
+
+  private handleXrSessionEnd() {
+    this.xrRig.setActive(false);
+    this.xrRig.reset();
+    this.xrControllers.setVisible(false);
+    this.vrMenu?.setOpen(false);
+    this.selectHeld = [false, false];
+    if (this.getCameraMode() !== "orbit" && this.getCameraMode() !== "onboard") {
+      this.controls.enabled = false;
+    }
+    
+    this.cameraController.setMode(this.getCameraMode(), this.controls);
+    this.resize();
+    this.xrHooks.onSessionEnd?.();
   }
 }

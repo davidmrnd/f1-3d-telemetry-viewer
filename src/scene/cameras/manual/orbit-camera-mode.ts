@@ -78,6 +78,11 @@ export class OrbitCameraMode implements CameraModeHandler {
   }
 
   update(context: CameraUpdateContext): string {
+    if (context.xrPresenting) {
+      this.pointer?.unlock();
+      return "Libre · apuntar al suelo + trigger para teleport";
+    }
+
     this.ensurePointer(context);
 
     if (!this.pointer?.isLocked) {

@@ -58,12 +58,14 @@ export class RaceCameraController {
     camera: Parameters<CameraModeHandler["update"]>[0]["camera"],
     controls: OrbitControls,
     deltaSeconds: number,
+    xrPresenting = false,
   ) {
     this.activeLabel = this.handlers[this.mode].update({
       placements,
       camera,
       controls,
       deltaSeconds,
+      xrPresenting,
     });
   }
 }

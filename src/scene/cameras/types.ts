@@ -16,6 +16,8 @@ export interface CameraUpdateContext {
   camera: THREE.PerspectiveCamera;
   controls: OrbitControls;
   deltaSeconds: number;
+  /** Sesión WebXR activa: el modo libre no usa pointer-lock/WASD. */
+  xrPresenting?: boolean;
 }
 
 /** Contrato común para cada modo en su subcarpeta (`automatic/`, `manual/`, `onboard/`). */
