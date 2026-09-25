@@ -60,6 +60,7 @@ export class VrMenu {
   private layout: LayoutRect[] = [];
   private open = false;
   private needsRedraw = true;
+  private scrubbing = false;
 
   constructor(actions: VrMenuActions, initial: VrMenuState) {
     this.actions = actions;
@@ -112,6 +113,11 @@ export class VrMenu {
   setOpen(open: boolean) {
     this.open = open;
     this.group.visible = open;
+    if (!open) this.scrubbing = false;
+  }
+
+  endPointer() {
+    this.scrubbing = false;
   }
 
   toggle(): boolean {
@@ -168,48 +174,26 @@ export class VrMenu {
   }
 
   handleRaycast(raycaster: THREE.Raycaster): boolean {
-    if (!this.open) {
-      return false;
-    }
-    const hits = raycaster.intersectObject(this.hitMesh, false);
-    if (hits.length === 0) {
-      return false;
-    }
-    const uv = hits[0].uv;
-    if (!uv) {
-      return false;
-    }
-    const px = uv.x * CANVAS_W;
-    const py = (1 - uv.y) * CANVAS_H;
-    const zone = this.hitTest(px, py);
-    if (!zone) {
-      return false;
-    }
+    if (!this.open) return false;
+    const uv = raycaster.intersectObject(this.hitMesh, false)[0]?.uv;
+    if (!uv) return false;
+    const zone = this.hitTest(uv.x * CANVAS_W, (1 - uv.y) * CANVAS_H);
+    if (!zone) return false;
+    this.scrubbing = zone.id === "seek";
     this.activateZone(zone);
     return true;
   }
 
   handleRaycastHold(raycaster: THREE.Raycaster): boolean {
-    if (!this.open) {
-      return false;
-    }
-    const hits = raycaster.intersectObject(this.hitMesh, false);
-    if (hits.length === 0) {
-      return false;
-    }
-    const uv = hits[0].uv;
-    if (!uv) {
-      return false;
-    }
-    const px = uv.x * CANVAS_W;
-    const py = (1 - uv.y) * CANVAS_H;
-    const zone = this.hitTest(px, py);
-    if (zone?.id === "seek") {
-      this.actions.onSeek(zone.ratio);
-      this.setState({ normalizedTime: zone.ratio });
-      return true;
-    }
-    return false;
+    if (!this.open || !this.scrubbing) return false;
+    const uv = raycaster.intersectObject(this.hitMesh, false)[0]?.uv;
+    if (!uv) return false;
+    const bar = this.layout.find((r) => r.zone.id === "seek");
+    if (!bar) return false;
+    const ratio = Math.max(0, Math.min(1, (uv.x * CANVAS_W - bar.x) / bar.w));
+    this.setState({ normalizedTime: ratio });
+    this.actions.onSeek(ratio);
+    return true;
   }
 
   private activateZone(zone: HitZone) {

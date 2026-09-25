@@ -77,16 +77,13 @@ export function bindXr(
       }
     },
     onSeek: (ratio) => {
-      const frame = replay.seek(ratio);
+      replay.seek(ratio);
       timeline.value = String(Math.round(ratio * 1000));
-      if (frame) {
-        onFrame(frame);
-        const duration = replay.getController()?.getDuration() ?? 0;
-        scene.syncVrMenuState({
-          normalizedTime: ratio,
-          timeLabel: `${formatReplayTime(replay.currentTime)} / ${formatReplayTime(duration)}`,
-        });
-      }
+      const duration = replay.getController()?.getDuration() ?? 0;
+      scene.syncVrMenuState({
+        normalizedTime: ratio,
+        timeLabel: `${formatReplayTime(replay.currentTime)} / ${formatReplayTime(duration)}`,
+      });
     },
     onSetSpeed: (speed) => {
       replay.setSpeed(speed);

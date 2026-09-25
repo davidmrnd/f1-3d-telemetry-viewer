@@ -69,6 +69,7 @@ export class RaceScene {
   private vrMenu: VrMenu | null = null;
   private xrHooks: RaceSceneXrHooks = {};
   private selectHeld = [false, false];
+  private selectHoldBusy = false;
   private driversForMenu: VrMenuDriverOption[] = [];
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -160,6 +161,7 @@ export class RaceScene {
       onSelectStart: (index) => this.handleSelectStart(index),
       onSelectEnd: (index) => {
         this.selectHeld[index] = false;
+        this.vrMenu?.endPointer();
       },
     });
     this.xrControllers.setVisible(false);
@@ -190,6 +192,14 @@ export class RaceScene {
 
   setAnimationLoop(callback: XRFrameRequestCallback | null) {
     this.renderer.setAnimationLoop(callback);
+  }
+
+  pollXrInput() {
+    if (!this.renderer.xr.isPresenting) {
+      return;
+    }
+    this.xrControllers.update();
+    this.updateSelectHold();
   }
 
   initTrackEnvironment() {
@@ -484,8 +494,6 @@ export class RaceScene {
 
     if (xrPresenting) {
       this.xrRig.applyDesiredCamera(this.camera);
-      this.xrControllers.update();
-      this.updateSelectHold();
       this.vrMenu?.update();
     }
   }
@@ -569,17 +577,22 @@ export class RaceScene {
 
   private updateSelectHold() {
     const menu = this.vrMenu;
-    if (!menu?.isOpen()) {
+    if (!menu?.isOpen() || this.selectHoldBusy) {
       return;
     }
-    for (let i = 0; i < this.selectHeld.length; i += 1) {
-      if (!this.selectHeld[i]) {
-        continue;
+    this.selectHoldBusy = true;
+    try {
+      for (let i = 0; i < this.selectHeld.length; i += 1) {
+        if (!this.selectHeld[i]) {
+          continue;
+        }
+        const raycaster = this.xrControllers.getRaycaster(i);
+        if (raycaster) {
+          menu.handleRaycastHold(raycaster);
+        }
       }
-      const raycaster = this.xrControllers.getRaycaster(i);
-      if (raycaster) {
-        menu.handleRaycastHold(raycaster);
-      }
+    } finally {
+      this.selectHoldBusy = false;
     }
   }
 

@@ -113,5 +113,6 @@ async function bootstrap() {
 
 void bootstrap();
 scene.setAnimationLoop((time) => {
+  scene.pollXrInput();
   tick(time);
 });
