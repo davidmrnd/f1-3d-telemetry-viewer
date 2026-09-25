@@ -457,6 +457,7 @@ export class RaceScene {
 
       visual.group.position.copy(position);
       visual.group.rotation.y = carHeadingToRotationY(car.heading);
+      visual.group.rotation.x = -car.pitch;
       visual.label.visible = frame.activeEvent?.drivers.includes(car.driver.driverNumber) ?? false;
     });
 

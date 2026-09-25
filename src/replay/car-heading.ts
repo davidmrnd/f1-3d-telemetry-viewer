@@ -16,6 +16,17 @@ export function computeMovementHeading(
   return Math.atan2(dz, dx);
 }
 
+export function computeMovementPitch(
+  from: { x: number; y: number; z: number },
+  to: { x: number; y: number; z: number },
+): number | null {
+  const horizontal = Math.hypot(to.x - from.x, to.z - from.z);
+  if (horizontal * horizontal < MIN_DIST_SQ) {
+    return null;
+  }
+  return Math.atan2(to.y - from.y, horizontal);
+}
+
 function shortestAngleDelta(from: number, to: number): number {
   let delta = to - from;
   while (delta > Math.PI) {
@@ -37,9 +48,9 @@ function distSq(a: { x: number; z: number }, b: { x: number; z: number }): numbe
   return dx * dx + dz * dz;
 }
 
-export function headingAtSampleIndex(samples: CarSample[], index: number): number {
+function findLookaheadPair(samples: CarSample[], index: number): [CarSample, CarSample] | null {
   if (samples.length === 0) {
-    return 0;
+    return null;
   }
 
   const clamped = Math.max(0, Math.min(samples.length - 1, index));
@@ -47,31 +58,65 @@ export function headingAtSampleIndex(samples: CarSample[], index: number): numbe
 
   for (let i = clamped + 1; i < samples.length; i++) {
     if (distSq(from, samples[i]) >= LOOKAHEAD_DIST_SQ) {
-      return computeMovementHeading(from, samples[i]) ?? 0;
+      return [from, samples[i]];
     }
   }
 
   for (let i = samples.length - 1; i > clamped; i--) {
-    const heading = computeMovementHeading(from, samples[i]);
-    if (heading !== null) {
-      return heading;
+    if (distSq(from, samples[i]) >= MIN_DIST_SQ) {
+      return [from, samples[i]];
     }
   }
 
   for (let i = clamped - 1; i >= 0; i--) {
     if (distSq(samples[i], from) >= LOOKAHEAD_DIST_SQ) {
-      return computeMovementHeading(samples[i], from) ?? 0;
+      return [samples[i], from];
     }
   }
 
   for (let i = clamped - 1; i >= 0; i--) {
-    const heading = computeMovementHeading(samples[i], from);
-    if (heading !== null) {
-      return heading;
+    if (distSq(samples[i], from) >= MIN_DIST_SQ) {
+      return [samples[i], from];
     }
   }
 
-  return 0;
+  return null;
+}
+
+export function orientationAtSampleIndex(
+  samples: CarSample[],
+  index: number,
+): { heading: number; pitch: number } {
+  const pair = findLookaheadPair(samples, index);
+  if (!pair) {
+    return { heading: 0, pitch: 0 };
+  }
+  return {
+    heading: computeMovementHeading(pair[0], pair[1]) ?? 0,
+    pitch: computeMovementPitch(pair[0], pair[1]) ?? 0,
+  };
+}
+
+export function headingAtSampleIndex(samples: CarSample[], index: number): number {
+  return orientationAtSampleIndex(samples, index).heading;
+}
+
+export function resolveCarOrientation(
+  samples: CarSample[],
+  previousIndex: number,
+  nextIndex: number,
+  ratio: number,
+): { heading: number; pitch: number } {
+  const previous = orientationAtSampleIndex(samples, previousIndex);
+  if (previousIndex === nextIndex) {
+    return previous;
+  }
+
+  const next = orientationAtSampleIndex(samples, nextIndex);
+  return {
+    heading: lerpAngle(previous.heading, next.heading, ratio),
+    pitch: previous.pitch + (next.pitch - previous.pitch) * ratio,
+  };
 }
 
 export function resolveCarHeading(
@@ -80,11 +125,5 @@ export function resolveCarHeading(
   nextIndex: number,
   ratio: number,
 ): number {
-  const headingPrevious = headingAtSampleIndex(samples, previousIndex);
-  if (previousIndex === nextIndex) {
-    return headingPrevious;
-  }
-
-  const headingNext = headingAtSampleIndex(samples, nextIndex);
-  return lerpAngle(headingPrevious, headingNext, ratio);
+  return resolveCarOrientation(samples, previousIndex, nextIndex, ratio).heading;
 }

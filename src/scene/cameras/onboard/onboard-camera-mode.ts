@@ -4,11 +4,8 @@ import type { DriverInfo } from "../../../types";
 import type { BaseCarPlacement } from "../../car-placement";
 import type { CameraModeHandler, CameraUpdateContext } from "../types";
 
-/** Altura del casco respecto al suelo del coche (m). */
 const HELMET_HEIGHT_METERS = 1.05;
-/** Pequeño avance desde el centro del monoplaza (m). */
 const COCKPIT_FORWARD_OFFSET_METERS = 0.35;
-/** Punto de mira adelante (m). */
 const LOOK_AHEAD_METERS = 55;
 const SMOOTHING_RATE = 12;
 
@@ -54,7 +51,7 @@ export class OnboardCameraMode implements CameraModeHandler {
     }
 
     const { car, position } = target;
-    const forward = forwardFromHeading(car.heading);
+    const forward = forwardFromHeading(car.heading, car.pitch);
     const eye = position
       .clone()
       .add(new THREE.Vector3(0, HELMET_HEIGHT_METERS, 0))
@@ -104,6 +101,11 @@ export class OnboardCameraMode implements CameraModeHandler {
   }
 }
 
-function forwardFromHeading(heading: number): THREE.Vector3 {
-  return new THREE.Vector3(Math.cos(heading), 0, Math.sin(heading)).normalize();
+function forwardFromHeading(heading: number, pitch = 0): THREE.Vector3 {
+  const cosPitch = Math.cos(pitch);
+  return new THREE.Vector3(
+    Math.cos(heading) * cosPitch,
+    Math.sin(pitch),
+    Math.sin(heading) * cosPitch,
+  ).normalize();
 }

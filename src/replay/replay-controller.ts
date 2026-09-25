@@ -1,4 +1,4 @@
-import { resolveCarHeading } from "./car-heading";
+import { resolveCarOrientation } from "./car-heading";
 import type {
   CarSample,
   DriverInfo,
@@ -131,7 +131,7 @@ export class ReplayController {
         return {
           driver,
           sample,
-          heading: resolveCarHeading(samples, previousIndex, nextIndex, ratio),
+          ...resolveCarOrientation(samples, previousIndex, nextIndex, ratio),
         };
       })
       .filter(Boolean) as FrameCarState[];

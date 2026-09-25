@@ -88,6 +88,7 @@ export interface FrameCarState {
   driver: DriverInfo;
   sample: CarSample;
   heading: number;
+  pitch: number;
 }
 
 export interface ReplayFrame {

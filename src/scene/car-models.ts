@@ -205,6 +205,7 @@ export function createCarVisual(driver: DriverInfo, sceneLength = CAR_TEMPLATE_L
 
   const lengthScale = sceneLength / CAR_TEMPLATE_LENGTH;
   const anchor = new THREE.Group();
+  anchor.rotation.order = "YXZ";
   const model = preparedTemplate.clone(true);
   model.scale.multiplyScalar(lengthScale);
   const carHeight = alignCarToGround(model);
