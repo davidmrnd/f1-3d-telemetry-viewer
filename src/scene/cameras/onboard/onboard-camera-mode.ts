@@ -1,19 +1,16 @@
 import * as THREE from "three";
 import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { DriverInfo } from "../../../types";
+import { carHeadingToRotationY } from "../../car-models";
 import type { BaseCarPlacement } from "../../car-placement";
 import type { CameraModeHandler, CameraUpdateContext } from "../types";
 
-const HELMET_HEIGHT_METERS = 1.05;
-const COCKPIT_FORWARD_OFFSET_METERS = 0.35;
-const LOOK_AHEAD_METERS = 55;
-const SMOOTHING_RATE = 12;
+const HELMET_HEIGHT_METERS = 1;
+const COCKPIT_FORWARD_OFFSET_METERS = -0.20;
+const LOOK_AHEAD_METERS = 50;
 
 export class OnboardCameraMode implements CameraModeHandler {
   private followDriverNumber: number | null = null;
-  private readonly smoothedPosition = new THREE.Vector3();
-  private readonly smoothedLookAt = new THREE.Vector3();
-  private initialized = false;
 
   setDrivers(drivers: DriverInfo[]) {
     if (this.followDriverNumber !== null) {
@@ -24,7 +21,6 @@ export class OnboardCameraMode implements CameraModeHandler {
 
   setFollowDriver(driverNumber: number) {
     this.followDriverNumber = driverNumber;
-    this.initialized = false;
   }
 
   getFollowDriver(): number | null {
@@ -33,14 +29,11 @@ export class OnboardCameraMode implements CameraModeHandler {
 
   onActivate(controls: OrbitControls) {
     controls.enabled = false;
-    this.initialized = false;
   }
 
   onDeactivate() {}
 
-  reset() {
-    this.initialized = false;
-  }
+  reset() {}
 
   update(context: CameraUpdateContext): string {
     context.controls.enabled = false;
@@ -51,26 +44,17 @@ export class OnboardCameraMode implements CameraModeHandler {
     }
 
     const { car, position } = target;
-    const forward = forwardFromHeading(car.heading, car.pitch);
+    const flatForward = new THREE.Vector3(Math.cos(car.heading), 0, Math.sin(car.heading));
     const eye = position
       .clone()
       .add(new THREE.Vector3(0, HELMET_HEIGHT_METERS, 0))
-      .add(forward.clone().multiplyScalar(COCKPIT_FORWARD_OFFSET_METERS));
-    const lookAt = eye.clone().add(forward.multiplyScalar(LOOK_AHEAD_METERS));
+      .add(flatForward.multiplyScalar(COCKPIT_FORWARD_OFFSET_METERS));
 
-    if (!this.initialized) {
-      this.smoothedPosition.copy(eye);
-      this.smoothedLookAt.copy(lookAt);
-      this.initialized = true;
-    } else {
-      const alpha = 1 - Math.exp(-SMOOTHING_RATE * context.deltaSeconds);
-      this.smoothedPosition.lerp(eye, alpha);
-      this.smoothedLookAt.lerp(lookAt, alpha);
-    }
-
-    context.camera.position.copy(this.smoothedPosition);
-    context.controls.target.copy(this.smoothedLookAt);
-    context.controls.update();
+    context.camera.position.copy(eye);
+    context.camera.rotation.order = "YXZ";
+    context.camera.rotation.set(car.pitch, carHeadingToRotationY(car.heading) + Math.PI, 0);
+    const lookDir = new THREE.Vector3(0, 0, -1).applyQuaternion(context.camera.quaternion);
+    context.controls.target.copy(eye).addScaledVector(lookDir, LOOK_AHEAD_METERS);
 
     return `On-board ${car.driver.acronym}`;
   }
@@ -99,13 +83,4 @@ export class OnboardCameraMode implements CameraModeHandler {
 
     return leader ?? null;
   }
-}
-
-function forwardFromHeading(heading: number, pitch = 0): THREE.Vector3 {
-  const cosPitch = Math.cos(pitch);
-  return new THREE.Vector3(
-    Math.cos(heading) * cosPitch,
-    Math.sin(pitch),
-    Math.sin(heading) * cosPitch,
-  ).normalize();
 }
