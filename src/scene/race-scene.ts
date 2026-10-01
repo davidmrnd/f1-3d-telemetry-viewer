@@ -24,7 +24,7 @@ import {
 } from "./track-environment";
 import { RaceCameraController } from "./cameras/race-camera-controller";
 import type { CameraMode } from "./cameras/types";
-import type { FrameCarState, ReplayFrame, ReplaySegment } from "../types";
+import type { FrameCarState, ReplayFrame, ReplaySegment, StartingGridSlot } from "../types";
 import { XrRig } from "./xr/xr-rig";
 import { XrSessionController } from "./xr/xr-session";
 import { XrControllers } from "./xr/xr-controllers";
@@ -60,6 +60,7 @@ export class RaceScene {
   private readonly groundBase: THREE.Mesh;
 
   private transform: SceneTransform | null = null;
+  private startingGrid: StartingGridSlot[] = [];
   private readonly cameraController = new RaceCameraController();
   private lastUpdateMs = performance.now();
 
@@ -337,6 +338,7 @@ export class RaceScene {
     this.carVisuals.clear();
     const transform = buildTransform(segment);
     this.transform = transform;
+    this.startingGrid = segment.startingGrid ?? [];
 
     this.driversForMenu = segment.drivers.map((driver) => ({
       driverNumber: driver.driverNumber,
@@ -447,7 +449,9 @@ export class RaceScene {
       return;
     }
 
-    const visualPlacements = buildVisualPlacements(frame, transform);
+    const visualPlacements = buildVisualPlacements(frame, transform, {
+      startingGrid: this.startingGrid,
+    });
 
     visualPlacements.forEach(({ car, position }) => {
       const visual = this.carVisuals.get(car.driver.driverNumber);

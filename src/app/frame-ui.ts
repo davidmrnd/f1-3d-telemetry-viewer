@@ -9,6 +9,31 @@ export type FrameUiElements = {
   cameraPill: HTMLDivElement;
 };
 
+function trackPhaseLabel(frame: ReplayFrame) {
+  const phase = frame.trackStatus?.phase;
+  switch (phase) {
+    case "formation":
+      return "Vuelta de formación";
+    case "standing_start":
+      return "Parrilla de salida";
+    case "pre_session": {
+      const stationary =
+        frame.cars.length > 0 && frame.cars.every((car) => car.sample.speed <= 5);
+      return stationary ? "Parrilla de salida" : null;
+    }
+    case "yellow":
+      return "Bandera amarilla";
+    case "safety_car":
+      return "Safety car";
+    case "red":
+      return "Bandera roja";
+    case "finished":
+      return "Finalizada";
+    default:
+      return null;
+  }
+}
+
 export function paintFrame(
   frame: ReplayFrame,
   duration: number,
@@ -41,7 +66,13 @@ export function paintFrame(
     elements.eventPill.hidden = false;
     elements.eventPill.textContent = frame.activeEvent.label;
   } else {
-    elements.eventPill.hidden = true;
-    elements.eventPill.textContent = "";
+    const phaseLabel = trackPhaseLabel(frame);
+    if (phaseLabel) {
+      elements.eventPill.hidden = false;
+      elements.eventPill.textContent = phaseLabel;
+    } else {
+      elements.eventPill.hidden = true;
+      elements.eventPill.textContent = "";
+    }
   }
 }

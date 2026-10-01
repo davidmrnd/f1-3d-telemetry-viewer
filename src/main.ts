@@ -63,7 +63,7 @@ const render = (frame: Parameters<typeof paintFrame>[0]) => {
 
 function tick(now: number) {
   if (!replay.getController()) {
-    scene.update({ now: 0, normalized: 0, cars: [], activeEvent: null });
+    scene.update({ now: 0, normalized: 0, cars: [], activeEvent: null, trackStatus: null });
     scene.render();
     return;
   }

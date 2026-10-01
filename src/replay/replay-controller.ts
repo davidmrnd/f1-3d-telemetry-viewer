@@ -6,6 +6,7 @@ import type {
   ReplayEvent,
   ReplayFrame,
   ReplaySegment,
+  TrackStatusInterval,
 } from "../types";
 
 function lerp(a: number, b: number, t: number) {
@@ -94,6 +95,17 @@ function getActiveEvent(events: ReplayEvent[], t: number) {
   return events.find((event) => t >= event.startTime && t <= event.endTime) ?? null;
 }
 
+function getActiveTrackStatus(intervals: TrackStatusInterval[], t: number): TrackStatusInterval | null {
+  if (intervals.length === 0) {
+    return null;
+  }
+  return (
+    intervals.find((interval) => t >= interval.start && t < interval.end) ??
+    intervals.find((interval) => t === interval.end) ??
+    null
+  );
+}
+
 export class ReplayController {
   private readonly duration: number;
   private readonly samplesByDriver: Map<number, CarSample[]>;
@@ -147,6 +159,7 @@ export class ReplayController {
       normalized: this.duration === 0 ? 0 : clampedTime / this.duration,
       cars,
       activeEvent: getActiveEvent(this.segment.events, clampedTime),
+      trackStatus: getActiveTrackStatus(this.segment.trackStatus ?? [], clampedTime),
     };
   }
 }

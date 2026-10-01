@@ -74,12 +74,48 @@ export interface ReplayTimeRange {
   endIso: string;
 }
 
+export interface RaceControlEvent {
+  t: number;
+  isoTime: string;
+  category: string;
+  flag: string | null;
+  message: string;
+  scope: string | null;
+  lapNumber: number | null;
+  driverNumber: number | null;
+}
+
+export interface StartingGridSlot {
+  driverNumber: number;
+  position: number;
+}
+
+export type TrackPhase =
+  | "pre_session"
+  | "formation"
+  | "standing_start"
+  | "racing"
+  | "yellow"
+  | "safety_car"
+  | "red"
+  | "finished";
+
+export interface TrackStatusInterval {
+  start: number;
+  end: number;
+  phase: TrackPhase;
+  flag: string | null;
+}
+
 export interface ReplaySegment {
   sessionRef: SessionRef;
   drivers: DriverInfo[];
   timeRange: ReplayTimeRange;
   samples: Record<number, CarSample[]>;
   events: ReplayEvent[];
+  raceControl: RaceControlEvent[];
+  startingGrid: StartingGridSlot[];
+  trackStatus: TrackStatusInterval[];
   circuit: CircuitModel;
   notes: string[];
 }
@@ -96,5 +132,6 @@ export interface ReplayFrame {
   normalized: number;
   cars: FrameCarState[];
   activeEvent: ReplayEvent | null;
+  trackStatus: TrackStatusInterval | null;
 }
 
