@@ -102,6 +102,84 @@
           </section>
 
           <section class="panel">
+            <p class="panel-kicker">Graficos</p>
+            <h2>Calidad visual</h2>
+            <label class="graphics-field">
+              <span>Preset</span>
+              <select id="graphics-preset-select">
+                <option value="low">Baja</option>
+                <option value="medium">Media</option>
+                <option value="high" selected>Alta</option>
+                <option value="custom" disabled>Personalizado</option>
+              </select>
+            </label>
+            <button
+              id="graphics-advanced-toggle"
+              class="control-button secondary graphics-advanced-toggle"
+              type="button"
+              aria-expanded="false"
+            >
+              Avanzado
+            </button>
+            <div id="graphics-advanced-panel" class="graphics-advanced" hidden>
+              <label class="graphics-field">
+                <span>Resolucion</span>
+                <select id="graphics-pixel-ratio-select">
+                  <option value="0.75">0.75x</option>
+                  <option value="1">1x</option>
+                  <option value="1.25">1.25x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="2">2x</option>
+                </select>
+              </label>
+              <label class="graphics-field">
+                <span>Escala VR</span>
+                <select id="graphics-xr-scale-select">
+                  <option value="0.5">0.5x</option>
+                  <option value="0.75">0.75x</option>
+                  <option value="1">1x</option>
+                </select>
+              </label>
+              <label class="graphics-field">
+                <span>Sombras</span>
+                <select id="graphics-shadows-select">
+                  <option value="off">Off</option>
+                  <option value="low">Baja</option>
+                  <option value="high">Alta</option>
+                </select>
+              </label>
+              <label class="graphics-field">
+                <span>Sombras coches</span>
+                <select id="graphics-car-shadows-select">
+                  <option value="on">On</option>
+                  <option value="off">Off</option>
+                </select>
+              </label>
+              <label class="graphics-field">
+                <span>Materiales coches</span>
+                <select id="graphics-car-materials-select">
+                  <option value="pbr">PBR</option>
+                  <option value="simple">Simple</option>
+                </select>
+              </label>
+              <label class="graphics-field">
+                <span>Entorno HDRI</span>
+                <select id="graphics-environment-select">
+                  <option value="on">On</option>
+                  <option value="off">Off</option>
+                </select>
+              </label>
+              <label class="graphics-field">
+                <span>Niebla</span>
+                <select id="graphics-fog-select">
+                  <option value="on">On</option>
+                  <option value="off">Off</option>
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <section class="panel">
             <div class="panel-head">
               <div>
                 <p class="panel-kicker">Telemetria</p>

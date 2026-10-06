@@ -1,5 +1,19 @@
 import * as THREE from "three";
 import type { CameraMode } from "../cameras/types";
+import {
+  CAR_MATERIAL_LABELS,
+  DEFAULT_GRAPHICS_SETTINGS,
+  GRAPHICS_PRESET_LABELS,
+  PIXEL_RATIO_OPTIONS,
+  settingsFromPreset,
+  SHADOW_QUALITY_LABELS,
+  withDetectedPreset,
+  XR_SCALE_OPTIONS,
+  type CarMaterialQuality,
+  type GraphicsPreset,
+  type GraphicsSettings,
+  type ShadowQuality,
+} from "../graphics-settings";
 
 export type VrMenuDriverOption = {
   driverNumber: number;
@@ -14,6 +28,7 @@ export type VrMenuState = {
   cameraMode: CameraMode;
   followDriver: number | null;
   drivers: VrMenuDriverOption[];
+  graphics: GraphicsSettings;
 };
 
 export type VrMenuActions = {
@@ -23,8 +38,11 @@ export type VrMenuActions = {
   onSetSpeed: (speed: number) => void;
   onSetCameraMode: (mode: CameraMode) => void;
   onSetFollowDriver: (driverNumber: number) => void;
+  onSetGraphicsSettings: (settings: GraphicsSettings) => void;
   onClose: () => void;
 };
+
+type MenuPage = "main" | "graphics";
 
 type HitZone =
   | { id: "play" }
@@ -33,20 +51,33 @@ type HitZone =
   | { id: "seek"; ratio: number }
   | { id: "speed"; value: number }
   | { id: "camera"; mode: CameraMode }
-  | { id: "driver"; driverNumber: number };
+  | { id: "driver"; driverNumber: number }
+  | { id: "openGraphics" }
+  | { id: "back" }
+  | { id: "preset"; preset: GraphicsPreset }
+  | { id: "pixelRatio"; value: number }
+  | { id: "shadows"; value: ShadowQuality }
+  | { id: "environment"; value: boolean }
+  | { id: "fog"; value: boolean }
+  | { id: "xrScale"; value: number }
+  | { id: "carMaterials"; value: CarMaterialQuality }
+  | { id: "carShadows"; value: boolean };
 
 type LayoutRect = { x: number; y: number; w: number; h: number; zone: HitZone };
 
-const PANEL_WIDTH_M = 1.15;
-const PANEL_HEIGHT_M = 0.92;
+const PANEL_WIDTH_M = 1.25;
+const PANEL_HEIGHT_M = 1.4;
 const CANVAS_W = 1024;
-const CANVAS_H = 820;
+const CANVAS_H = 1280;
 const SPEEDS = [0.5, 1, 1.5, 2];
 const CAMERA_OPTIONS: { mode: CameraMode; label: string }[] = [
   { mode: "broadcast", label: "Retransmisión" },
   { mode: "onboard", label: "On-board" },
   { mode: "orbit", label: "Libre" },
 ];
+const PRESETS: GraphicsPreset[] = ["low", "medium", "high"];
+const SHADOWS: ShadowQuality[] = ["off", "low", "high"];
+const CAR_MATERIALS: CarMaterialQuality[] = ["pbr", "simple"];
 
 export class VrMenu {
   readonly group = new THREE.Group();
@@ -61,10 +92,15 @@ export class VrMenu {
   private open = false;
   private needsRedraw = true;
   private scrubbing = false;
+  private page: MenuPage = "main";
 
   constructor(actions: VrMenuActions, initial: VrMenuState) {
     this.actions = actions;
-    this.state = { ...initial, drivers: [...initial.drivers] };
+    this.state = {
+      ...initial,
+      drivers: [...initial.drivers],
+      graphics: { ...(initial.graphics ?? DEFAULT_GRAPHICS_SETTINGS) },
+    };
 
     this.canvas = document.createElement("canvas");
     this.canvas.width = CANVAS_W;
@@ -113,7 +149,12 @@ export class VrMenu {
   setOpen(open: boolean) {
     this.open = open;
     this.group.visible = open;
-    if (!open) this.scrubbing = false;
+    if (!open) {
+      this.scrubbing = false;
+      this.page = "main";
+      this.rebuildLayout();
+      this.needsRedraw = true;
+    }
   }
 
   endPointer() {
@@ -140,11 +181,24 @@ export class VrMenu {
 
   setState(partial: Partial<VrMenuState>) {
     const nextDrivers = partial.drivers ? [...partial.drivers] : this.state.drivers;
+    const nextGraphics = partial.graphics
+      ? { ...partial.graphics }
+      : this.state.graphics;
     const next: VrMenuState = {
       ...this.state,
       ...partial,
       drivers: nextDrivers,
+      graphics: nextGraphics,
     };
+    const graphicsChanged =
+      next.graphics.preset !== this.state.graphics.preset ||
+      next.graphics.maxPixelRatio !== this.state.graphics.maxPixelRatio ||
+      next.graphics.shadows !== this.state.graphics.shadows ||
+      next.graphics.environment !== this.state.graphics.environment ||
+      next.graphics.fog !== this.state.graphics.fog ||
+      next.graphics.xrScale !== this.state.graphics.xrScale ||
+      next.graphics.carMaterials !== this.state.graphics.carMaterials ||
+      next.graphics.carShadows !== this.state.graphics.carShadows;
     const changed =
       next.playing !== this.state.playing ||
       next.normalizedTime !== this.state.normalizedTime ||
@@ -152,9 +206,10 @@ export class VrMenu {
       next.speed !== this.state.speed ||
       next.cameraMode !== this.state.cameraMode ||
       next.followDriver !== this.state.followDriver ||
-      next.drivers !== this.state.drivers;
+      next.drivers !== this.state.drivers ||
+      graphicsChanged;
     this.state = next;
-    if (partial.drivers || partial.cameraMode !== undefined) {
+    if (partial.drivers || partial.cameraMode !== undefined || graphicsChanged) {
       this.rebuildLayout();
     }
     if (changed) {
@@ -223,6 +278,85 @@ export class VrMenu {
         this.actions.onSetFollowDriver(zone.driverNumber);
         this.setState({ followDriver: zone.driverNumber });
         break;
+      case "openGraphics":
+        this.page = "graphics";
+        this.rebuildLayout();
+        this.needsRedraw = true;
+        break;
+      case "back":
+        this.page = "main";
+        this.rebuildLayout();
+        this.needsRedraw = true;
+        break;
+      case "preset": {
+        const settings = settingsFromPreset(zone.preset);
+        this.actions.onSetGraphicsSettings(settings);
+        this.setState({ graphics: settings });
+        break;
+      }
+      case "pixelRatio": {
+        const settings = withDetectedPreset({
+          ...this.state.graphics,
+          maxPixelRatio: zone.value,
+        });
+        this.actions.onSetGraphicsSettings(settings);
+        this.setState({ graphics: settings });
+        break;
+      }
+      case "shadows": {
+        const settings = withDetectedPreset({
+          ...this.state.graphics,
+          shadows: zone.value,
+        });
+        this.actions.onSetGraphicsSettings(settings);
+        this.setState({ graphics: settings });
+        break;
+      }
+      case "environment": {
+        const settings = withDetectedPreset({
+          ...this.state.graphics,
+          environment: zone.value,
+        });
+        this.actions.onSetGraphicsSettings(settings);
+        this.setState({ graphics: settings });
+        break;
+      }
+      case "fog": {
+        const settings = withDetectedPreset({
+          ...this.state.graphics,
+          fog: zone.value,
+        });
+        this.actions.onSetGraphicsSettings(settings);
+        this.setState({ graphics: settings });
+        break;
+      }
+      case "xrScale": {
+        const settings = withDetectedPreset({
+          ...this.state.graphics,
+          xrScale: zone.value,
+        });
+        this.actions.onSetGraphicsSettings(settings);
+        this.setState({ graphics: settings });
+        break;
+      }
+      case "carMaterials": {
+        const settings = withDetectedPreset({
+          ...this.state.graphics,
+          carMaterials: zone.value,
+        });
+        this.actions.onSetGraphicsSettings(settings);
+        this.setState({ graphics: settings });
+        break;
+      }
+      case "carShadows": {
+        const settings = withDetectedPreset({
+          ...this.state.graphics,
+          carShadows: zone.value,
+        });
+        this.actions.onSetGraphicsSettings(settings);
+        this.setState({ graphics: settings });
+        break;
+      }
       default:
         break;
     }
@@ -242,6 +376,10 @@ export class VrMenu {
   }
 
   private rebuildLayout() {
+    this.layout = this.page === "graphics" ? this.buildGraphicsLayout() : this.buildMainLayout();
+  }
+
+  private buildMainLayout(): LayoutRect[] {
     const layout: LayoutRect[] = [];
     const pad = 36;
     let y = 90;
@@ -276,6 +414,15 @@ export class VrMenu {
     });
     y += 100;
 
+    layout.push({
+      x: pad,
+      y,
+      w: 280,
+      h: 56,
+      zone: { id: "openGraphics" },
+    });
+    y += 80;
+
     if (this.state.cameraMode === "onboard") {
       this.state.drivers.slice(0, 8).forEach((driver, index) => {
         const col = index % 4;
@@ -290,7 +437,87 @@ export class VrMenu {
       });
     }
 
-    this.layout = layout;
+    return layout;
+  }
+
+  private buildGraphicsLayout(): LayoutRect[] {
+    const layout: LayoutRect[] = [];
+    const pad = 36;
+    const rowH = 48;
+    const rowGap = 78;
+    let y = 90;
+
+    layout.push({ x: pad, y, w: 200, h: 52, zone: { id: "back" } });
+    layout.push({ x: CANVAS_W - pad - 160, y, w: 160, h: 52, zone: { id: "close" } });
+    y += 84;
+
+    PRESETS.forEach((preset, index) => {
+      layout.push({
+        x: pad + index * 240,
+        y,
+        w: 220,
+        h: rowH,
+        zone: { id: "preset", preset },
+      });
+    });
+    y += rowGap;
+
+    PIXEL_RATIO_OPTIONS.forEach((value, index) => {
+      layout.push({
+        x: pad + (index % 5) * 190,
+        y,
+        w: 170,
+        h: rowH,
+        zone: { id: "pixelRatio", value },
+      });
+    });
+    y += rowGap;
+
+    XR_SCALE_OPTIONS.forEach((value, index) => {
+      layout.push({
+        x: pad + index * 240,
+        y,
+        w: 220,
+        h: rowH,
+        zone: { id: "xrScale", value },
+      });
+    });
+    y += rowGap;
+
+    SHADOWS.forEach((value, index) => {
+      layout.push({
+        x: pad + index * 240,
+        y,
+        w: 220,
+        h: rowH,
+        zone: { id: "shadows", value },
+      });
+    });
+    y += rowGap;
+
+    layout.push({ x: pad, y, w: 220, h: rowH, zone: { id: "carShadows", value: true } });
+    layout.push({ x: pad + 240, y, w: 220, h: rowH, zone: { id: "carShadows", value: false } });
+    y += rowGap;
+
+    CAR_MATERIALS.forEach((value, index) => {
+      layout.push({
+        x: pad + index * 240,
+        y,
+        w: 220,
+        h: rowH,
+        zone: { id: "carMaterials", value },
+      });
+    });
+    y += rowGap;
+
+    layout.push({ x: pad, y, w: 220, h: rowH, zone: { id: "environment", value: true } });
+    layout.push({ x: pad + 240, y, w: 220, h: rowH, zone: { id: "environment", value: false } });
+    y += rowGap;
+
+    layout.push({ x: pad, y, w: 220, h: rowH, zone: { id: "fog", value: true } });
+    layout.push({ x: pad + 240, y, w: 220, h: rowH, zone: { id: "fog", value: false } });
+
+    return layout;
   }
 
   private draw() {
@@ -306,19 +533,45 @@ export class VrMenu {
     this.roundRect(20, 20, CANVAS_W - 40, CANVAS_H - 40, 28);
     ctx.stroke();
 
-    ctx.fillStyle = "#e8eef5";
-    ctx.font = "700 42px Segoe UI, sans-serif";
-    ctx.fillText("Menú VR", 48, 70);
+    if (this.page === "graphics") {
+      this.drawGraphicsLabels();
+    } else {
+      ctx.fillStyle = "#e8eef5";
+      ctx.font = "700 42px Segoe UI, sans-serif";
+      ctx.fillText("Menú VR", 48, 70);
 
-    ctx.font = "500 28px Segoe UI, sans-serif";
-    ctx.fillStyle = "#9db0c4";
-    ctx.fillText(this.state.timeLabel, 280, 68);
+      ctx.font = "500 28px Segoe UI, sans-serif";
+      ctx.fillStyle = "#9db0c4";
+      ctx.fillText(this.state.timeLabel, 280, 68);
+    }
 
     for (const rect of this.layout) {
       this.drawZone(rect);
     }
 
     this.texture.needsUpdate = true;
+  }
+
+  private drawGraphicsLabels() {
+    const { ctx, state } = this;
+    ctx.fillStyle = "#e8eef5";
+    ctx.font = "700 42px Segoe UI, sans-serif";
+    ctx.fillText("Gráficos", 260, 70);
+
+    ctx.fillStyle = "#9db0c4";
+    ctx.font = "600 20px Segoe UI, sans-serif";
+    ctx.fillText("Preset", 48, 160);
+    ctx.fillText("Resolución", 48, 238);
+    ctx.fillText("Escala VR", 48, 316);
+    ctx.fillText("Sombras", 48, 394);
+    ctx.fillText("Sombras coches", 48, 472);
+    ctx.fillText("Materiales coches", 48, 550);
+    ctx.fillText("Entorno HDRI", 48, 628);
+    ctx.fillText("Niebla", 48, 706);
+
+    ctx.fillStyle = "#7aa2c8";
+    ctx.font = "500 22px Segoe UI, sans-serif";
+    ctx.fillText(GRAPHICS_PRESET_LABELS[state.graphics.preset], 780, 70);
   }
 
   private drawZone(rect: LayoutRect) {
@@ -355,6 +608,44 @@ export class VrMenu {
         active = state.followDriver === zone.driverNumber;
         break;
       }
+      case "openGraphics":
+        label = "Gráficos";
+        break;
+      case "back":
+        label = "Volver";
+        break;
+      case "preset":
+        label = GRAPHICS_PRESET_LABELS[zone.preset];
+        active = state.graphics.preset === zone.preset;
+        break;
+      case "pixelRatio":
+        label = `${zone.value}x`;
+        active = state.graphics.maxPixelRatio === zone.value;
+        break;
+      case "shadows":
+        label = SHADOW_QUALITY_LABELS[zone.value];
+        active = state.graphics.shadows === zone.value;
+        break;
+      case "environment":
+        label = zone.value ? "On" : "Off";
+        active = state.graphics.environment === zone.value;
+        break;
+      case "fog":
+        label = zone.value ? "On" : "Off";
+        active = state.graphics.fog === zone.value;
+        break;
+      case "xrScale":
+        label = `${zone.value}x`;
+        active = state.graphics.xrScale === zone.value;
+        break;
+      case "carMaterials":
+        label = CAR_MATERIAL_LABELS[zone.value];
+        active = state.graphics.carMaterials === zone.value;
+        break;
+      case "carShadows":
+        label = zone.value ? "On" : "Off";
+        active = state.graphics.carShadows === zone.value;
+        break;
       default:
         break;
     }

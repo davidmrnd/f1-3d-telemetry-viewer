@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { buildVisualPlacements } from "./car-placement";
-import { carHeadingToRotationY, createCarVisual } from "./car-models";
+import { applyCarVisualQuality, carHeadingToRotationY, createCarVisual } from "./car-models";
 import {
   buildTrackCenterline,
   buildTransform,
@@ -24,12 +24,20 @@ import {
 } from "./track-environment";
 import { RaceCameraController } from "./cameras/race-camera-controller";
 import type { CameraMode } from "./cameras/types";
+import {
+  DEFAULT_GRAPHICS_SETTINGS,
+  type GraphicsSettings,
+} from "./graphics-settings";
 import type { FrameCarState, ReplayFrame, ReplaySegment, StartingGridSlot } from "../types";
 import { XrRig } from "./xr/xr-rig";
 import { XrSessionController } from "./xr/xr-session";
 import { XrControllers } from "./xr/xr-controllers";
 import { VrMenu, type VrMenuDriverOption, type VrMenuState } from "./xr/vr-menu";
 import { tryTeleportAlongRay } from "./xr/xr-teleport";
+
+const FOG_COLOR = "#c5d4e4";
+const FOG_NEAR = 400;
+const FOG_FAR = 2400;
 
 interface CarVisual {
   group: THREE.Group;
@@ -46,6 +54,7 @@ export type RaceSceneXrHooks = {
   onSetSpeed?: (speed: number) => void;
   onSetCameraMode?: (mode: CameraMode) => void;
   onSetFollowDriver?: (driverNumber: number) => void;
+  onSetGraphicsSettings?: (settings: GraphicsSettings) => void;
 };
 
 export class RaceScene {
@@ -58,11 +67,14 @@ export class RaceScene {
   private readonly eventBeacon: THREE.Mesh;
   private readonly ground: THREE.Mesh;
   private readonly groundBase: THREE.Mesh;
+  private readonly keyLight: THREE.DirectionalLight;
 
   private transform: SceneTransform | null = null;
   private startingGrid: StartingGridSlot[] = [];
   private readonly cameraController = new RaceCameraController();
   private lastUpdateMs = performance.now();
+  private environmentMap: THREE.Texture | null = null;
+  private graphicsSettings: GraphicsSettings = { ...DEFAULT_GRAPHICS_SETTINGS };
 
   private readonly xrRig = new XrRig();
   private readonly xrSession: XrSessionController;
@@ -98,17 +110,17 @@ export class RaceScene {
     const hemi = new THREE.HemisphereLight("#dbeafe", "#4a5568", 0.75);
     this.xrRig.worldRoot.add(hemi);
 
-    const key = new THREE.DirectionalLight("#fff8f0", 2.2);
-    key.position.set(180, 320, 120);
-    key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
-    key.shadow.camera.near = 1;
-    key.shadow.camera.far = 900;
-    key.shadow.camera.left = -400;
-    key.shadow.camera.right = 400;
-    key.shadow.camera.top = 400;
-    key.shadow.camera.bottom = -400;
-    this.xrRig.worldRoot.add(key);
+    this.keyLight = new THREE.DirectionalLight("#fff8f0", 2.2);
+    this.keyLight.position.set(180, 320, 120);
+    this.keyLight.castShadow = true;
+    this.keyLight.shadow.mapSize.set(2048, 2048);
+    this.keyLight.shadow.camera.near = 1;
+    this.keyLight.shadow.camera.far = 900;
+    this.keyLight.shadow.camera.left = -400;
+    this.keyLight.shadow.camera.right = 400;
+    this.keyLight.shadow.camera.top = 400;
+    this.keyLight.shadow.camera.bottom = -400;
+    this.xrRig.worldRoot.add(this.keyLight);
 
     const fill = new THREE.DirectionalLight("#c8d8f0", 0.55);
     fill.position.set(-120, 80, -160);
@@ -205,12 +217,66 @@ export class RaceScene {
 
   initTrackEnvironment() {
     applyTrackEnvironment(this.scene, this.renderer);
+    this.environmentMap =
+      this.scene.environment instanceof THREE.Texture ? this.scene.environment : null;
     const grass = getTrackSurfaceMaterials().grass;
     grass.polygonOffset = true;
     grass.polygonOffsetFactor = 1;
     grass.polygonOffsetUnits = 1;
     this.ground.material = grass;
     this.configureGrassTextureRepeat();
+  }
+
+  getGraphicsSettings(): GraphicsSettings {
+    return { ...this.graphicsSettings };
+  }
+
+  applyGraphicsSettings(settings: GraphicsSettings) {
+    this.graphicsSettings = { ...settings };
+
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, settings.maxPixelRatio));
+    this.renderer.xr.setFramebufferScaleFactor(settings.xrScale);
+    this.resize();
+
+    if (settings.shadows === "off") {
+      this.renderer.shadowMap.enabled = false;
+      this.keyLight.castShadow = false;
+    } else {
+      this.renderer.shadowMap.enabled = true;
+      this.keyLight.castShadow = true;
+      const mapSize = settings.shadows === "low" ? 1024 : 2048;
+      this.renderer.shadowMap.type =
+        settings.shadows === "low" ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
+      if (this.keyLight.shadow.mapSize.x !== mapSize) {
+        this.keyLight.shadow.mapSize.set(mapSize, mapSize);
+        if (this.keyLight.shadow.map) {
+          this.keyLight.shadow.map.dispose();
+          this.keyLight.shadow.map = null;
+        }
+      }
+    }
+    this.renderer.shadowMap.needsUpdate = true;
+
+    this.scene.environment = settings.environment ? this.environmentMap : null;
+
+    if (settings.fog) {
+      this.scene.fog = new THREE.Fog(FOG_COLOR, FOG_NEAR, FOG_FAR);
+    } else {
+      this.scene.fog = null;
+    }
+
+    this.applyCarVisualGraphics(settings);
+    this.vrMenu?.setState({ graphics: this.graphicsSettings });
+  }
+
+  private applyCarVisualGraphics(settings: GraphicsSettings) {
+    const castShadows = settings.carShadows && settings.shadows !== "off";
+    for (const visual of this.carVisuals.values()) {
+      applyCarVisualQuality(visual.group, {
+        materials: settings.carMaterials,
+        castShadows,
+      });
+    }
   }
 
   private configureGrassTextureRepeat() {
@@ -399,6 +465,7 @@ export class RaceScene {
       this.carVisuals.set(driver.driverNumber, visual);
       this.root.add(visual.group);
     });
+    this.applyCarVisualGraphics(this.graphicsSettings);
 
     this.cameraController.loadSegment(segment, transform);
     if (this.cameraController.getMode() === "orbit") {
@@ -520,6 +587,7 @@ export class RaceScene {
       cameraMode: this.getCameraMode(),
       followDriver: this.getFollowDriver(),
       drivers: this.driversForMenu,
+      graphics: this.graphicsSettings,
     };
 
     this.vrMenu = new VrMenu(
@@ -530,6 +598,7 @@ export class RaceScene {
         onSetSpeed: (speed) => this.xrHooks.onSetSpeed?.(speed),
         onSetCameraMode: (mode) => this.xrHooks.onSetCameraMode?.(mode),
         onSetFollowDriver: (driverNumber) => this.xrHooks.onSetFollowDriver?.(driverNumber),
+        onSetGraphicsSettings: (settings) => this.xrHooks.onSetGraphicsSettings?.(settings),
         onClose: () => this.vrMenu?.setOpen(false),
       },
       initial,

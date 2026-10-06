@@ -2,6 +2,7 @@ import type { CameraMode } from "../scene/cameras/types";
 import { isImmersiveVrSupported } from "../scene/xr/xr-session";
 import type { RaceScene } from "../scene/race-scene";
 import type { ReplayFrame } from "../types";
+import type { GraphicsSettingsController } from "./bind-graphics-settings";
 import type { ReplayApp } from "./replay-app";
 import { formatReplayTime } from "./format";
 import { syncCameraDriverSelectVisibility } from "./camera-controls";
@@ -22,6 +23,7 @@ export function bindXr(
   elements: XrUiElements,
   onFrame: (frame: ReplayFrame) => void,
   syncPlayButton: (playing: boolean) => void,
+  graphics: GraphicsSettingsController,
 ) {
   const {
     enterVrButton,
@@ -58,6 +60,7 @@ export function bindXr(
           driverNumber: Number(option.value),
           label: option.textContent || option.value,
         })),
+        graphics: graphics.get(),
       };
     },
     onTogglePlay: () => {
@@ -102,6 +105,9 @@ export function bindXr(
         onFrame(controller.getFrame(replay.currentTime));
       }
       scene.syncVrMenuState({ followDriver: driverNumber });
+    },
+    onSetGraphicsSettings: (settings) => {
+      graphics.set(settings);
     },
     onSessionStart: () => {
       enterVrButton.textContent = "Salir de VR";

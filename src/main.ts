@@ -1,6 +1,10 @@
 import "./style.css";
 
 import { bindControls } from "./app/bind-controls";
+import {
+  bindGraphicsSettings,
+  queryGraphicsControlElements,
+} from "./app/bind-graphics-settings";
 import { bindXr } from "./app/bind-xr";
 import { populateCameraDriverSelect } from "./app/camera-controls";
 import { mustQuery } from "./app/dom";
@@ -79,7 +83,6 @@ function tick(now: number) {
 
 async function bootstrap() {
   bindControls(replay, scene, ui, render, syncPlayButton);
-  bindXr(replay, scene, ui, render, syncPlayButton);
   window.addEventListener("resize", () => scene.resize());
   ui.statusPill.textContent = "Cargando datos del replay...";
 
@@ -87,6 +90,9 @@ async function bootstrap() {
     ui.statusPill.textContent = "Cargando modelos 3D...";
     await Promise.all([preloadCarModels(), preloadTrackEnvironment()]);
     scene.initTrackEnvironment();
+
+    const graphics = bindGraphicsSettings(scene, queryGraphicsControlElements());
+    bindXr(replay, scene, ui, render, syncPlayButton, graphics);
 
     const segment = await loadReplaySegment();
     const controller = new ReplayController(segment);

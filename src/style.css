@@ -281,6 +281,33 @@ select {
   margin-bottom: 14px;
 }
 
+.graphics-field {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.graphics-field span {
+  font-size: 0.86rem;
+  color: #a6bdcb;
+}
+
+.graphics-advanced-toggle {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.graphics-advanced {
+  display: grid;
+  gap: 4px;
+  padding-top: 4px;
+  border-top: 1px solid #2a3847;
+}
+
+.graphics-advanced[hidden] {
+  display: none;
+}
+
 .facts {
   display: grid;
   gap: 14px;
