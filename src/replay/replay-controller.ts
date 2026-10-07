@@ -1,6 +1,8 @@
 import { buildDriverTrajectories } from "./interpolation/build-driver-trajectories";
 import type { DriverTrajectory } from "./interpolation/driver-trajectory";
 import { TelemetryTimeline } from "./interpolation/telemetry-timeline";
+import { buildLaneOffsetTimelines } from "./overtakes/detect-side-by-side";
+import type { LaneOffsetTimeline } from "./overtakes/lane-offset-timeline";
 import type {
   DriverInfo,
   FrameCarState,
@@ -10,9 +12,12 @@ import type {
   TrackStatusInterval,
 } from "../types";
 
+const LANE_CHANGE_MIN_SPEED_MPS = 5;
+
 interface DriverTrack {
   driver: DriverInfo;
   trajectory: DriverTrajectory;
+  laneOffset: LaneOffsetTimeline;
   telemetry: TelemetryTimeline;
 }
 
@@ -38,13 +43,16 @@ export class ReplayController {
   constructor(private readonly segment: ReplaySegment) {
     this.duration = segment.timeRange.end;
     const driversByNumber = new Map(segment.drivers.map((driver) => [driver.driverNumber, driver]));
-    this.tracks = [...buildDriverTrajectories(segment)].flatMap(([driverNumber, trajectory]) => {
+    const trajectories = buildDriverTrajectories(segment);
+    const laneOffsets = buildLaneOffsetTimelines(trajectories, this.duration);
+    this.tracks = [...trajectories].flatMap(([driverNumber, trajectory]) => {
       const driver = driversByNumber.get(driverNumber);
       const samples = segment.samples[driverNumber];
-      if (!driver || !samples || samples.length === 0) {
+      const laneOffset = laneOffsets.get(driverNumber);
+      if (!driver || !samples || samples.length === 0 || !laneOffset) {
         return [];
       }
-      return [{ driver, trajectory, telemetry: new TelemetryTimeline(samples) }];
+      return [{ driver, trajectory, laneOffset, telemetry: new TelemetryTimeline(samples) }];
     });
   }
 
@@ -58,13 +66,15 @@ export class ReplayController {
 
   getFrame(t: number): ReplayFrame {
     const clampedTime = Math.max(0, Math.min(this.duration, t));
-    const cars: FrameCarState[] = this.tracks.map(({ driver, trajectory, telemetry }) => {
+    const cars: FrameCarState[] = this.tracks.map(({ driver, trajectory, laneOffset, telemetry }) => {
       const pose = trajectory.poseAt(clampedTime);
+      const lane = laneOffset.sample(clampedTime);
       return {
         driver,
         sample: { ...telemetry.sampleAt(clampedTime), x: pose.x, y: pose.y, z: pose.z },
-        heading: pose.heading,
+        heading: pose.heading + Math.atan2(lane.rate, Math.max(pose.speed, LANE_CHANGE_MIN_SPEED_MPS)),
         pitch: pose.pitch,
+        lateralOffset: lane.offset,
       };
     });
 

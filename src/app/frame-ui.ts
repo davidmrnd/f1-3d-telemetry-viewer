@@ -62,17 +62,7 @@ export function paintFrame(
     elements.cameraPill.textContent = "";
   }
 
-  if (frame.activeEvent) {
-    elements.eventPill.hidden = false;
-    elements.eventPill.textContent = frame.activeEvent.label;
-  } else {
-    const phaseLabel = trackPhaseLabel(frame);
-    if (phaseLabel) {
-      elements.eventPill.hidden = false;
-      elements.eventPill.textContent = phaseLabel;
-    } else {
-      elements.eventPill.hidden = true;
-      elements.eventPill.textContent = "";
-    }
-  }
+  const phaseLabel = trackPhaseLabel(frame);
+  elements.eventPill.hidden = !phaseLabel;
+  elements.eventPill.textContent = phaseLabel ?? "";
 }

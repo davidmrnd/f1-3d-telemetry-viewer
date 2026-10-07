@@ -529,28 +529,10 @@ export class RaceScene {
       visual.group.position.copy(position);
       visual.group.rotation.y = carHeadingToRotationY(car.heading);
       visual.group.rotation.x = -car.pitch;
-      visual.label.visible = frame.activeEvent?.drivers.includes(car.driver.driverNumber) ?? false;
+      visual.label.visible = false;
     });
 
-    if (frame.activeEvent) {
-      const [a, b] = frame.activeEvent.drivers
-        .map((driverNumber) => frame.cars.find((car) => car.driver.driverNumber === driverNumber))
-        .filter(Boolean) as FrameCarState[];
-
-      if (a && b) {
-        const positionA = this.carVisuals.get(a.driver.driverNumber)?.group.position;
-        const positionB = this.carVisuals.get(b.driver.driverNumber)?.group.position;
-        if (positionA && positionB) {
-          this.eventBeacon.visible = true;
-          this.eventBeacon.position.copy(positionA.clone().lerp(positionB, 0.5));
-          this.eventBeacon.position.y = Math.max(positionA.y, positionB.y) + 2.4;
-          const pulse = 1 + Math.sin(performance.now() * 0.008) * 0.08;
-          this.eventBeacon.scale.setScalar(pulse);
-        }
-      }
-    } else {
-      this.eventBeacon.visible = false;
-    }
+    this.eventBeacon.visible = false;
 
     if (xrPresenting) {
       this.controls.enabled = false;
