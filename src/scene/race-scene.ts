@@ -32,6 +32,11 @@ import {
   DEFAULT_GRAPHICS_SETTINGS,
   type GraphicsSettings,
 } from "./graphics-settings";
+import {
+  applyLaunchHoldToFrame,
+  createStartFinishDecor,
+  type StartFinishDecor,
+} from "./start-finish";
 import type { FrameCarState, ReplayFrame, ReplaySegment, StartingGridSlot } from "../types";
 import { XrRig } from "./xr/xr-rig";
 import { XrSessionController } from "./xr/xr-session";
@@ -77,6 +82,7 @@ export class RaceScene {
   private startingGrid: StartingGridSlot[] = [];
   private readonly gridLateralBlender = new GridLateralOffsetBlender();
   private readonly cameraController = new RaceCameraController();
+  private startFinish: StartFinishDecor | null = null;
   private lastUpdateMs = performance.now();
   private environmentMap: THREE.Texture | null = null;
   private graphicsSettings: GraphicsSettings = { ...DEFAULT_GRAPHICS_SETTINGS };
@@ -318,6 +324,7 @@ export class RaceScene {
   }
 
   private disposeRootContents() {
+    this.startFinish = null;
     this.root.traverse((object) => {
       if (object instanceof THREE.Mesh) {
         object.geometry.dispose();
@@ -444,6 +451,11 @@ export class RaceScene {
       this.buildTrackSurfaces(pathPoints, closed, trackWidth, kerbWidth);
     }
 
+    this.startFinish = createStartFinishDecor(segment, pathPoints, transform, trackWidth);
+    if (this.startFinish) {
+      this.root.add(this.startFinish.group);
+    }
+
     for (const corner of segment.circuit.corners) {
       const markerPoint = vectorFromPoint(
         {
@@ -522,11 +534,19 @@ export class RaceScene {
       return;
     }
 
+    const heldFrame = this.startFinish
+      ? applyLaunchHoldToFrame(
+          frame,
+          this.startFinish.greenAt,
+          this.startFinish.launchHoldPoses,
+        )
+      : frame;
+
     const { offsets: lateralOffsets, rates: lateralRates } = this.gridLateralBlender.resolve(
-      frame,
+      heldFrame,
       this.startingGrid,
     );
-    const visualPlacements = buildVisualPlacements(frame, transform, {
+    const visualPlacements = buildVisualPlacements(heldFrame, transform, {
       lateralOffsets,
       lateralRates,
     });
@@ -544,6 +564,7 @@ export class RaceScene {
     });
 
     this.eventBeacon.visible = false;
+    this.startFinish?.update(frame.now);
 
     if (xrPresenting) {
       this.controls.enabled = false;
