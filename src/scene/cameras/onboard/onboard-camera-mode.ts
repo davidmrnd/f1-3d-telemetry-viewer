@@ -43,8 +43,8 @@ export class OnboardCameraMode implements CameraModeHandler {
       return "";
     }
 
-    const { car, position } = target;
-    const flatForward = new THREE.Vector3(Math.cos(car.heading), 0, Math.sin(car.heading));
+    const { car, position, heading } = target;
+    const flatForward = new THREE.Vector3(Math.cos(heading), 0, Math.sin(heading));
     const eye = position
       .clone()
       .add(new THREE.Vector3(0, HELMET_HEIGHT_METERS, 0))
@@ -52,7 +52,7 @@ export class OnboardCameraMode implements CameraModeHandler {
 
     context.camera.position.copy(eye);
     context.camera.rotation.order = "YXZ";
-    context.camera.rotation.set(car.pitch, carHeadingToRotationY(car.heading) + Math.PI, 0);
+    context.camera.rotation.set(car.pitch, carHeadingToRotationY(heading) + Math.PI, 0);
     const lookDir = new THREE.Vector3(0, 0, -1).applyQuaternion(context.camera.quaternion);
     context.controls.target.copy(eye).addScaledVector(lookDir, LOOK_AHEAD_METERS);
 

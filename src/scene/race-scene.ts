@@ -1,6 +1,10 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { buildVisualPlacements } from "./car-placement";
+import {
+  buildDriverGridHolds,
+  buildVisualPlacements,
+  GridLateralOffsetBlender,
+} from "./car-placement";
 import { applyCarVisualQuality, carHeadingToRotationY, createCarVisual } from "./car-models";
 import {
   buildTrackCenterline,
@@ -71,6 +75,7 @@ export class RaceScene {
 
   private transform: SceneTransform | null = null;
   private startingGrid: StartingGridSlot[] = [];
+  private readonly gridLateralBlender = new GridLateralOffsetBlender();
   private readonly cameraController = new RaceCameraController();
   private lastUpdateMs = performance.now();
   private environmentMap: THREE.Texture | null = null;
@@ -405,6 +410,7 @@ export class RaceScene {
     const transform = buildTransform(segment);
     this.transform = transform;
     this.startingGrid = segment.startingGrid ?? [];
+    this.gridLateralBlender.reset(buildDriverGridHolds(segment));
 
     this.driversForMenu = segment.drivers.map((driver) => ({
       driverNumber: driver.driverNumber,
@@ -516,18 +522,23 @@ export class RaceScene {
       return;
     }
 
+    const { offsets: lateralOffsets, rates: lateralRates } = this.gridLateralBlender.resolve(
+      frame,
+      this.startingGrid,
+    );
     const visualPlacements = buildVisualPlacements(frame, transform, {
-      startingGrid: this.startingGrid,
+      lateralOffsets,
+      lateralRates,
     });
 
-    visualPlacements.forEach(({ car, position }) => {
+    visualPlacements.forEach(({ car, position, heading }) => {
       const visual = this.carVisuals.get(car.driver.driverNumber);
       if (!visual) {
         return;
       }
 
       visual.group.position.copy(position);
-      visual.group.rotation.y = carHeadingToRotationY(car.heading);
+      visual.group.rotation.y = carHeadingToRotationY(heading);
       visual.group.rotation.x = -car.pitch;
       visual.label.visible = false;
     });
