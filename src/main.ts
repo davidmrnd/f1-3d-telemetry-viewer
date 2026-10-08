@@ -8,10 +8,10 @@ import {
 import { bindXr } from "./app/bind-xr";
 import { populateCameraDriverSelect } from "./app/camera-controls";
 import { mustQuery } from "./app/dom";
-import { DriverListView } from "./app/driver-list-view";
 import { paintFrame } from "./app/frame-ui";
 import { ReplayApp } from "./app/replay-app";
 import { paintSessionMetadata } from "./app/session-ui";
+import { TimingTowerView } from "./app/timing-tower-view";
 import { loadReplaySegment } from "./data/load-replay-segment";
 import { ReplayController } from "./replay/replay-controller";
 import { preloadCarModels } from "./scene/car-models";
@@ -43,7 +43,10 @@ const ui = {
 
 const scene = new RaceScene(canvas);
 const replay = new ReplayApp();
-const driverList = new DriverListView(mustQuery<HTMLDivElement>("#driver-list"));
+const timingTower = new TimingTowerView(
+  mustQuery<HTMLDivElement>("#timing-tower"),
+  mustQuery<HTMLElement>("#timing-lap-tag"),
+);
 let lastTick = performance.now();
 
 const syncPlayButton = (playing: boolean) => {
@@ -53,7 +56,7 @@ const syncPlayButton = (playing: boolean) => {
 const render = (frame: Parameters<typeof paintFrame>[0]) => {
   const controller = replay.getController();
   if (!controller) return;
-  paintFrame(frame, controller.getDuration(), scene, driverList, ui);
+  paintFrame(frame, controller.getDuration(), scene, timingTower, ui);
   const duration = controller.getDuration();
   scene.syncVrMenuState({
     normalizedTime: duration > 0 ? frame.now / duration : 0,
@@ -101,7 +104,8 @@ async function bootstrap() {
     populateCameraDriverSelect(ui.cameraDriverSelect, segment.drivers);
     scene.setFollowDriver(Number(ui.cameraDriverSelect.value));
     paintSessionMetadata(segment, ui);
-    driverList.clear();
+    timingTower.setSegment(segment);
+    timingTower.clear();
     render(controller.getFrame(0));
     ui.statusPill.textContent = "Listo.";
   } catch (error) {

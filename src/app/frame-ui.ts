@@ -1,5 +1,5 @@
 import type { ReplayFrame } from "../types";
-import type { DriverListView } from "./driver-list-view";
+import type { TimingTowerView } from "./timing-tower-view";
 import { formatReplayTime } from "./format";
 
 export type FrameUiElements = {
@@ -43,12 +43,12 @@ export function paintFrame(
     getActiveCameraLabel(): string;
     getCameraMode(): string;
   },
-  driverList: DriverListView,
+  timingTower: TimingTowerView,
   elements: FrameUiElements,
 ) {
   scene.update(frame);
   scene.render();
-  driverList.update(frame);
+  timingTower.update(frame);
   elements.timeline.value = String(Math.round(frame.normalized * 1000));
   elements.timeReadout.textContent = `${formatReplayTime(frame.now)} / ${formatReplayTime(duration)}`;
 

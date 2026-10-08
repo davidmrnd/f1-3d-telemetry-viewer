@@ -332,84 +332,106 @@ select {
   color: #f3f6fb;
 }
 
-.driver-list {
-  display: grid;
-  gap: 12px;
+.timing-tower-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.driver-card {
-  padding: 14px;
-  border-radius: 10px;
-  border: 1px solid #2f3d4d;
+.timing-tower {
+  display: grid;
+  gap: 2px;
+}
+
+.timing-row {
+  display: grid;
+  grid-template-columns: 1.6rem 4px minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 6px;
   background: #17232f;
 }
 
-.driver-card__head {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 12px;
+.timing-row--leader {
+  background: #1c2d3d;
 }
 
-.driver-color {
-  width: 14px;
-  height: 48px;
+.timing-row__pos {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: #d7e4ee;
+}
+
+.timing-row__team {
+  width: 4px;
+  height: 1.1rem;
   border-radius: 999px;
 }
 
-.driver-name,
-.driver-team {
-  margin: 0;
-}
-
-.driver-name {
+.timing-row__acronym {
   font-weight: 700;
-  font-size: 1rem;
+  letter-spacing: 0.04em;
+  color: #f3f6fb;
 }
 
-.driver-name span {
+.timing-row__tyre {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 2.4rem;
+}
+
+.timing-row__compound {
+  font-weight: 800;
+  font-size: 0.92rem;
+}
+
+.timing-row__compound[data-compound="soft"] {
+  color: #e11d48;
+}
+
+.timing-row__compound[data-compound="medium"] {
+  color: #eab308;
+}
+
+.timing-row__compound[data-compound="hard"] {
+  color: #e8eef5;
+}
+
+.timing-row__compound[data-compound="intermediate"],
+.timing-row__compound[data-compound="inter"] {
+  color: #22c55e;
+}
+
+.timing-row__compound[data-compound="wet"] {
+  color: #3b82f6;
+}
+
+.timing-row__compound[data-compound="unknown"] {
   color: #8faabb;
-  font-weight: 500;
 }
 
-.driver-team {
-  margin-top: 4px;
-  color: #91a8b7;
-  font-size: 0.9rem;
+.timing-row__age {
+  font-size: 0.75rem;
+  color: #8faabb;
+  font-variant-numeric: tabular-nums;
 }
 
-.driver-position {
-  border-radius: 8px;
-  padding: 6px 10px;
+.timing-row__interval {
+  min-width: 4.2rem;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+  color: #c5d5e0;
+}
+
+.timing-row--leader .timing-row__interval {
   font-weight: 700;
-  background: #243240;
-}
-
-.driver-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 0;
-}
-
-.driver-stats div {
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: #1e2a36;
-}
-
-.driver-stats dt {
-  margin-bottom: 4px;
-  font-size: 0.74rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #84a0b0;
-}
-
-.driver-stats dd {
-  margin: 0;
-  font-size: 0.98rem;
+  letter-spacing: 0.04em;
+  color: #f3f6fb;
 }
 
 .notes-list {
@@ -459,10 +481,6 @@ select {
 
   #camera-driver-wrap {
     grid-column: 1 / -1;
-  }
-
-  .driver-stats {
-    grid-template-columns: 1fr;
   }
 }
 
