@@ -17,6 +17,8 @@ const LIGHTS_ALL_RED_MS = 1100;
 const LIGHTS_OFF_STEP_MS = 700;
 const LIGHTS_GREEN_MS = 900;
 const LAUNCH_SPEED_KMH = 8;
+const LAUNCH_HOLD_LEAD_MS =
+  LIGHTS_ALL_RED_MS + LIGHT_COUNT * LIGHTS_OFF_STEP_MS + 2500;
 
 type LightMode = "off" | "red" | "green";
 
@@ -116,6 +118,13 @@ export function applyLaunchHoldToFrame(
   poses: Map<number, LaunchHoldPose>,
 ): ReplayFrame {
   if (greenAt === null || frame.now >= greenAt || poses.size === 0) {
+    return frame;
+  }
+
+  const phase = frame.trackStatus?.phase;
+  const inStandingStart = phase === "standing_start";
+  const inLightsWindow = frame.now >= greenAt - LAUNCH_HOLD_LEAD_MS;
+  if (!inStandingStart && !inLightsWindow) {
     return frame;
   }
 
