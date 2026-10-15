@@ -5,32 +5,90 @@
     "aston-martin": {
       "body": "/models/cars/f1model/liveries/aston-martin/body.png"
     },
-    "redbull": {
-      "body": "/models/cars/f1model/liveries/redbull/body.png"
-    },
     "ferrari": {
       "body": "/models/cars/f1model/liveries/ferrari/body.png"
     },
+    "mclaren": {
+      "body": "/models/cars/f1model/liveries/mclaren/body.jpg"
+    },
     "mercedes": {
       "body": "/models/cars/f1model/liveries/mercedes/body.png"
+    },
+    "redbull": {
+      "body": "/models/cars/f1model/liveries/redbull/body.png"
+    },
+    "williams": {
+      "body": "/models/cars/f1model/liveries/williams/body.jpg"
+    },
+    "alpine": {
+      "body": "/models/cars/f1model/liveries/alpine/body.jpg"
+    },
+    "haas": {
+      "body": "/models/cars/f1model/liveries/haas/body.jpg"
+    },
+    "racing-bulls": {
+      "body": "/models/cars/f1model/liveries/racing-bulls/body.jpg"
+    },
+    "kick-sauber": {
+      "body": "/models/cars/f1model/liveries/kick-sauber/body.jpg"
     }
   },
   "byTeam": {
     "Red Bull Racing": "redbull",
     "Ferrari": "ferrari",
-    "Mercedes": "mercedes"
+    "Mercedes": "mercedes",
+    "Aston Martin": "aston-martin",
+    "McLaren": "mclaren",
+    "Williams": "williams",
+    "Alpine": "alpine",
+    "Haas F1 Team": "haas",
+    "Racing Bulls": "racing-bulls",
+    "Kick Sauber": "kick-sauber"
   },
   "byDriverNumber": {
     "1": "redbull",
+    "22": "redbull",
+    "4": "mclaren",
+    "81": "mclaren",
     "16": "ferrari",
+    "44": "ferrari",
+    "12": "mercedes",
     "63": "mercedes",
-    "44": "mercedes"
+    "14": "aston-martin",
+    "18": "aston-martin",
+    "23": "williams",
+    "55": "williams",
+    "7": "alpine",
+    "10": "alpine",
+    "43": "alpine",
+    "31": "haas",
+    "87": "haas",
+    "6": "racing-bulls",
+    "30": "racing-bulls",
+    "5": "kick-sauber",
+    "27": "kick-sauber"
   },
   "byAcronym": {
     "VER": "redbull",
-    "PER": "redbull",
+    "TSU": "redbull",
+    "NOR": "mclaren",
+    "PIA": "mclaren",
     "LEC": "ferrari",
-    "HAM": "mercedes",
-    "RUS": "mercedes"
+    "HAM": "ferrari",
+    "ANT": "mercedes",
+    "RUS": "mercedes",
+    "ALO": "aston-martin",
+    "STR": "aston-martin",
+    "ALB": "williams",
+    "SAI": "williams",
+    "DOO": "alpine",
+    "GAS": "alpine",
+    "COL": "alpine",
+    "OCO": "haas",
+    "BEA": "haas",
+    "HAD": "racing-bulls",
+    "LAW": "racing-bulls",
+    "BOR": "kick-sauber",
+    "HUL": "kick-sauber"
   }
 }
