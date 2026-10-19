@@ -1,12 +1,11 @@
 import type { ReplaySegment } from "../types";
+import type { RaceCatalogEntry } from "./races-catalog";
 
-const REPLAY_SEGMENT_URL = "/data/replay-segment.json";
-
-export async function loadReplaySegment(): Promise<ReplaySegment> {
-  const response = await fetch(REPLAY_SEGMENT_URL);
+export async function loadReplaySegment(path: string): Promise<ReplaySegment> {
+  const response = await fetch(path);
   if (!response.ok) {
     throw new Error(
-      `No se pudo cargar ${REPLAY_SEGMENT_URL}. Ejecuta "npm run sync:data" para generarlo desde OpenF1.`,
+      `No se pudo cargar ${path}. Ejecuta "npm run sync:data" para generarlo desde OpenF1.`,
     );
   }
   const segment = (await response.json()) as ReplaySegment;
@@ -16,4 +15,8 @@ export async function loadReplaySegment(): Promise<ReplaySegment> {
     startingGrid: segment.startingGrid ?? [],
     trackStatus: segment.trackStatus ?? [],
   };
+}
+
+export async function loadReplaySegmentFromRace(entry: RaceCatalogEntry): Promise<ReplaySegment> {
+  return loadReplaySegment(entry.path);
 }

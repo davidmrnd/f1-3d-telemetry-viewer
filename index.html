@@ -10,12 +10,30 @@
     />
   </head>
   <body>
-    <div id="app" class="shell">
+    <div id="race-picker" class="race-picker" hidden>
+      <div class="race-picker-panel">
+        <p class="eyebrow">F1 Replay</p>
+        <h1>Elige una carrera</h1>
+        <p class="race-picker-hint">
+          Solo aparecen las carreras descargadas con <code>npm run sync:data</code>.
+        </p>
+        <div id="race-picker-grid" class="race-picker-grid"></div>
+        <p id="race-picker-empty" class="race-picker-empty" hidden>
+          No hay carreras descargadas. Ejecuta el sync para generar un snapshot en
+          <code>public/data/{año}/{circuito}/</code>.
+        </p>
+      </div>
+    </div>
+
+    <div id="app" class="shell" hidden>
       <header class="topbar">
         <div>
           <p class="eyebrow">F1 Replay</p>
           <h1>Visualizador 3D de carrera</h1>
         </div>
+        <button id="change-race-button" class="control-button secondary" type="button">
+          Cambiar carrera
+        </button>
       </header>
 
       <main class="layout">
