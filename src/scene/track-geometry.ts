@@ -38,10 +38,6 @@ export interface SceneTransform {
   elevationScale: number;
 }
 
-/**
- * Misma lógica que `deriveLapTrack` en `scripts/cache-replay-segment.mjs`:
- * puntos reales del piloto, sin splines.
- */
 export function deriveTrackCenterlineFromSamples(
   samples: CarSample[],
   simplifyStep = 3,
@@ -59,6 +55,25 @@ export function deriveTrackCenterlineFromSamples(
     }));
 }
 
+function horizontalDistanceMeters(
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+): number {
+  return Math.hypot(ax - bx, az - bz) * OPENF1_UNITS_TO_METERS;
+}
+
+function trackPointsLengthMeters(points: TrackPoint3D[]): number {
+  let length = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const prev = points[index - 1];
+    const curr = points[index];
+    length += horizontalDistanceMeters(prev.x, prev.z, curr.x, curr.z);
+  }
+  return length;
+}
+
 function trackLoopGapMeters(points: TrackPoint3D[]): number {
   if (points.length < 2) {
     return Number.POSITIVE_INFINITY;
@@ -66,7 +81,7 @@ function trackLoopGapMeters(points: TrackPoint3D[]): number {
 
   const first = points[0];
   const last = points[points.length - 1];
-  return Math.hypot(first.x - last.x, first.z - last.z) * OPENF1_UNITS_TO_METERS;
+  return horizontalDistanceMeters(first.x, first.z, last.x, last.z);
 }
 
 function isClosedTrackLoop(points: TrackPoint3D[], thresholdMeters = 120): boolean {
@@ -87,25 +102,69 @@ function closeTrackLoop(points: TrackPoint3D[]): TrackPoint3D[] {
   return [...points, { ...first }];
 }
 
+function extractClosedLapSamples(
+  samples: CarSample[],
+  expectedLapMeters: number,
+): CarSample[] | null {
+  if (samples.length < 4) {
+    return null;
+  }
+
+  const closeThresholdMeters = 100;
+  const minLapMeters = Math.max(3000, expectedLapMeters * 0.85);
+  const maxLapMeters = expectedLapMeters > 0 ? expectedLapMeters * 1.4 : 9000;
+  const start = samples[0];
+  let traveled = 0;
+  let bestEnd: number | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (let index = 1; index < samples.length; index += 1) {
+    const prev = samples[index - 1];
+    const curr = samples[index];
+    traveled += horizontalDistanceMeters(prev.x, prev.z, curr.x, curr.z);
+
+    if (traveled < minLapMeters) {
+      continue;
+    }
+    if (traveled > maxLapMeters) {
+      break;
+    }
+
+    const gap = horizontalDistanceMeters(curr.x, curr.z, start.x, start.z);
+    if (gap > closeThresholdMeters) {
+      continue;
+    }
+
+    const score = gap + Math.abs(traveled - expectedLapMeters) * 0.05;
+    if (score < bestScore) {
+      bestScore = score;
+      bestEnd = index;
+    }
+  }
+
+  return bestEnd == null ? null : samples.slice(0, bestEnd + 1);
+}
 export function pickTrackDriverNumber(segment: ReplaySegment): number {
   const preferred = segment.drivers.find((driver) => segment.samples[driver.driverNumber]?.length);
   return preferred?.driverNumber ?? segment.drivers[0]?.driverNumber ?? 1;
 }
 
-/** Centerline fiel a telemetría: vuelta completa del JSON o, si aplica, trazada cerrada del piloto del segmento. */
 export function buildTrackCenterline(segment: ReplaySegment, simplifyStep = 2): TrackPoint3D[] {
   const driverNumber = pickTrackDriverNumber(segment);
   const samples = segment.samples[driverNumber];
   if (samples && samples.length > 24) {
-    const fromDriver = deriveTrackCenterlineFromSamples(samples, simplifyStep);
-    if (isClosedTrackLoop(fromDriver)) {
-      return closeTrackLoop(fromDriver);
+    const expectedLapMeters = Math.max(trackPointsLengthMeters(segment.circuit.centerline), 3000);
+    const lapSamples = extractClosedLapSamples(samples, expectedLapMeters);
+    if (lapSamples && lapSamples.length > 24) {
+      const fromDriver = deriveTrackCenterlineFromSamples(lapSamples, simplifyStep);
+      if (fromDriver.length >= 4) {
+        return closeTrackLoop(fromDriver);
+      }
     }
   }
 
   return closeTrackLoop(segment.circuit.centerline);
 }
-
 /** Añade vértices a lo largo de la polyline sin cambiar la trazada (sin splines). */
 export function densifyPolylineLinear(
   points: THREE.Vector3[],
