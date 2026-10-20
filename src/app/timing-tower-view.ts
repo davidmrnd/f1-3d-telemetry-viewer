@@ -12,9 +12,12 @@ type TowerRowNodes = {
 };
 
 function createRow(car: FrameCarState): TowerRowNodes {
-  const root = document.createElement("div");
+  const root = document.createElement("button");
+  root.type = "button";
   root.className = "timing-row";
   root.dataset.driver = String(car.driver.driverNumber);
+  root.title = `Ver cámara a bordo de ${car.driver.fullName} · ${car.driver.teamName}`;
+  root.setAttribute("aria-label", `Cámara a bordo de ${car.driver.fullName}`);
 
   const position = document.createElement("span");
   position.className = "timing-row__pos";

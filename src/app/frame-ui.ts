@@ -50,13 +50,15 @@ export function paintFrame(
   scene.render();
   timingTower.update(frame);
   elements.timeline.value = String(Math.round(frame.normalized * 1000));
+  elements.timeline.style.setProperty("--progress", `${frame.normalized * 100}%`);
   elements.timeReadout.textContent = `${formatReplayTime(frame.now)} / ${formatReplayTime(duration)}`;
+  elements.timeline.setAttribute("aria-valuetext", elements.timeReadout.textContent);
 
   const cameraLabel = scene.getActiveCameraLabel();
   const mode = scene.getCameraMode();
   if ((mode === "broadcast" || mode === "onboard" || mode === "orbit") && cameraLabel) {
     elements.cameraPill.hidden = false;
-    elements.cameraPill.textContent = cameraLabel;
+    elements.cameraPill.textContent = cameraLabel.replace(/^On-board /, "A bordo · ");
   } else {
     elements.cameraPill.hidden = true;
     elements.cameraPill.textContent = "";

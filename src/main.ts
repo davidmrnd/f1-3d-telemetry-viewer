@@ -1,6 +1,8 @@
 import "./style.css";
+import "./app/player.css";
 
 import { bindControls } from "./app/bind-controls";
+import { bindPlayerChrome } from "./app/bind-player-chrome";
 import {
   bindGraphicsSettings,
   queryGraphicsControlElements,
@@ -8,6 +10,7 @@ import {
 import { bindXr } from "./app/bind-xr";
 import { populateCameraDriverSelect } from "./app/camera-controls";
 import { mustQuery } from "./app/dom";
+import { DesktopPlayerView } from "./app/desktop-player-view";
 import { paintFrame } from "./app/frame-ui";
 import { RacePickerView } from "./app/race-picker-view";
 import { ReplayApp } from "./app/replay-app";
@@ -63,15 +66,30 @@ const timingTower = new TimingTowerView(
 );
 let lastTick = performance.now();
 let bootstrapped = false;
+const desktopPlayer = new DesktopPlayerView((mode, driver) => {
+  if (driver != null) {
+    ui.cameraDriverSelect.value = String(driver);
+    ui.cameraDriverSelect.dispatchEvent(new Event("change"));
+  }
+  ui.cameraModeSelect.value = mode;
+  ui.cameraModeSelect.dispatchEvent(new Event("change"));
+});
 
 const syncPlayButton = (playing: boolean) => {
-  ui.playToggle.textContent = playing ? "Pausar" : "Reproducir";
+  const label = playing ? "Pausar" : "Reproducir";
+  if (ui.playToggle.getAttribute("aria-label") === label) return;
+  ui.playToggle.setAttribute("aria-label", label);
+  ui.playToggle.title = `${label} (Espacio)`;
+  ui.playToggle.querySelector("use")?.setAttribute("href", playing ? "#i-pause" : "#i-play");
+  mustQuery("#playback-state").textContent = playing ? "REPRODUCIENDO" : "EN PAUSA";
+  appShell.dispatchEvent(new Event("playbackchange"));
 };
 
 const render = (frame: Parameters<typeof paintFrame>[0]) => {
   const controller = replay.getController();
   if (!controller) return;
   paintFrame(frame, controller.getDuration(), scene, timingTower, ui);
+  desktopPlayer.update(frame, scene.getCameraMode(), scene.getFollowDriver());
   const duration = controller.getDuration();
   scene.syncVrMenuState({
     normalizedTime: duration > 0 ? frame.now / duration : 0,
@@ -130,26 +148,47 @@ async function pickRace(
   }
 
   appShell.hidden = true;
-  return racePicker.open(races, preferredId);
+  return racePicker.open(races, preferredId, replay.getController() != null);
 }
 
 async function loadSelectedRace(entry: RaceCatalogEntry) {
+  ui.statusPill.classList.remove("is-ready");
   ui.statusPill.textContent = "Cargando datos del replay...";
   const segment = await loadReplaySegmentFromRace(entry);
   const controller = new ReplayController(segment);
-  replay.playing = false;
   replay.setController(controller);
+  replay.playing = false;
   scene.loadSegment(segment);
   populateCameraDriverSelect(ui.cameraDriverSelect, segment.drivers);
   scene.setFollowDriver(Number(ui.cameraDriverSelect.value));
   paintSessionMetadata(segment, ui);
   timingTower.setSegment(segment);
   timingTower.clear();
+  desktopPlayer.setSegment(segment);
+  mustQuery("#session-season").textContent = `FÓRMULA 1 · TEMPORADA ${segment.sessionRef.year}`;
+  appShell.hidden = false;
+  scene.resize();
+  const initialFrame = controller.getFrame(0);
+  const initialMode = scene.getCameraMode();
+  const initialDriver = scene.getFollowDriver();
+  scene.setCameraMode("onboard");
+  for (const driver of segment.drivers) {
+    scene.setFollowDriver(driver.driverNumber);
+    scene.update(initialFrame);
+    scene.render();
+    desktopPlayer.capturePreview(canvas, "onboard", driver.driverNumber);
+  }
+  scene.setCameraMode("broadcast");
+  scene.update(initialFrame);
+  scene.render();
+  desktopPlayer.capturePreview(canvas, "broadcast");
+  if (initialDriver != null) scene.setFollowDriver(initialDriver);
+  scene.setCameraMode(initialMode);
   lastTick = performance.now();
-  render(controller.getFrame(0));
+  render(initialFrame);
   syncPlayButton(false);
   ui.statusPill.textContent = "Listo.";
-  appShell.hidden = false;
+  ui.statusPill.classList.add("is-ready");
 
   const url = new URL(window.location.href);
   url.searchParams.set("id", entry.id);
@@ -159,11 +198,17 @@ async function loadSelectedRace(entry: RaceCatalogEntry) {
 }
 
 async function chooseAndLoadRace(options: { allowQueryShortcut?: boolean } = {}) {
+  const wasPlaying = replay.playing;
+  replay.playing = false;
+  syncPlayButton(false);
   const catalog = await loadRacesCatalog();
   const selected = await pickRace(catalog.races, catalog.activeId, options);
   if (!selected) {
-    appShell.hidden = true;
-    syncPlayButton(false);
+    appShell.hidden = replay.getController() == null;
+    replay.playing = replay.getController() != null && wasPlaying;
+    syncPlayButton(replay.playing);
+    lastTick = performance.now();
+    if (!appShell.hidden) changeRaceButton.focus({ preventScroll: true });
     return;
   }
 
@@ -172,9 +217,14 @@ async function chooseAndLoadRace(options: { allowQueryShortcut?: boolean } = {})
 
 async function bootstrap() {
   bindControls(replay, scene, ui, render, syncPlayButton);
+  bindPlayerChrome(replay, render);
   window.addEventListener("resize", () => scene.resize());
   changeRaceButton.addEventListener("click", () => {
-    void chooseAndLoadRace({ allowQueryShortcut: false });
+    void chooseAndLoadRace({ allowQueryShortcut: false }).catch((error) => {
+      appShell.hidden = false;
+      ui.statusPill.classList.remove("is-ready");
+      ui.statusPill.textContent = error instanceof Error ? error.message : "No se pudo cargar la carrera.";
+    });
   });
 
   try {
@@ -193,6 +243,7 @@ async function bootstrap() {
     console.error(error);
     replay.playing = false;
     appShell.hidden = false;
+    ui.statusPill.classList.remove("is-ready");
     ui.statusPill.textContent = "Error de carga.";
     ui.sessionTitle.textContent = "Error de carga";
     ui.sessionEvent.textContent =

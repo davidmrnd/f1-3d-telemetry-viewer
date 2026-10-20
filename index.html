@@ -3,214 +3,103 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>F1 VR Replay</title>
-    <meta
-      name="description"
-      content="Experiencia 3D inmersiva de un tramo de F1 a escala real, con datos de OpenF1. Pensado para WebXR/VR."
-    />
+    <meta name="theme-color" content="#08090b" />
+    <link rel="stylesheet" href="/fonts/fonts.css" />
+    <title>APEX — F1 Replay</title>
+    <meta name="description" content="Vuelve a vivir la carrera. Replays 3D de Fórmula 1 con cámaras a bordo, telemetría y datos de OpenF1." />
   </head>
   <body>
+    <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z" fill="currentColor" stroke="none" /></symbol>
+        <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 5h3v14H7zm7 0h3v14h-3z" fill="currentColor" stroke="none" /></symbol>
+        <symbol id="i-camera" viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2" /><path d="m15 10 6-3v10l-6-3z" /></symbol>
+        <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6" /></symbol>
+        <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></symbol>
+        <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6" /></symbol>
+        <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" /></symbol>
+        <symbol id="i-minimize" viewBox="0 0 24 24"><path d="M3 8h5V3m13 5h-5V3M8 21v-5H3m13 5v-5h5" /></symbol>
+        <symbol id="i-theater" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M7 5v14m10-14v14" /></symbol>
+        <symbol id="i-settings" viewBox="0 0 24 24"><path d="m9 3-1 3-3 1-2 3 2 2-1 3 2 3 3-1 2 3h3l1-3 3-1 2-3-2-2 1-3-2-3-3 1-2-3z" /><circle cx="11.5" cy="11.5" r="3" /></symbol>
+        <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 11v6m0-10v1" /></symbol>
+        <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V3m0 1c5-4 9 4 14 0v10c-5 4-9-4-14 0" /></symbol>
+        <symbol id="i-orbit" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><ellipse cx="12" cy="12" rx="11" ry="5" transform="rotate(-35 12 12)" /></symbol>
+      </defs>
+    </svg>
     <div id="race-picker" class="race-picker" hidden>
       <div class="race-picker-panel">
-        <p class="eyebrow">F1 Replay</p>
-        <h1>Elige una carrera</h1>
-        <p class="race-picker-hint">
-          Solo aparecen las carreras descargadas con <code>npm run sync:data</code>.
-        </p>
+        <div class="picker-topline"><span class="wordmark">APEX<span class="brand-slash"></span></span><span class="eyebrow">EL ARCHIVO DE CARRERAS</span></div>
+        <div class="picker-heading"><div><p class="section-label">FÓRMULA 1 · REPLAY 3D</p><h1>La carrera, desde dentro.</h1><p class="race-picker-hint">Elige un Gran Premio. Tú decides cómo vivirlo.</p></div><button id="close-race-picker" class="icon-button" type="button" aria-label="Volver al replay" hidden><svg class="icon"><use href="#i-close" /></svg></button></div>
         <div id="race-picker-grid" class="race-picker-grid"></div>
-        <p id="race-picker-empty" class="race-picker-empty" hidden>
-          No hay carreras descargadas. Ejecuta el sync para generar un snapshot en
-          <code>public/data/{año}/{circuito}/</code>.
-        </p>
+        <p id="race-picker-empty" class="race-picker-empty" hidden>No hay carreras disponibles todavía.</p>
+        <div class="picker-footer"><span class="source-dot"></span> DATOS DE OPENF1<span>Experiencia 3D · Proyecto académico independiente</span></div>
       </div>
     </div>
-
-    <div id="app" class="shell" hidden>
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">F1 Replay</p>
-          <h1>Visualizador 3D de carrera</h1>
-        </div>
-        <button id="change-race-button" class="control-button secondary" type="button">
-          Cambiar carrera
-        </button>
-      </header>
-
-      <main class="layout">
-        <section class="viewport-card">
-          <div class="scene-shell">
-            <canvas id="race-canvas"></canvas>
-            <div class="scene-gradient"></div>
-            <div class="scene-overlay">
-              <div class="scene-overlay-left">
-                <div class="status-pill" id="status-pill">Preparando demo...</div>
-                <div class="camera-pill" id="camera-pill" hidden></div>
-              </div>
-              <div class="scene-overlay-right">
-                <div class="event-pill" id="event-pill" hidden></div>
-                <button
-                  id="fullscreen-button"
-                  class="scene-chrome-button"
-                  type="button"
-                  title="Pantalla completa"
-                  hidden
-                >
-                  Pantalla completa
-                </button>
-              </div>
-            </div>
+    <div id="app" class="shell scene-shell" hidden>
+      <main class="player" aria-label="Reproductor de carrera 3D">
+        <canvas id="race-canvas" aria-label="Escena 3D de la carrera"></canvas>
+        <div class="scene-shade" aria-hidden="true"></div>
+        <header class="topbar player-chrome">
+          <a class="wordmark" href="./" aria-label="APEX, elegir carrera">APEX<span class="brand-slash"></span></a>
+          <nav class="main-nav" aria-label="Navegación principal"><span class="nav-active">REPLAY 3D</span><button id="change-race-button" type="button">CARRERAS</button></nav>
+          <div class="topbar-right"><span class="data-source"><span class="source-dot"></span> DATOS OPENF1</span><span class="topbar-divider"></span><button id="help-button" class="icon-button" aria-label="Ayuda y atajos de teclado" title="Ayuda y atajos (?)" type="button"><svg class="icon"><use href="#i-info" /></svg></button><span class="edition-tag">BETA</span></div>
+        </header>
+        <section class="race-heading player-chrome" aria-label="Información de la carrera">
+          <div class="race-badges"><span class="replay-badge"><span></span> REPLAY</span><span id="timing-lap-tag" class="lap-badge" hidden></span><div id="event-pill" class="event-pill" hidden></div></div>
+          <div class="race-title"><p id="session-season" class="section-label">FÓRMULA 1</p><h1 id="session-title">Cargando carrera…</h1><div class="race-subtitle"><span id="session-circuit">—</span><span class="subtitle-separator">/</span><span>RECONSTRUCCIÓN 3D</span></div></div>
+        </section>
+        <aside id="classification-panel" class="classification-panel floating-panel player-chrome" aria-label="Clasificación de la carrera">
+          <div class="panel-heading"><h2>CLASIFICACIÓN</h2><button class="icon-button small" data-toggle-panel="classification" aria-label="Ocultar clasificación" type="button"><svg class="icon"><use href="#i-close" /></svg></button></div>
+          <div class="timing-columns"><span>POS</span><span>PILOTO</span><span>NEUM.</span><span>INTERVALO</span></div>
+          <div id="timing-tower" class="timing-tower"></div>
+          <div class="tower-footer"><div id="car-count-tag">— pilotos</div><span>INTERVALO AL ANTERIOR</span></div>
+        </aside>
+        <aside id="inspector-panel" class="inspector-panel floating-panel player-chrome" aria-label="Cámaras, datos y mapa">
+          <div class="inspector-header"><div class="panel-tabs" role="tablist" aria-label="Panel de carrera"><button id="tab-cameras" class="panel-tab" role="tab" aria-selected="true" aria-controls="panel-cameras" tabindex="0" data-tab="cameras">CÁMARAS</button><button id="tab-data" class="panel-tab" role="tab" aria-selected="false" aria-controls="panel-data" tabindex="-1" data-tab="data">DATOS</button><button id="tab-map" class="panel-tab" role="tab" aria-selected="false" aria-controls="panel-map" tabindex="-1" data-tab="map">MAPA</button></div><button class="icon-button small inspector-close" data-toggle-panel="inspector" aria-label="Ocultar panel de cámaras" type="button"><svg class="icon"><use href="#i-close" /></svg></button></div>
+          <section id="panel-cameras" class="tab-content camera-content" role="tabpanel" aria-labelledby="tab-cameras"><div class="camera-section-label"><span>ELIGE TU PUNTO DE VISTA</span><span id="camera-count">—</span></div><div id="camera-list" class="camera-list"></div></section>
+          <section id="panel-data" class="tab-content telemetry-content" role="tabpanel" aria-labelledby="tab-data" hidden>
+            <p class="section-label">TELEMETRÍA DEL PILOTO</p><div id="telemetry-driver" class="telemetry-driver">—</div><p id="telemetry-team" class="muted">—</p>
+            <div class="speed-gauge"><strong id="telemetry-speed">—</strong><span>KM/H</span></div>
+            <div class="telemetry-stats"><div><span>MARCHA</span><strong id="telemetry-gear">—</strong></div><div><span>RPM</span><strong id="telemetry-rpm">—</strong></div><div><span>DRS</span><strong id="telemetry-drs">—</strong></div></div>
+            <div class="pedal"><div><span>ACELERADOR</span><span id="throttle-value">—</span></div><div class="pedal-track"><span id="throttle-bar"></span></div></div>
+            <div class="pedal brake"><div><span>FRENO</span><span id="brake-value">—</span></div><div class="pedal-track"><span id="brake-bar"></span></div></div>
+            <p class="data-note">Datos registrados por OpenF1 y sincronizados con el replay.</p>
+          </section>
+          <section id="panel-map" class="tab-content map-content" role="tabpanel" aria-labelledby="tab-map" hidden><p class="section-label">POSICIONES EN PISTA</p><svg id="circuit-map" viewBox="0 0 280 260" role="img" aria-label="Mapa del circuito y posición de los pilotos"><path id="map-track-outline"></path><path id="map-track"></path><g id="map-drivers"></g></svg><div class="map-caption"><span class="source-dot"></span><span id="map-circuit-name">Circuito</span></div><p class="data-note">Trazado y posiciones aproximadas a partir de los datos de la sesión.</p></section>
+          <div class="inspector-footer"><span class="recording-dot"></span> SINCRONIZADO CON EL REPLAY</div>
+        </aside>
+        <div class="view-caption player-chrome"><span class="caption-rule"></span><div id="camera-pill" class="camera-pill" hidden></div><span class="view-caption-detail">ESCALA REAL · 3D</span></div>
+        <div id="status-pill" class="status-pill" role="status">Preparando experiencia…</div>
+        <footer class="player-controls player-chrome" aria-label="Controles del reproductor">
+          <div class="timeline-meta"><span id="playback-state">EN PAUSA</span><span id="time-readout">00:00.0 / 00:00.0</span></div>
+          <div class="timeline-wrap"><input id="timeline" type="range" min="0" max="1000" value="0" aria-label="Posición del replay" /></div>
+          <div class="control-bar">
+            <div class="playback-controls"><button id="play-toggle" class="icon-button play-button" type="button" aria-label="Reproducir" title="Reproducir (Espacio)"><svg class="icon"><use href="#i-play" /></svg></button><button id="reset-button" class="icon-button" type="button" aria-label="Reiniciar replay" title="Reiniciar (R)"><svg class="icon"><use href="#i-reset" /></svg></button><label class="speed-wrap"><span class="sr-only">Velocidad de reproducción</span><select id="speed-select"><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="1.5">1,5×</option><option value="2">2×</option></select></label><span class="control-divider"></span><span class="replay-indicator"><span></span> REPLAY</span></div>
+            <div class="driver-rail"><button id="drivers-previous" class="icon-button small" aria-label="Pilotos anteriores" type="button"><svg class="icon rotate-180"><use href="#i-chevron" /></svg></button><div id="quick-drivers" class="quick-drivers" aria-label="Selección rápida de piloto"></div><button id="drivers-next" class="icon-button small" aria-label="Más pilotos" type="button"><svg class="icon"><use href="#i-chevron" /></svg></button></div>
+            <div class="view-controls"><button class="icon-button panel-toggle" data-toggle-panel="classification" type="button" aria-label="Mostrar u ocultar clasificación" aria-controls="classification-panel" aria-expanded="true" title="Clasificación (C)"><svg class="icon"><use href="#i-flag" /></svg></button><button class="icon-button panel-toggle" data-toggle-panel="inspector" type="button" aria-label="Mostrar u ocultar cámaras y datos" aria-controls="inspector-panel" aria-expanded="true" title="Cámaras y datos (P)"><svg class="icon"><use href="#i-camera" /></svg></button><button id="theater-button" class="icon-button" type="button" aria-label="Modo cine" aria-pressed="false" title="Modo cine (T)"><svg class="icon"><use href="#i-theater" /></svg></button><button id="settings-button" class="icon-button" type="button" aria-label="Ajustes de reproducción" aria-controls="settings-panel" aria-expanded="false" title="Ajustes"><svg class="icon"><use href="#i-settings" /></svg></button><button id="fullscreen-button" class="icon-button" type="button" aria-label="Pantalla completa" title="Pantalla completa (F)"><svg class="icon"><use href="#i-fullscreen" /></svg></button></div>
           </div>
-
-          <div class="controls">
-            <button id="play-toggle" class="control-button">Pausar</button>
-            <button id="reset-button" class="control-button secondary">Reiniciar</button>
-            <button id="enter-vr" class="control-button vr-button" type="button" hidden>
-              Entrar en VR
-            </button>
-            <label class="timeline-wrap">
-              <span id="time-readout">00:00.0 / 00:00.0</span>
-              <input id="timeline" type="range" min="0" max="1000" value="0" />
-            </label>
-            <label class="speed-wrap">
-              <span>Velocidad</span>
-              <select id="speed-select">
-                <option value="0.5">0.5x</option>
-                <option value="1" selected>1x</option>
-                <option value="1.5">1.5x</option>
-                <option value="2">2x</option>
-              </select>
-            </label>
-            <label class="camera-wrap">
-              <span>Cámara</span>
-              <select id="camera-mode-select">
-                <option value="broadcast" selected>Retransmisión</option>
-                <option value="onboard">On-board piloto</option>
-                <option value="orbit">Libre (vuelo)</option>
-              </select>
-            </label>
-            <label class="camera-wrap" id="camera-driver-wrap" hidden>
-              <span>Piloto</span>
-              <select id="camera-driver-select"></select>
-            </label>
+        </footer>
+        <section id="settings-panel" class="settings-panel floating-panel" aria-label="Ajustes de reproducción" hidden>
+          <div class="panel-heading"><h2>AJUSTES</h2><button id="settings-close" class="icon-button small" type="button" aria-label="Cerrar ajustes"><svg class="icon"><use href="#i-close" /></svg></button></div>
+          <div class="settings-content">
+            <label class="settings-field"><span>Cámara</span><select id="camera-mode-select"><option value="broadcast" selected>Retransmisión</option><option value="onboard">A bordo del piloto</option><option value="orbit">Cámara libre</option></select></label>
+            <label class="settings-field" id="camera-driver-wrap" hidden><span>Piloto</span><select id="camera-driver-select"></select></label>
+            <label class="settings-field"><span>Calidad visual</span><select id="graphics-preset-select"><option value="low">Baja</option><option value="medium">Media</option><option value="high" selected>Alta</option><option value="custom" disabled>Personalizada</option></select></label>
+            <button id="graphics-advanced-toggle" class="text-button graphics-advanced-toggle" type="button" aria-expanded="false">Avanzado</button>
+            <div id="graphics-advanced-panel" class="graphics-advanced" hidden>
+              <label class="settings-field"><span>Resolución</span><select id="graphics-pixel-ratio-select"><option value="0.75">0,75×</option><option value="1">1×</option><option value="1.25">1,25×</option><option value="1.5">1,5×</option><option value="2">2×</option></select></label>
+              <label class="settings-field"><span>Escala de render VR</span><select id="graphics-xr-scale-select"><option value="0.5">0,5×</option><option value="0.75">0,75×</option><option value="1">1×</option></select></label>
+              <label class="settings-field"><span>Sombras</span><select id="graphics-shadows-select"><option value="off">Desactivadas</option><option value="low">Bajas</option><option value="high">Altas</option></select></label>
+              <label class="settings-field"><span>Sombras de coches</span><select id="graphics-car-shadows-select"><option value="on">Activadas</option><option value="off">Desactivadas</option></select></label>
+              <label class="settings-field"><span>Materiales de coches</span><select id="graphics-car-materials-select"><option value="pbr">Detallados</option><option value="simple">Simples</option></select></label>
+              <label class="settings-field"><span>Entorno HDRI</span><select id="graphics-environment-select"><option value="on">Activado</option><option value="off">Desactivado</option></select></label>
+              <label class="settings-field"><span>Niebla</span><select id="graphics-fog-select"><option value="on">Activada</option><option value="off">Desactivada</option></select></label>
+            </div>
+            <button id="enter-vr" class="control-button vr-button" type="button" hidden>Entrar en VR</button>
+            <div class="settings-session"><span class="section-label">SESIÓN</span><span id="session-window">—</span><span id="session-event">—</span></div>
           </div>
         </section>
-
-        <aside class="sidebar">
-          <section class="panel">
-            <p class="panel-kicker">Sesion</p>
-            <h2 id="session-title">Cargando meeting...</h2>
-            <dl class="facts">
-              <div>
-                <dt>Circuito</dt>
-                <dd id="session-circuit">-</dd>
-              </div>
-              <div>
-                <dt>Ventana</dt>
-                <dd id="session-window">-</dd>
-              </div>
-              <div>
-                <dt>Evento</dt>
-                <dd id="session-event">Buscando cambio de posicion...</dd>
-              </div>
-              <div>
-                <dt>Calidad</dt>
-                <dd>Coordenadas aproximadas, utiles para analisis visual.</dd>
-              </div>
-            </dl>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head">
-              <div>
-                <p class="panel-kicker">Carrera</p>
-                <h2>Clasificación</h2>
-              </div>
-              <div class="timing-tower-meta">
-                <div class="mini-tag" id="timing-lap-tag" hidden></div>
-                <div class="mini-tag" id="car-count-tag">- coches</div>
-              </div>
-            </div>
-            <div id="timing-tower" class="timing-tower"></div>
-          </section>
-
-          <section class="panel">
-            <p class="panel-kicker">Graficos</p>
-            <h2>Calidad visual</h2>
-            <label class="graphics-field">
-              <span>Preset</span>
-              <select id="graphics-preset-select">
-                <option value="low">Baja</option>
-                <option value="medium">Media</option>
-                <option value="high" selected>Alta</option>
-                <option value="custom" disabled>Personalizado</option>
-              </select>
-            </label>
-            <button
-              id="graphics-advanced-toggle"
-              class="control-button secondary graphics-advanced-toggle"
-              type="button"
-              aria-expanded="false"
-            >
-              Avanzado
-            </button>
-            <div id="graphics-advanced-panel" class="graphics-advanced" hidden>
-              <label class="graphics-field">
-                <span>Resolucion</span>
-                <select id="graphics-pixel-ratio-select">
-                  <option value="0.75">0.75x</option>
-                  <option value="1">1x</option>
-                  <option value="1.25">1.25x</option>
-                  <option value="1.5">1.5x</option>
-                  <option value="2">2x</option>
-                </select>
-              </label>
-              <label class="graphics-field">
-                <span>Escala VR</span>
-                <select id="graphics-xr-scale-select">
-                  <option value="0.5">0.5x</option>
-                  <option value="0.75">0.75x</option>
-                  <option value="1">1x</option>
-                </select>
-              </label>
-              <label class="graphics-field">
-                <span>Sombras</span>
-                <select id="graphics-shadows-select">
-                  <option value="off">Off</option>
-                  <option value="low">Baja</option>
-                  <option value="high">Alta</option>
-                </select>
-              </label>
-              <label class="graphics-field">
-                <span>Sombras coches</span>
-                <select id="graphics-car-shadows-select">
-                  <option value="on">On</option>
-                  <option value="off">Off</option>
-                </select>
-              </label>
-              <label class="graphics-field">
-                <span>Materiales coches</span>
-                <select id="graphics-car-materials-select">
-                  <option value="pbr">PBR</option>
-                  <option value="simple">Simple</option>
-                </select>
-              </label>
-              <label class="graphics-field">
-                <span>Entorno HDRI</span>
-                <select id="graphics-environment-select">
-                  <option value="on">On</option>
-                  <option value="off">Off</option>
-                </select>
-              </label>
-              <label class="graphics-field">
-                <span>Niebla</span>
-                <select id="graphics-fog-select">
-                  <option value="on">On</option>
-                  <option value="off">Off</option>
-                </select>
-              </label>
-            </div>
-          </section>
-        </aside>
+        <dialog id="help-dialog" class="help-dialog"><div class="panel-heading"><h2>LA CARRERA, A TU MANERA.</h2><button id="help-close" class="icon-button" type="button" aria-label="Cerrar ayuda"><svg class="icon"><use href="#i-close" /></svg></button></div><p>Explora una reconstrucción 3D con datos históricos de OpenF1. Cambia de cámara, sigue a un piloto o consulta su telemetría.</p><dl class="shortcut-list"><div><dt>Reproducir / pausar</dt><dd><kbd>Espacio</kbd></dd></div><div><dt>Retroceder / avanzar 10 s</dt><dd><kbd>←</kbd> <kbd>→</kbd></dd></div><div><dt>Clasificación / cámaras</dt><dd><kbd>C</kbd> <kbd>P</kbd></dd></div><div><dt>Modo cine / pantalla completa</dt><dd><kbd>T</kbd> <kbd>F</kbd></dd></div><div><dt>Reiniciar</dt><dd><kbd>R</kbd></dd></div></dl><p class="data-note">La geometría y las posiciones son aproximadas. Proyecto académico independiente, no afiliado a Formula 1. La sesión no incluye audio.</p></dialog>
       </main>
     </div>
     <script type="module" src="/src/main.ts"></script>

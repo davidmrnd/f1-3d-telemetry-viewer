@@ -20,7 +20,8 @@ export function bindViewportFullscreen(
     shell.classList.toggle("is-fullscreen", active);
     button.setAttribute("aria-pressed", String(active));
     button.title = active ? "Salir de pantalla completa (Esc)" : "Pantalla completa";
-    button.textContent = active ? "Salir" : "Pantalla completa";
+    button.setAttribute("aria-label", active ? "Salir de pantalla completa" : "Pantalla completa");
+    button.querySelector("use")?.setAttribute("href", active ? "#i-minimize" : "#i-fullscreen");
     options?.onChange?.(active);
   };
 

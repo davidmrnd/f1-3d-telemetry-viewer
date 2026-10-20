@@ -36,20 +36,11 @@ export function bindControls(
     sceneShell,
   } = elements;
 
-  const fullscreen = bindViewportFullscreen(sceneShell, fullscreenButton);
-
-  const syncFreeModeChrome = (mode: CameraMode) => {
-    const free = mode === "orbit";
-    fullscreenButton.hidden = !free;
-    if (!free && fullscreen.isActive()) {
-      void fullscreen.exit();
-    }
-  };
+  bindViewportFullscreen(sceneShell, fullscreenButton);
 
   const applyCameraMode = (mode: CameraMode) => {
     scene.setCameraMode(mode);
     syncCameraDriverSelectVisibility(mode, cameraDriverWrap);
-    syncFreeModeChrome(mode);
     const controller = replay.getController();
     if (controller) {
       onFrame(controller.getFrame(replay.currentTime));
@@ -57,6 +48,12 @@ export function bindControls(
   };
 
   playToggle.addEventListener("click", () => {
+    const controller = replay.getController();
+    if (!controller) return;
+    if (!replay.playing && replay.currentTime >= controller.getDuration()) {
+      const frame = replay.seek(0);
+      if (frame) onFrame(frame);
+    }
     syncPlayButton(replay.togglePlay());
   });
 
