@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { CarSample, ReplaySegment, TrackPoint3D } from "../types";
+import type { CarSample, CircuitCorner, ReplaySegment, TrackPoint3D } from "../types";
 
 /** OpenF1 x/y/z en décimos de metro (coherente con el campo speed en km/h). */
 export const OPENF1_UNITS_TO_METERS = 0.1;
@@ -26,6 +26,10 @@ export const TRACK_PATH_DENSIFY_SPACING_METERS = 4;
 
 /** Separación al remuestrear la centerline suavizada para el ribbon visual (m). */
 export const TRACK_PATH_SMOOTH_SPACING_METERS = 2;
+
+const TRACK_LAP_MIN_FLYING_SPEED_KMH = 80;
+const TRACK_LAP_CORNER_COVERAGE_METERS = 40;
+const TRACK_LAP_START_STRIDE = 12;
 
 export interface SceneTransform {
   /** Metros de escena por unidad OpenF1 en plano horizontal. */
@@ -102,23 +106,61 @@ function closeTrackLoop(points: TrackPoint3D[]): TrackPoint3D[] {
   return [...points, { ...first }];
 }
 
-function extractClosedLapSamples(
+function distanceToCircuitCornerMeters(point: TrackPoint3D, corner: CircuitCorner): number {
+  return horizontalDistanceMeters(point.x, point.z, corner.x, corner.y);
+}
+
+export function pathCoversCircuitCorners(
+  points: TrackPoint3D[],
+  corners: CircuitCorner[],
+  maxMeters = TRACK_LAP_CORNER_COVERAGE_METERS,
+): boolean {
+  if (corners.length === 0 || points.length === 0) {
+    return corners.length === 0;
+  }
+
+  return corners.every((corner) => {
+    let best = Number.POSITIVE_INFINITY;
+    for (const point of points) {
+      best = Math.min(best, distanceToCircuitCornerMeters(point, corner));
+      if (best <= maxMeters) {
+        return true;
+      }
+    }
+    return false;
+  });
+}
+
+function scoreClosedLapCandidate(
+  gapMeters: number,
+  traveledMeters: number,
+  expectedLapMeters: number,
+): number {
+  return gapMeters + Math.abs(traveledMeters - expectedLapMeters) * 0.35;
+}
+
+function extractClosedLapFromStart(
   samples: CarSample[],
+  startIndex: number,
   expectedLapMeters: number,
 ): CarSample[] | null {
-  if (samples.length < 4) {
+  if (startIndex < 0 || startIndex >= samples.length - 3) {
+    return null;
+  }
+
+  const start = samples[startIndex];
+  if (start.speed < TRACK_LAP_MIN_FLYING_SPEED_KMH) {
     return null;
   }
 
   const closeThresholdMeters = 100;
   const minLapMeters = Math.max(3000, expectedLapMeters * 0.85);
-  const maxLapMeters = expectedLapMeters > 0 ? expectedLapMeters * 1.4 : 9000;
-  const start = samples[0];
+  const maxLapMeters = expectedLapMeters > 0 ? expectedLapMeters * 1.2 : 8500;
   let traveled = 0;
   let bestEnd: number | null = null;
   let bestScore = Number.POSITIVE_INFINITY;
 
-  for (let index = 1; index < samples.length; index += 1) {
+  for (let index = startIndex + 1; index < samples.length; index += 1) {
     const prev = samples[index - 1];
     const curr = samples[index];
     traveled += horizontalDistanceMeters(prev.x, prev.z, curr.x, curr.z);
@@ -135,35 +177,87 @@ function extractClosedLapSamples(
       continue;
     }
 
-    const score = gap + Math.abs(traveled - expectedLapMeters) * 0.05;
+    const score = scoreClosedLapCandidate(gap, traveled, expectedLapMeters);
     if (score < bestScore) {
       bestScore = score;
       bestEnd = index;
     }
   }
 
-  return bestEnd == null ? null : samples.slice(0, bestEnd + 1);
+  return bestEnd == null ? null : samples.slice(startIndex, bestEnd + 1);
 }
+
+function extractClosedLapSamples(
+  samples: CarSample[],
+  expectedLapMeters: number,
+  corners: CircuitCorner[] = [],
+): CarSample[] | null {
+  if (samples.length < 4) {
+    return null;
+  }
+
+  let bestLap: CarSample[] | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (let startIndex = 0; startIndex < samples.length - 3; startIndex += TRACK_LAP_START_STRIDE) {
+    const candidate = extractClosedLapFromStart(samples, startIndex, expectedLapMeters);
+    if (!candidate || candidate.length < 24) {
+      continue;
+    }
+
+    const points = candidate.map((sample) => ({ x: sample.x, y: sample.y, z: sample.z }));
+    if (!pathCoversCircuitCorners(points, corners)) {
+      continue;
+    }
+
+    const traveled = trackPointsLengthMeters(points);
+    const gap = trackLoopGapMeters(points);
+    const score = scoreClosedLapCandidate(gap, traveled, expectedLapMeters);
+    if (score < bestScore) {
+      bestScore = score;
+      bestLap = candidate;
+    }
+  }
+
+  return bestLap;
+}
+
 export function pickTrackDriverNumber(segment: ReplaySegment): number {
   const preferred = segment.drivers.find((driver) => segment.samples[driver.driverNumber]?.length);
   return preferred?.driverNumber ?? segment.drivers[0]?.driverNumber ?? 1;
 }
 
+function trackDriverCandidates(segment: ReplaySegment): number[] {
+  const preferred = pickTrackDriverNumber(segment);
+  const rest = segment.drivers
+    .map((driver) => driver.driverNumber)
+    .filter((driverNumber) => driverNumber !== preferred);
+  return [preferred, ...rest];
+}
+
 export function buildTrackCenterline(segment: ReplaySegment, simplifyStep = 2): TrackPoint3D[] {
-  const driverNumber = pickTrackDriverNumber(segment);
-  const samples = segment.samples[driverNumber];
-  if (samples && samples.length > 24) {
-    const expectedLapMeters = Math.max(trackPointsLengthMeters(segment.circuit.centerline), 3000);
-    const lapSamples = extractClosedLapSamples(samples, expectedLapMeters);
-    if (lapSamples && lapSamples.length > 24) {
-      const fromDriver = deriveTrackCenterlineFromSamples(lapSamples, simplifyStep);
-      if (fromDriver.length >= 4) {
-        return closeTrackLoop(fromDriver);
-      }
+  const stored = closeTrackLoop(segment.circuit.centerline);
+  const expectedLapMeters = Math.max(trackPointsLengthMeters(stored), 3000);
+  const corners = segment.circuit.corners;
+
+  for (const driverNumber of trackDriverCandidates(segment)) {
+    const samples = segment.samples[driverNumber];
+    if (!samples || samples.length <= 24) {
+      continue;
+    }
+
+    const lapSamples = extractClosedLapSamples(samples, expectedLapMeters, corners);
+    if (!lapSamples || lapSamples.length <= 24) {
+      continue;
+    }
+
+    const fromDriver = deriveTrackCenterlineFromSamples(lapSamples, simplifyStep);
+    if (fromDriver.length >= 4 && pathCoversCircuitCorners(fromDriver, corners)) {
+      return closeTrackLoop(fromDriver);
     }
   }
 
-  return closeTrackLoop(segment.circuit.centerline);
+  return stored;
 }
 /** Añade vértices a lo largo de la polyline sin cambiar la trazada (sin splines). */
 export function densifyPolylineLinear(
