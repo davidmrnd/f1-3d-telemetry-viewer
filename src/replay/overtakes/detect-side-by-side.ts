@@ -110,10 +110,10 @@ function addEpisodes(
   episodes.get(reference)?.push({ start, end, amplitude: -otherSide * needed * (1 - otherShare) });
 }
 
-export function buildLaneOffsetTimelines(
+export function* buildLaneOffsetTimelineSteps(
   trajectories: Map<number, DriverTrajectory>,
   duration: number,
-): Map<number, LaneOffsetTimeline> {
+): Generator<number, Map<number, LaneOffsetTimeline>> {
   const drivers = [...trajectories.keys()];
   const pairSamples = new Map<string, PairSample[]>();
   const episodes = new Map<number, LaneEpisode[]>(drivers.map((driver) => [driver, []]));
@@ -135,14 +135,30 @@ export function buildLaneOffsetTimelines(
         pairSamples.set(key, list);
       }
     }
+    if (t % (SAMPLE_STEP_MS * 1000) === 0) yield 0.9 * t / Math.max(1, duration);
   }
 
+  let completed = 0;
   for (const [key, samples] of pairSamples) {
     const [a, b] = key.split(":").map(Number);
     for (const run of collectRuns(samples)) {
       addEpisodes(run, drivers[a], drivers[b], trajectories, episodes);
     }
+    completed += 1;
+    if (completed % 8 === 0 || completed === pairSamples.size) {
+      yield 0.9 + 0.1 * completed / pairSamples.size;
+    }
   }
 
   return new Map(drivers.map((driver) => [driver, new LaneOffsetTimeline(episodes.get(driver) ?? [])]));
+}
+
+export function buildLaneOffsetTimelines(
+  trajectories: Map<number, DriverTrajectory>,
+  duration: number,
+): Map<number, LaneOffsetTimeline> {
+  const steps = buildLaneOffsetTimelineSteps(trajectories, duration);
+  let step = steps.next();
+  while (!step.done) step = steps.next();
+  return step.value;
 }

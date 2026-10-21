@@ -38,18 +38,30 @@ function buildTrajectory(driver: PreparedDriver, telemetryLagMs: number): Driver
   });
 }
 
-export function buildDriverTrajectories(segment: ReplaySegment): Map<number, DriverTrajectory> {
+export function* buildDriverTrajectoriesSteps(segment: ReplaySegment): Generator<number, Map<number, DriverTrajectory>> {
   const prepared = new Map<number, PreparedDriver>();
-  for (const [driverNumber, samples] of Object.entries(segment.samples)) {
+  const entries = Object.entries(segment.samples);
+  for (const [index, [driverNumber, samples]] of entries.entries()) {
     if (samples.length > 0) {
       prepared.set(Number(driverNumber), prepareDriver(samples));
     }
+    yield 0.3 * (index + 1) / entries.length;
   }
 
   const telemetryLagMs = estimateTelemetryLagMs([...prepared.values()]);
   const trajectories = new Map<number, DriverTrajectory>();
+  let completed = 0;
   for (const [driverNumber, driver] of prepared) {
     trajectories.set(driverNumber, buildTrajectory(driver, telemetryLagMs));
+    completed += 1;
+    yield 0.3 + 0.7 * completed / prepared.size;
   }
   return trajectories;
+}
+
+export function buildDriverTrajectories(segment: ReplaySegment): Map<number, DriverTrajectory> {
+  const steps = buildDriverTrajectoriesSteps(segment);
+  let step = steps.next();
+  while (!step.done) step = steps.next();
+  return step.value;
 }

@@ -12,6 +12,7 @@ import { populateCameraDriverSelect } from "./app/camera-controls";
 import { mustQuery } from "./app/dom";
 import { DesktopPlayerView } from "./app/desktop-player-view";
 import { paintFrame } from "./app/frame-ui";
+import { LoadingView } from "./app/loading-view";
 import { RacePickerView } from "./app/race-picker-view";
 import { ReplayApp } from "./app/replay-app";
 import { paintSessionMetadata } from "./app/session-ui";
@@ -66,6 +67,8 @@ const timingTower = new TimingTowerView(
 );
 let lastTick = performance.now();
 let bootstrapped = false;
+let loadingRace = false;
+const loadingView = new LoadingView();
 const desktopPlayer = new DesktopPlayerView((mode, driver) => {
   if (driver != null) {
     ui.cameraDriverSelect.value = String(driver);
@@ -102,6 +105,7 @@ const render = (frame: Parameters<typeof paintFrame>[0]) => {
 };
 
 function tick(now: number) {
+  if (loadingRace) return;
   if (!replay.getController()) {
     scene.update({ now: 0, normalized: 0, cars: [], activeEvent: null, trackStatus: null });
     scene.render();
@@ -152,49 +156,69 @@ async function pickRace(
 }
 
 async function loadSelectedRace(entry: RaceCatalogEntry) {
-  ui.statusPill.classList.remove("is-ready");
-  ui.statusPill.textContent = "Cargando datos del replay...";
-  const segment = await loadReplaySegmentFromRace(entry);
-  const controller = new ReplayController(segment);
-  replay.setController(controller);
-  replay.playing = false;
-  scene.loadSegment(segment);
-  populateCameraDriverSelect(ui.cameraDriverSelect, segment.drivers);
-  scene.setFollowDriver(Number(ui.cameraDriverSelect.value));
-  paintSessionMetadata(segment, ui);
-  timingTower.setSegment(segment);
-  timingTower.clear();
-  desktopPlayer.setSegment(segment);
-  mustQuery("#session-season").textContent = `FÓRMULA 1 · TEMPORADA ${segment.sessionRef.year}`;
-  appShell.hidden = false;
-  scene.resize();
-  const initialFrame = controller.getFrame(0);
-  const initialMode = scene.getCameraMode();
-  const initialDriver = scene.getFollowDriver();
-  scene.setCameraMode("onboard");
-  for (const driver of segment.drivers) {
-    scene.setFollowDriver(driver.driverNumber);
+  loadingRace = true;
+  appShell.inert = true;
+  loadingView.show(entry);
+  try {
+    ui.statusPill.classList.remove("is-ready");
+    ui.statusPill.textContent = "Cargando datos del replay...";
+    await loadingView.checkpoint(0);
+    const segment = await loadReplaySegmentFromRace(entry, (loaded, total) => {
+      if (total) loadingView.update(35 * Math.min(1, loaded / total));
+    });
+    await loadingView.checkpoint(40, "Preparando trayectorias…");
+    const controller = await ReplayController.create(segment, (progress) =>
+      loadingView.checkpoint(40 + 19 * progress),
+    );
+    replay.setController(controller);
+    replay.playing = false;
+    await loadingView.checkpoint(60, "Construyendo el circuito…");
+    scene.loadSegment(segment);
+    populateCameraDriverSelect(ui.cameraDriverSelect, segment.drivers);
+    scene.setFollowDriver(Number(ui.cameraDriverSelect.value));
+    paintSessionMetadata(segment, ui);
+    timingTower.setSegment(segment);
+    timingTower.clear();
+    desktopPlayer.setSegment(segment);
+    mustQuery("#session-season").textContent = `FÓRMULA 1 · TEMPORADA ${segment.sessionRef.year}`;
+    appShell.hidden = false;
+    scene.resize();
+    const initialFrame = controller.getFrame(0);
+    const initialMode = scene.getCameraMode();
+    const initialDriver = scene.getFollowDriver();
+    await loadingView.checkpoint(75, "Preparando cámaras…");
+    scene.setCameraMode("onboard");
+    for (const [index, driver] of segment.drivers.entries()) {
+      scene.setFollowDriver(driver.driverNumber);
+      scene.update(initialFrame);
+      scene.render();
+      desktopPlayer.capturePreview(canvas, "onboard", driver.driverNumber);
+      await loadingView.checkpoint(75 + 23 * (index + 1) / segment.drivers.length);
+    }
+    scene.setCameraMode("broadcast");
     scene.update(initialFrame);
     scene.render();
-    desktopPlayer.capturePreview(canvas, "onboard", driver.driverNumber);
-  }
-  scene.setCameraMode("broadcast");
-  scene.update(initialFrame);
-  scene.render();
-  desktopPlayer.capturePreview(canvas, "broadcast");
-  if (initialDriver != null) scene.setFollowDriver(initialDriver);
-  scene.setCameraMode(initialMode);
-  lastTick = performance.now();
-  render(initialFrame);
-  syncPlayButton(false);
-  ui.statusPill.textContent = "Listo.";
-  ui.statusPill.classList.add("is-ready");
+    desktopPlayer.capturePreview(canvas, "broadcast");
+    if (initialDriver != null) scene.setFollowDriver(initialDriver);
+    scene.setCameraMode(initialMode);
+    await loadingView.checkpoint(99, "Últimos detalles…");
+    render(initialFrame);
+    syncPlayButton(false);
+    ui.statusPill.textContent = "Listo.";
+    ui.statusPill.classList.add("is-ready");
 
-  const url = new URL(window.location.href);
-  url.searchParams.set("id", entry.id);
-  url.searchParams.set("year", String(entry.year));
-  url.searchParams.set("race", entry.race);
-  window.history.replaceState({}, "", url);
+    const url = new URL(window.location.href);
+    url.searchParams.set("id", entry.id);
+    url.searchParams.set("year", String(entry.year));
+    url.searchParams.set("race", entry.race);
+    window.history.replaceState({}, "", url);
+    await loadingView.checkpoint(100, "Finalizando…");
+  } finally {
+    lastTick = performance.now();
+    loadingRace = false;
+    appShell.inert = false;
+    loadingView.hide();
+  }
 }
 
 async function chooseAndLoadRace(options: { allowQueryShortcut?: boolean } = {}) {

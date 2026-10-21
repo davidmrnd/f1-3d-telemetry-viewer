@@ -102,7 +102,7 @@ export function bindPlayerChrome(replay: ReplayApp, onFrame: (frame: ReplayFrame
   shell.addEventListener("focusin", wake);
   shell.addEventListener("playbackchange", wake);
   window.addEventListener("keydown", (event) => {
-    if (event.defaultPrevented || shell.hidden || !replay.getController() || document.pointerLockElement || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.defaultPrevented || shell.hidden || shell.inert || !replay.getController() || document.pointerLockElement || event.altKey || event.ctrlKey || event.metaKey) return;
     wake();
     if (help.open) return;
     if (event.key === "Escape") {

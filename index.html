@@ -36,6 +36,18 @@
         <div class="picker-footer"><span class="source-dot"></span> DATOS DE OPENF1<span>Experiencia 3D · Proyecto académico independiente</span></div>
       </div>
     </div>
+    <section id="race-loading" class="race-loading" aria-label="Cargando circuito" aria-busy="true" hidden>
+      <div class="loading-brand"><span class="wordmark">APEX<span class="brand-slash"></span></span><span class="section-label">FÓRMULA 1 · REPLAY 3D</span></div>
+      <div class="loading-content">
+        <p class="section-label">PREPARANDO TU REPLAY</p>
+        <h1 id="loading-title">Circuito</h1>
+        <p id="loading-subtitle" class="loading-subtitle"></p>
+        <img id="loading-track" class="loading-track" alt="" />
+        <div class="loading-readout"><span id="loading-stage" role="status">Cargando datos del replay…</span><span id="loading-percentage" aria-hidden="true">0 %</span></div>
+        <div id="loading-progress" class="loading-progress" role="progressbar" aria-label="Preparación del replay" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-describedby="loading-stage"><span></span></div>
+        <p class="loading-note">Datos de OpenF1 · Reconstrucción 3D</p>
+      </div>
+    </section>
     <div id="app" class="shell scene-shell" hidden>
       <main class="player" aria-label="Reproductor de carrera 3D">
         <canvas id="race-canvas" aria-label="Escena 3D de la carrera"></canvas>

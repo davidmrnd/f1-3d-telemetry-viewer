@@ -1,14 +1,41 @@
 import type { ReplaySegment } from "../types";
 import type { RaceCatalogEntry } from "./races-catalog";
 
-export async function loadReplaySegment(path: string): Promise<ReplaySegment> {
+export type ReplayLoadProgress = (loadedBytes: number, totalBytes: number | null) => void;
+
+export async function loadReplaySegment(path: string, onProgress?: ReplayLoadProgress): Promise<ReplaySegment> {
   const response = await fetch(path);
   if (!response.ok) {
     throw new Error(
       `No se pudo cargar ${path}. Ejecuta "npm run sync:data" para generarlo desde OpenF1.`,
     );
   }
-  const segment = (await response.json()) as ReplaySegment;
+  let segment: ReplaySegment;
+  if (onProgress && response.body) {
+    const size = Number(response.headers.get("content-length"));
+    const encoding = response.headers.get("content-encoding");
+    const total = size > 0 && (!encoding || encoding === "identity") ? size : null;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const parts: string[] = [];
+    let loaded = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        loaded += value.byteLength;
+        parts.push(decoder.decode(value, { stream: true }));
+        onProgress(loaded, total);
+      }
+      parts.push(decoder.decode());
+      onProgress(loaded, loaded);
+    } finally {
+      reader.releaseLock();
+    }
+    segment = JSON.parse(parts.join("")) as ReplaySegment;
+  } else {
+    segment = (await response.json()) as ReplaySegment;
+  }
   return {
     ...segment,
     raceControl: segment.raceControl ?? [],
@@ -17,6 +44,6 @@ export async function loadReplaySegment(path: string): Promise<ReplaySegment> {
   };
 }
 
-export async function loadReplaySegmentFromRace(entry: RaceCatalogEntry): Promise<ReplaySegment> {
-  return loadReplaySegment(entry.path);
+export async function loadReplaySegmentFromRace(entry: RaceCatalogEntry, onProgress?: ReplayLoadProgress): Promise<ReplaySegment> {
+  return loadReplaySegment(entry.path, onProgress);
 }
