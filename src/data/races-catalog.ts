@@ -5,6 +5,7 @@ export interface RaceCatalogEntry {
   circuitShortName: string;
   meetingName: string;
   sessionKey: number;
+  totalLaps?: number | null;
   fileName: string;
   path: string;
   durationSec: number;

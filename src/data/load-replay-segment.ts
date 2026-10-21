@@ -45,5 +45,12 @@ export async function loadReplaySegment(path: string, onProgress?: ReplayLoadPro
 }
 
 export async function loadReplaySegmentFromRace(entry: RaceCatalogEntry, onProgress?: ReplayLoadProgress): Promise<ReplaySegment> {
-  return loadReplaySegment(entry.path, onProgress);
+  const segment = await loadReplaySegment(entry.path, onProgress);
+  return {
+    ...segment,
+    sessionRef: {
+      ...segment.sessionRef,
+      totalLaps: entry.totalLaps ?? segment.sessionRef.totalLaps ?? null,
+    },
+  };
 }

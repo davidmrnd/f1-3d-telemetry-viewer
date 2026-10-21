@@ -77,6 +77,7 @@ function sessionLapAt(events: RaceControlEvent[], now: number): number | null {
 export class TimingTowerView {
   private readonly rows = new Map<number, TowerRowNodes>();
   private raceControl: RaceControlEvent[] = [];
+  private totalLaps: number | null = null;
 
   constructor(
     private readonly container: HTMLElement,
@@ -85,6 +86,8 @@ export class TimingTowerView {
 
   setSegment(segment: ReplaySegment) {
     this.raceControl = segment.raceControl ?? [];
+    const totalLaps = segment.sessionRef.totalLaps;
+    this.totalLaps = totalLaps != null && Number.isInteger(totalLaps) && totalLaps > 0 ? totalLaps : null;
   }
 
   clear() {
@@ -127,7 +130,9 @@ export class TimingTowerView {
       const lap = sessionLapAt(this.raceControl, frame.now);
       if (lap != null) {
         this.lapLabel.hidden = false;
-        this.lapLabel.textContent = `Vuelta ${lap}`;
+        this.lapLabel.textContent = this.totalLaps != null
+          ? `Vuelta ${lap} / ${this.totalLaps}`
+          : `Vuelta ${lap}`;
       } else {
         this.lapLabel.hidden = true;
         this.lapLabel.textContent = "";

@@ -1,6 +1,7 @@
 export interface SessionRef {
   meetingKey: number;
   sessionKey: number;
+  totalLaps?: number | null;
   meetingName: string;
   circuitShortName: string;
   circuitInfoUrl: string | null;
