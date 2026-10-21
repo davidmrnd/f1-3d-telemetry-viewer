@@ -10,6 +10,7 @@
   --muted: #93959e;
   --line: rgba(255, 255, 255, 0.09);
   --edge: clamp(20px, 2.5vw, 44px);
+  --panel-edge: clamp(12px, 1.5vw, 26px);
   --top: 78px;
   --panel-top: 176px;
   --bottom: 134px;

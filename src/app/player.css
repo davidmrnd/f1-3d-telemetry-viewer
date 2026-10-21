@@ -1,6 +1,6 @@
 .shell, .player { position: relative; width: 100%; height: 100dvh; min-height: 420px; overflow: hidden; background: #08090b; }
 #race-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
-.scene-shade { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(4,5,7,.94) 0%, rgba(4,5,7,.74) 13%, rgba(4,5,7,0) 34%, rgba(4,5,7,0) 62%, rgba(4,5,7,.65) 85%, #060709 100%); }
+.scene-shade { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(4,5,7,.94) 0%, rgba(4,5,7,.74) 13%, rgba(4,5,7,0) 34%, rgba(4,5,7,0) 62%, rgba(4,5,7,.65) 85%, #060709 100%); transition: opacity 220ms; }
 .player-chrome { transition: opacity 220ms, transform 220ms; }
 .topbar { position: absolute; top: 0; left: 0; right: 0; height: var(--top); display: flex; align-items: center; padding: 0 var(--edge); border-bottom: 1px solid rgba(255,255,255,.055); gap: 56px; background: rgba(8,9,11,.5); }
 .main-nav { display: flex; align-items: stretch; gap: 34px; height: 100%; }
@@ -25,13 +25,13 @@
 .race-subtitle { display: flex; justify-content: end; gap: 8px; color: #9597a1; font-size: 9px; letter-spacing: .5px; margin-top: 7px; text-transform: uppercase; }
 .subtitle-separator { color: #54565e; }
 .floating-panel { background: rgba(9,10,13,.88); border: 1px solid var(--line); border-radius: 5px; backdrop-filter: blur(16px); }
-.classification-panel { position: absolute; top: var(--panel-top); left: var(--edge); width: var(--tower-width); max-height: calc(100% - var(--panel-top) - var(--bottom)); display: flex; flex-direction: column; overflow: hidden; }
+.classification-panel { position: absolute; top: var(--panel-top); bottom: var(--bottom); left: var(--panel-edge); width: var(--tower-width); max-height: calc(100% - var(--panel-top) - var(--bottom)); display: flex; flex-direction: column; overflow: hidden; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 10px 14px; border-bottom: 1px solid var(--line); }
 .panel-heading h2 { margin: 0; color: #e0e1e5; font-size: 10px; font-weight: 600; letter-spacing: 1.2px; }
 .panel-heading .icon-button { color: #72757f; }
 .timing-columns { display: grid; grid-template-columns: 24px 1fr 40px 66px; gap: 4px; padding: 11px 12px 8px; font-size: 8px; font-weight: 500; letter-spacing: .4px; color: #82858e; }
 .timing-columns > span:last-child { text-align: right; }
-.timing-tower { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #3b3d44 transparent; padding-bottom: 4px; }
+.timing-tower { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #3b3d44 transparent; padding-bottom: 4px; }
 .timing-row { display: grid; grid-template-columns: 23px 3px minmax(0, 1fr) 40px 62px; gap: 7px; align-items: center; min-height: clamp(20px, calc((100dvh - var(--panel-top) - var(--bottom) - 112px) / 20), 31px); flex-shrink: 0; width: 100%; padding: 0 12px; border-bottom: 1px solid rgba(255,255,255,.025); color: #e3e4e8; font-size: 11px; border-radius: 0; text-align: left; }
 .timing-row:nth-child(even) { background: rgba(255,255,255,.025); }
 .timing-row:hover { background: rgba(255,255,255,.08); }
@@ -52,7 +52,9 @@
 .timing-row--leader .timing-row__interval { font-size: 8px; letter-spacing: 1px; color: #858995; }
 .tower-footer { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--line); padding: 10px 12px; color: #646873; font-size: 7px; letter-spacing: .45px; }
 .tower-footer > div { font-size: 8px; color: #999ca5; letter-spacing: 0; }
-.inspector-panel { position: absolute; top: var(--panel-top); right: var(--edge); bottom: var(--bottom); width: var(--inspector-width); display: flex; flex-direction: column; overflow: hidden; }
+.inspector-panel { position: absolute; top: var(--panel-top); right: var(--panel-edge); bottom: var(--bottom); width: var(--inspector-width); display: flex; flex-direction: column; overflow: hidden; }
+.classification-panel, .inspector-panel { transition: top 220ms, bottom 220ms, max-height 220ms, opacity 220ms, transform 220ms; }
+.timing-row { flex-grow: 1; }
 .inspector-header { display: flex; align-items: center; border-bottom: 1px solid var(--line); min-height: 49px; padding: 0 7px 0 10px; }
 .panel-tabs { display: flex; align-items: stretch; height: 49px; flex: 1; }
 .panel-tab { position: relative; padding: 0 13px; font-size: 10px; font-weight: 600; letter-spacing: .35px; color: #777b86; }
@@ -103,7 +105,7 @@
 .map-driver { stroke: #111216; stroke-width: 1.8; }
 .map-driver.is-selected { stroke: white; stroke-width: 2; }
 .map-caption { display: flex; gap: 8px; align-items: center; color: #c4c7cf; font-size: 12px; }
-.view-caption { position: absolute; bottom: calc(var(--bottom) + 18px); left: calc(var(--edge) + var(--tower-width) + 24px); display: flex; align-items: center; gap: 9px; pointer-events: none; }
+.view-caption { position: absolute; bottom: calc(var(--bottom) + 18px); left: calc(var(--panel-edge) + var(--tower-width) + 24px); display: flex; align-items: center; gap: 9px; pointer-events: none; }
 .caption-rule { width: 20px; height: 2px; background: var(--accent); }
 .camera-pill { font-size: 10px; font-weight: 600; letter-spacing: .7px; text-transform: uppercase; }
 .view-caption-detail { font-size: 8px; letter-spacing: 1px; color: #a1a5b0; padding-left: 10px; border-left: 1px solid #62656d; margin-left: 3px; }
@@ -153,7 +155,9 @@ select option { color: #e1e3e9; background: #1c1e24; }
 .is-theater .classification-panel, .is-theater .inspector-panel { opacity: 0; transform: translateY(8px); pointer-events: none; visibility: hidden; }
 .is-theater .view-caption { left: var(--edge); }
 .is-theater .topbar { background: transparent; border-color: transparent; }
-.is-idle .player-chrome { opacity: 0; pointer-events: none; }
+.is-idle .player-chrome:not(.floating-panel) { opacity: 0; pointer-events: none; }
+.is-idle .scene-shade { opacity: .18; }
+.is-idle .classification-panel, .is-idle .inspector-panel { top: var(--panel-edge); bottom: var(--panel-edge); max-height: calc(100% - var(--panel-edge) - var(--panel-edge)); }
 .is-idle { cursor: none; }
 .is-idle .player-chrome:has(:focus-visible) { opacity: 1; pointer-events: auto; }
 .shell:fullscreen, .shell.is-fullscreen { height: 100dvh; width: 100%; }

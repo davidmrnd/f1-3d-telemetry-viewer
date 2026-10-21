@@ -91,7 +91,7 @@ export function bindPlayerChrome(replay: ReplayApp, onFrame: (frame: ReplayFrame
     idleTimer = window.setTimeout(() => {
       const focused = document.activeElement;
       if (replay.playing && !shell.hidden && settings.hidden && !help.open
-        && !shell.querySelector(".player-controls:hover, .floating-panel:hover, .topbar:hover")
+        && !shell.querySelector(".player-controls:hover, .topbar:hover")
         && !focused?.matches(":focus-visible")) {
         shell.classList.add("is-idle");
       }
