@@ -27,6 +27,7 @@ import { ReplayController } from "./replay/replay-controller";
 import { preloadCarModels } from "./scene/car-models";
 import { preloadTrackEnvironment } from "./scene/track-environment";
 import { RaceScene } from "./scene/race-scene";
+import { GraphicsPerformanceView } from "./app/graphics-performance-view";
 
 const canvas = mustQuery<HTMLCanvasElement>("#race-canvas");
 const appShell = mustQuery<HTMLElement>("#app");
@@ -60,6 +61,7 @@ const ui = {
 };
 
 const scene = new RaceScene(canvas);
+const graphicsPerformance = new GraphicsPerformanceView(mustQuery<HTMLOutputElement>("#graphics-stats"));
 const replay = new ReplayApp();
 const timingTower = new TimingTowerView(
   mustQuery<HTMLDivElement>("#timing-tower"),
@@ -282,4 +284,5 @@ void bootstrap();
 scene.setAnimationLoop((time) => {
   scene.pollXrInput();
   tick(time);
+  if (!loadingRace) graphicsPerformance.update(scene, time);
 });

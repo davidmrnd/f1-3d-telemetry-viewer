@@ -1,11 +1,11 @@
 import * as THREE from "three";
 import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
+import type { GraphicsSettings } from "./graphics-settings";
 
-/** Tamaño de tile en metros reales para repeat UV. */
 export const TRACK_TILE_METERS = {
-  road: 2,
-  grass: 4,
-  kerb: 1,
+  road: 3,
+  grass: 6,
+  kerb: 2.4,
 } as const;
 
 const TEXTURE_ROOT = "/textures";
@@ -23,22 +23,28 @@ const PBR_SETS = {
     roughness: `${TEXTURE_ROOT}/grass/Grass005_2K-JPG_Roughness.jpg`,
     ao: `${TEXTURE_ROOT}/grass/Grass005_2K-JPG_AmbientOcclusion.jpg`,
   },
-  kerb: {
-    color: `${TEXTURE_ROOT}/kerb/Candy001_1K-JPG_Color.jpg`,
-    normal: `${TEXTURE_ROOT}/kerb/Candy001_1K-JPG_NormalGL.jpg`,
-    roughness: `${TEXTURE_ROOT}/kerb/Candy001_1K-JPG_Roughness.jpg`,
+  gravel: {
+    color: `${TEXTURE_ROOT}/gravel/Gravel023_1K-JPG_Color.jpg`,
+    normal: `${TEXTURE_ROOT}/gravel/Gravel023_1K-JPG_NormalGL.jpg`,
+    roughness: `${TEXTURE_ROOT}/gravel/Gravel023_1K-JPG_Roughness.jpg`,
+    ao: `${TEXTURE_ROOT}/gravel/Gravel023_1K-JPG_AmbientOcclusion.jpg`,
   },
 } as const;
 
 const SKY_HDRI_URL = `${TEXTURE_ROOT}/sky/DaySkyHDRI063B_2K_HDR.exr`;
 
-/** Extensión del terreno de césped (m). Debe coincidir con `createGrassTerrainGeometry` en RaceScene. */
 export const GROUND_PLANE_SIZE_METERS = 6000;
 
 export interface TrackSurfaceMaterials {
   road: THREE.MeshStandardMaterial;
   grass: THREE.MeshStandardMaterial;
   kerb: THREE.MeshStandardMaterial;
+  gravel: THREE.MeshStandardMaterial;
+  apron: THREE.MeshStandardMaterial;
+  white: THREE.MeshStandardMaterial;
+  rubber: THREE.MeshStandardMaterial;
+  steel: THREE.MeshStandardMaterial;
+  concrete: THREE.MeshStandardMaterial;
 }
 
 interface PbrTextureSet {
@@ -51,6 +57,53 @@ interface PbrTextureSet {
 let loadPromise: Promise<void> | null = null;
 let skyTexture: THREE.DataTexture | null = null;
 let surfaceMaterials: TrackSurfaceMaterials | null = null;
+let skyTarget: THREE.WebGLRenderTarget | null = null;
+const detailMaps = new Map<THREE.MeshStandardMaterial, Pick<PbrTextureSet, "normalMap" | "roughnessMap" | "aoMap">>();
+const clearSkies = new Map<string, THREE.CanvasTexture>();
+
+function clearSky(style: GraphicsSettings["lighting"]) {
+  const existing = clearSkies.get(style);
+  if (existing) return existing;
+  const canvas = document.createElement("canvas");
+  canvas.width = 64; canvas.height = 256;
+  const ctx = canvas.getContext("2d")!;
+  const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+  gradient.addColorStop(0, style === "warm" ? "#7398b9" : style === "overcast" ? "#9fadb7" : "#548fbd");
+  gradient.addColorStop(0.42, style === "warm" ? "#ccd2cc" : "#b5cfdc");
+  gradient.addColorStop(0.5, style === "warm" ? "#e1d3ba" : "#d4dfe0");
+  gradient.addColorStop(0.53, "#b4bba8");
+  gradient.addColorStop(1, "#7d8774");
+  ctx.fillStyle = gradient; ctx.fillRect(0, 0, 64, 256);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.mapping = THREE.EquirectangularReflectionMapping;
+  clearSkies.set(style, texture);
+  return texture;
+}
+
+function tuneSurface(material: THREE.MeshStandardMaterial, saturation: number, roughnessFloor: number) {
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace("#include <color_fragment>",
+      `#include <color_fragment>\nfloat surfaceLuma = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));\ndiffuseColor.rgb = mix(vec3(surfaceLuma), diffuseColor.rgb, ${saturation.toFixed(2)});`)
+      .replace("#include <roughnessmap_fragment>", `#include <roughnessmap_fragment>\nroughnessFactor = max(roughnessFactor, ${roughnessFloor.toFixed(2)});`);
+  };
+  material.customProgramCacheKey = () => `surface-${saturation}-${roughnessFloor}`;
+}
+
+function createKerbMaterial() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 32;
+  canvas.height = 128;
+  const context = canvas.getContext("2d")!;
+  context.fillStyle = "#e2ded4";
+  context.fillRect(0, 0, 32, 128);
+  context.fillStyle = "#b52927";
+  context.fillRect(0, 0, 32, 64);
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  return new THREE.MeshStandardMaterial({ map, roughness: 0.87, metalness: 0 });
+}
 
 function loadColorTexture(url: string): Promise<THREE.Texture> {
   return new Promise((resolve, reject) => {
@@ -154,19 +207,33 @@ export function preloadTrackEnvironment(): Promise<void> {
   }
 
   loadPromise = (async () => {
-    const [road, grass, kerb, sky] = await Promise.all([
+    const [road, grass, gravel, sky] = await Promise.all([
       loadPbrSet("road", 8),
       loadPbrSet("grass", 4),
-      loadPbrSet("kerb", 6),
+      loadPbrSet("gravel", 4),
       loadSkyTexture(),
     ]);
 
     skyTexture = sky;
     surfaceMaterials = {
-      road: buildSurfaceMaterial(road, { roughness: 0.88, metalness: 0.03 }),
-      grass: buildSurfaceMaterial(grass, { roughness: 0.95, metalness: 0 }),
-      kerb: buildSurfaceMaterial(kerb, { roughness: 0.75, metalness: 0.04 }),
+      road: buildSurfaceMaterial(road, { color: "#a9afb2", roughness: 1, metalness: 0, envMapIntensity: 0.12, normalScale: new THREE.Vector2(0.035, 0.035) }),
+      grass: buildSurfaceMaterial(grass, { color: "#b6b9a0", roughness: 1, metalness: 0, vertexColors: true, normalScale: new THREE.Vector2(0.45, 0.45) }),
+      kerb: createKerbMaterial(),
+      gravel: buildSurfaceMaterial(gravel, { color: "#c5b89b", roughness: 1, metalness: 0, normalScale: new THREE.Vector2(0.6, 0.6) }),
+      apron: new THREE.MeshStandardMaterial({ color: "#477d70", roughness: 0.96 }),
+      white: new THREE.MeshStandardMaterial({ color: "#e5e3d8", roughness: 0.85 }),
+      rubber: new THREE.MeshStandardMaterial({ color: "#14181b", transparent: true, opacity: 0.13, depthWrite: false, roughness: 1 }),
+      steel: new THREE.MeshStandardMaterial({ color: "#a0a8ab", roughness: 0.7, metalness: 0.55 }),
+      concrete: new THREE.MeshStandardMaterial({ color: "#b9b6ac", roughness: 0.95 }),
     };
+    for (const material of Object.values(surfaceMaterials)) {
+      if (material.normalMap && material.roughnessMap) detailMaps.set(material, {
+        normalMap: material.normalMap, roughnessMap: material.roughnessMap, aoMap: material.aoMap ?? undefined,
+      });
+    }
+    tuneSurface(surfaceMaterials.road, 0.6, 0.87);
+    tuneSurface(surfaceMaterials.grass, 0.55, 0.93);
+    tuneSurface(surfaceMaterials.gravel, 0.75, 0.9);
   })().catch((error) => {
     loadPromise = null;
     throw error;
@@ -192,14 +259,44 @@ export function applyTrackEnvironment(scene: THREE.Scene, renderer: THREE.WebGLR
 
   const pmrem = new THREE.PMREMGenerator(renderer);
   pmrem.compileEquirectangularShader();
-  const environmentMap = pmrem.fromEquirectangular(skyTexture).texture;
+  skyTarget?.dispose();
+  skyTarget = pmrem.fromEquirectangular(skyTexture);
+  const environmentMap = skyTarget.texture;
   pmrem.dispose();
 
   scene.environment = environmentMap;
   scene.background = skyTexture;
-  scene.backgroundBlurriness = 0.04;
-  scene.backgroundIntensity = 1;
+  scene.backgroundBlurriness = 0.025;
+  scene.backgroundIntensity = 0.8;
 
-  const fogColor = new THREE.Color("#c5d4e4");
-  scene.fog = new THREE.Fog(fogColor.getHex(), 400, 2400);
+  const fogColor = new THREE.Color("#c8d3d6");
+  scene.fog = new THREE.Fog(fogColor.getHex(), 800, 3200);
+}
+
+export function applySurfaceQuality(settings: GraphicsSettings, renderer: THREE.WebGLRenderer) {
+  const anisotropy = Math.min(settings.anisotropy, renderer.capabilities.getMaxAnisotropy());
+  for (const [material, maps] of detailMaps) {
+    const normal = settings.surfaceDetail ? maps.normalMap : null;
+    if (material.normalMap !== normal) {
+      material.normalMap = normal;
+      material.roughnessMap = settings.surfaceDetail ? maps.roughnessMap : null;
+      material.aoMap = settings.surfaceDetail ? maps.aoMap ?? null : null;
+      material.needsUpdate = true;
+    }
+  }
+  for (const material of Object.values(getTrackSurfaceMaterials())) {
+    const maps = detailMaps.get(material);
+    for (const texture of [material.map, maps?.normalMap, maps?.roughnessMap, maps?.aoMap]) {
+      if (texture && texture.anisotropy !== anisotropy) {
+        texture.anisotropy = anisotropy;
+        texture.needsUpdate = true;
+      }
+    }
+  }
+}
+
+export function applySkyQuality(scene: THREE.Scene, settings: GraphicsSettings, color: string) {
+  scene.background = settings.sky ? settings.skyStyle === "hdri" ? skyTexture : clearSky(settings.lighting) : new THREE.Color(color);
+  scene.backgroundIntensity = settings.skyStyle === "hdri" ? 0.9 : 1;
+  scene.environmentIntensity = settings.environmentIntensity;
 }

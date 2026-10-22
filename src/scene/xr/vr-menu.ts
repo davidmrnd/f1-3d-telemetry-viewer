@@ -1,19 +1,9 @@
 import * as THREE from "three";
 import type { CameraMode } from "../cameras/types";
 import {
-  CAR_MATERIAL_LABELS,
-  DEFAULT_GRAPHICS_SETTINGS,
-  GRAPHICS_PRESET_LABELS,
-  PIXEL_RATIO_OPTIONS,
-  settingsFromPreset,
-  SHADOW_QUALITY_LABELS,
-  withDetectedPreset,
-  XR_SCALE_OPTIONS,
-  type CarMaterialQuality,
-  type GraphicsPreset,
-  type GraphicsSettings,
-  type ShadowQuality,
+  DEFAULT_GRAPHICS_SETTINGS, settingsFromPreset, withDetectedPreset, type GraphicsSettings,
 } from "../graphics-settings";
+import { drawVrGraphicsLabels, vrGraphicsLayout, vrGraphicsZoneLabel, type VrGraphicsZone } from "./vr-graphics";
 
 export type VrMenuDriverOption = {
   driverNumber: number;
@@ -54,14 +44,7 @@ type HitZone =
   | { id: "driver"; driverNumber: number }
   | { id: "openGraphics" }
   | { id: "back" }
-  | { id: "preset"; preset: GraphicsPreset }
-  | { id: "pixelRatio"; value: number }
-  | { id: "shadows"; value: ShadowQuality }
-  | { id: "environment"; value: boolean }
-  | { id: "fog"; value: boolean }
-  | { id: "xrScale"; value: number }
-  | { id: "carMaterials"; value: CarMaterialQuality }
-  | { id: "carShadows"; value: boolean };
+  | VrGraphicsZone;
 
 type LayoutRect = { x: number; y: number; w: number; h: number; zone: HitZone };
 
@@ -72,13 +55,9 @@ const CANVAS_H = 1280;
 const SPEEDS = [0.5, 1, 1.5, 2];
 const CAMERA_OPTIONS: { mode: CameraMode; label: string }[] = [
   { mode: "broadcast", label: "Retransmisión" },
-  { mode: "onboard", label: "On-board" },
+  { mode: "onboard", label: "A bordo" },
   { mode: "orbit", label: "Libre" },
 ];
-const PRESETS: GraphicsPreset[] = ["low", "medium", "high"];
-const SHADOWS: ShadowQuality[] = ["off", "low", "high"];
-const CAR_MATERIALS: CarMaterialQuality[] = ["pbr", "simple"];
-
 export class VrMenu {
   readonly group = new THREE.Group();
   private readonly canvas: HTMLCanvasElement;
@@ -93,6 +72,7 @@ export class VrMenu {
   private needsRedraw = true;
   private scrubbing = false;
   private page: MenuPage = "main";
+  private graphicsTab = 0;
 
   constructor(actions: VrMenuActions, initial: VrMenuState) {
     this.actions = actions;
@@ -190,15 +170,8 @@ export class VrMenu {
       drivers: nextDrivers,
       graphics: nextGraphics,
     };
-    const graphicsChanged =
-      next.graphics.preset !== this.state.graphics.preset ||
-      next.graphics.maxPixelRatio !== this.state.graphics.maxPixelRatio ||
-      next.graphics.shadows !== this.state.graphics.shadows ||
-      next.graphics.environment !== this.state.graphics.environment ||
-      next.graphics.fog !== this.state.graphics.fog ||
-      next.graphics.xrScale !== this.state.graphics.xrScale ||
-      next.graphics.carMaterials !== this.state.graphics.carMaterials ||
-      next.graphics.carShadows !== this.state.graphics.carShadows;
+    const graphicsChanged = (Object.keys(next.graphics) as (keyof GraphicsSettings)[])
+      .some((key) => next.graphics[key] !== this.state.graphics[key]);
     const changed =
       next.playing !== this.state.playing ||
       next.normalizedTime !== this.state.normalizedTime ||
@@ -294,65 +267,13 @@ export class VrMenu {
         this.setState({ graphics: settings });
         break;
       }
-      case "pixelRatio": {
-        const settings = withDetectedPreset({
-          ...this.state.graphics,
-          maxPixelRatio: zone.value,
-        });
-        this.actions.onSetGraphicsSettings(settings);
-        this.setState({ graphics: settings });
+      case "graphicsTab":
+        this.graphicsTab = zone.tab;
+        this.rebuildLayout();
+        this.needsRedraw = true;
         break;
-      }
-      case "shadows": {
-        const settings = withDetectedPreset({
-          ...this.state.graphics,
-          shadows: zone.value,
-        });
-        this.actions.onSetGraphicsSettings(settings);
-        this.setState({ graphics: settings });
-        break;
-      }
-      case "environment": {
-        const settings = withDetectedPreset({
-          ...this.state.graphics,
-          environment: zone.value,
-        });
-        this.actions.onSetGraphicsSettings(settings);
-        this.setState({ graphics: settings });
-        break;
-      }
-      case "fog": {
-        const settings = withDetectedPreset({
-          ...this.state.graphics,
-          fog: zone.value,
-        });
-        this.actions.onSetGraphicsSettings(settings);
-        this.setState({ graphics: settings });
-        break;
-      }
-      case "xrScale": {
-        const settings = withDetectedPreset({
-          ...this.state.graphics,
-          xrScale: zone.value,
-        });
-        this.actions.onSetGraphicsSettings(settings);
-        this.setState({ graphics: settings });
-        break;
-      }
-      case "carMaterials": {
-        const settings = withDetectedPreset({
-          ...this.state.graphics,
-          carMaterials: zone.value,
-        });
-        this.actions.onSetGraphicsSettings(settings);
-        this.setState({ graphics: settings });
-        break;
-      }
-      case "carShadows": {
-        const settings = withDetectedPreset({
-          ...this.state.graphics,
-          carShadows: zone.value,
-        });
+      case "graphicsValue": {
+        const settings = withDetectedPreset({ ...this.state.graphics, [zone.key]: zone.value });
         this.actions.onSetGraphicsSettings(settings);
         this.setState({ graphics: settings });
         break;
@@ -441,83 +362,7 @@ export class VrMenu {
   }
 
   private buildGraphicsLayout(): LayoutRect[] {
-    const layout: LayoutRect[] = [];
-    const pad = 36;
-    const rowH = 48;
-    const rowGap = 78;
-    let y = 90;
-
-    layout.push({ x: pad, y, w: 200, h: 52, zone: { id: "back" } });
-    layout.push({ x: CANVAS_W - pad - 160, y, w: 160, h: 52, zone: { id: "close" } });
-    y += 84;
-
-    PRESETS.forEach((preset, index) => {
-      layout.push({
-        x: pad + index * 240,
-        y,
-        w: 220,
-        h: rowH,
-        zone: { id: "preset", preset },
-      });
-    });
-    y += rowGap;
-
-    PIXEL_RATIO_OPTIONS.forEach((value, index) => {
-      layout.push({
-        x: pad + (index % 5) * 190,
-        y,
-        w: 170,
-        h: rowH,
-        zone: { id: "pixelRatio", value },
-      });
-    });
-    y += rowGap;
-
-    XR_SCALE_OPTIONS.forEach((value, index) => {
-      layout.push({
-        x: pad + index * 240,
-        y,
-        w: 220,
-        h: rowH,
-        zone: { id: "xrScale", value },
-      });
-    });
-    y += rowGap;
-
-    SHADOWS.forEach((value, index) => {
-      layout.push({
-        x: pad + index * 240,
-        y,
-        w: 220,
-        h: rowH,
-        zone: { id: "shadows", value },
-      });
-    });
-    y += rowGap;
-
-    layout.push({ x: pad, y, w: 220, h: rowH, zone: { id: "carShadows", value: true } });
-    layout.push({ x: pad + 240, y, w: 220, h: rowH, zone: { id: "carShadows", value: false } });
-    y += rowGap;
-
-    CAR_MATERIALS.forEach((value, index) => {
-      layout.push({
-        x: pad + index * 240,
-        y,
-        w: 220,
-        h: rowH,
-        zone: { id: "carMaterials", value },
-      });
-    });
-    y += rowGap;
-
-    layout.push({ x: pad, y, w: 220, h: rowH, zone: { id: "environment", value: true } });
-    layout.push({ x: pad + 240, y, w: 220, h: rowH, zone: { id: "environment", value: false } });
-    y += rowGap;
-
-    layout.push({ x: pad, y, w: 220, h: rowH, zone: { id: "fog", value: true } });
-    layout.push({ x: pad + 240, y, w: 220, h: rowH, zone: { id: "fog", value: false } });
-
-    return layout;
+    return vrGraphicsLayout(this.graphicsTab);
   }
 
   private draw() {
@@ -553,25 +398,7 @@ export class VrMenu {
   }
 
   private drawGraphicsLabels() {
-    const { ctx, state } = this;
-    ctx.fillStyle = "#e8eef5";
-    ctx.font = "700 42px Segoe UI, sans-serif";
-    ctx.fillText("Gráficos", 260, 70);
-
-    ctx.fillStyle = "#9db0c4";
-    ctx.font = "600 20px Segoe UI, sans-serif";
-    ctx.fillText("Preset", 48, 160);
-    ctx.fillText("Resolución", 48, 238);
-    ctx.fillText("Escala VR", 48, 316);
-    ctx.fillText("Sombras", 48, 394);
-    ctx.fillText("Sombras coches", 48, 472);
-    ctx.fillText("Materiales coches", 48, 550);
-    ctx.fillText("Entorno HDRI", 48, 628);
-    ctx.fillText("Niebla", 48, 706);
-
-    ctx.fillStyle = "#7aa2c8";
-    ctx.font = "500 22px Segoe UI, sans-serif";
-    ctx.fillText(GRAPHICS_PRESET_LABELS[state.graphics.preset], 780, 70);
+    drawVrGraphicsLabels(this.ctx, this.graphicsTab);
   }
 
   private drawZone(rect: LayoutRect) {
@@ -615,36 +442,16 @@ export class VrMenu {
         label = "Volver";
         break;
       case "preset":
-        label = GRAPHICS_PRESET_LABELS[zone.preset];
+        label = vrGraphicsZoneLabel(zone);
         active = state.graphics.preset === zone.preset;
         break;
-      case "pixelRatio":
-        label = `${zone.value}x`;
-        active = state.graphics.maxPixelRatio === zone.value;
+      case "graphicsTab":
+        label = vrGraphicsZoneLabel(zone);
+        active = this.graphicsTab === zone.tab;
         break;
-      case "shadows":
-        label = SHADOW_QUALITY_LABELS[zone.value];
-        active = state.graphics.shadows === zone.value;
-        break;
-      case "environment":
-        label = zone.value ? "On" : "Off";
-        active = state.graphics.environment === zone.value;
-        break;
-      case "fog":
-        label = zone.value ? "On" : "Off";
-        active = state.graphics.fog === zone.value;
-        break;
-      case "xrScale":
-        label = `${zone.value}x`;
-        active = state.graphics.xrScale === zone.value;
-        break;
-      case "carMaterials":
-        label = CAR_MATERIAL_LABELS[zone.value];
-        active = state.graphics.carMaterials === zone.value;
-        break;
-      case "carShadows":
-        label = zone.value ? "On" : "Off";
-        active = state.graphics.carShadows === zone.value;
+      case "graphicsValue":
+        label = vrGraphicsZoneLabel(zone);
+        active = state.graphics[zone.key] === zone.value;
         break;
       default:
         break;
@@ -655,7 +462,7 @@ export class VrMenu {
     ctx.fill();
 
     ctx.fillStyle = "#f2f6fb";
-    ctx.font = "600 28px Segoe UI, sans-serif";
+    ctx.font = this.page === "graphics" ? "600 22px Segoe UI, sans-serif" : "600 28px Segoe UI, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2);

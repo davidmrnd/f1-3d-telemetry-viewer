@@ -221,13 +221,18 @@ export function createGrassTerrainGeometry(options: GrassTerrainOptions): THREE.
   }
   const positions = new Float32Array(vertices.length * 3);
   const uvs = new Float32Array(vertices.length * 2);
+  const colors = new Float32Array(vertices.length * 3);
   const tile = Math.max(0.01, options.grassTileMeters ?? 4);
   vertices.forEach((p, i) => {
     positions.set([p.x, p.y, p.z], i * 3);
     uvs.set([p.x / tile, p.z / tile], i * 2);
+    const variation = 0.88 + Math.sin(p.x * 0.014 + Math.sin(p.z * 0.009)) * 0.05
+      + Math.cos(p.z * 0.026 - p.x * 0.008) * 0.035;
+    colors.set([variation, variation, variation * 0.94], i * 3);
   });
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
   geometry.setIndex([...faces].flatMap((face) => face.vertices));
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();

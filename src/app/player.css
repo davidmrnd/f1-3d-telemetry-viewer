@@ -145,11 +145,21 @@ select option { color: #e1e3e9; background: #1c1e24; }
 .view-controls { gap: 0; }
 .view-controls .icon-button { width: 36px; }
 .view-controls .icon { width: 20px; height: 20px; }
-.settings-panel { position: absolute; right: var(--edge); bottom: 125px; width: 325px; max-height: calc(100% - 150px); display: flex; flex-direction: column; z-index: 10; background: rgba(14,15,19,.98); }
+.settings-panel { position: absolute; right: var(--edge); bottom: 125px; width: 380px; max-height: calc(100% - 150px); display: flex; flex-direction: column; z-index: 10; background: rgba(14,15,19,.98); }
 .settings-content { padding: 10px 16px 16px; overflow-y: auto; scrollbar-width: thin; }
 .settings-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 45px; font-size: 11px; color: #a5a9b4; }
 .settings-field select { max-width: 164px; padding: 7px 9px; color: #e4e5e9; border: 1px solid #31343d; background: #1b1d23; border-radius: 3px; font-size: 10px; }
 .graphics-advanced { border-top: 1px solid var(--line); padding: 8px 0; }
+.graphics-intro { margin: 16px 0 10px; }
+.graphics-intro .section-label { color: #c4c9d3; font-size: 8px; letter-spacing: 1.4px; }
+.graphics-intro p, .graphics-hint { color: #9299a8; font-size: 10px; line-height: 1.65; margin: 6px 0 12px; }
+.graphics-advanced-toggle { width: 100%; padding: 12px 0; text-align: left; color: #e7d3ac; }
+.graphics-group { border-bottom: 1px solid var(--line); padding: 12px 0; }
+.graphics-group summary { cursor: pointer; color: #e0e3eb; font-size: 11px; font-weight: 600; }
+.graphics-group summary > span { float: right; color: #8992a2; font-size: 8px; font-weight: 400; letter-spacing: .5px; }
+.graphics-group[open] summary { margin-bottom: 8px; }
+.graphics-reset { color: #a7afbd; padding: 14px 0; font-size: 10px; }
+.graphics-stats { position: absolute; top: 76px; left: 50%; transform: translateX(-50%); z-index: 4; padding: 8px 12px; border: 1px solid #38414c; border-radius: 4px; background: rgba(10,14,18,.92); color: #cee0ce; font: 10px/1.6 monospace; white-space: pre-line; pointer-events: none; }
 .settings-session { display: grid; gap: 8px; border-top: 1px solid var(--line); margin-top: 14px; padding-top: 15px; color: #828895; font-size: 10px; line-height: 1.6; }
 .settings-session .section-label { font-size: 8px; }
 .is-theater .classification-panel, .is-theater .inspector-panel { opacity: 0; transform: translateY(8px); pointer-events: none; visibility: hidden; }

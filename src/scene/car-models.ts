@@ -86,8 +86,9 @@ function applyTeamTint(root: THREE.Object3D, color: string) {
         cloned.color.lerp(team, 0.14);
         cloned.emissive.set("#000000");
         cloned.emissiveIntensity = 0;
-        cloned.roughness = Math.min(cloned.roughness, 0.55);
-        cloned.metalness = Math.max(cloned.metalness, 0.35);
+        const body = cloned.map?.name === LIVERY_BODY_TEXTURE_NAME;
+        cloned.roughness = body ? 0.4 : Math.max(cloned.roughness, 0.8);
+        cloned.metalness = body ? 0.15 : 0;
       }
       return cloned;
     });
@@ -222,25 +223,7 @@ export function createCarVisual(driver: DriverInfo, sceneLength = CAR_TEMPLATE_L
   return { group: anchor, model, label };
 }
 
-type MaterialBaseline = {
-  metalness: number;
-  roughness: number;
-  envMapIntensity: number;
-};
-
-function ensureMaterialBaseline(material: THREE.MeshStandardMaterial): MaterialBaseline {
-  const existing = material.userData.graphicsBaseline as MaterialBaseline | undefined;
-  if (existing) {
-    return existing;
-  }
-  const baseline: MaterialBaseline = {
-    metalness: material.metalness,
-    roughness: material.roughness,
-    envMapIntensity: material.envMapIntensity,
-  };
-  material.userData.graphicsBaseline = baseline;
-  return baseline;
-}
+type MaterialVariants = { detailed: THREE.Material[]; simple: THREE.Material[] };
 
 export function applyCarVisualQuality(
   root: THREE.Object3D,
@@ -253,23 +236,35 @@ export function applyCarVisualQuality(
     child.castShadow = options.castShadows;
     child.receiveShadow = options.castShadows;
 
-    const materials = Array.isArray(child.material) ? child.material : [child.material];
-    for (const material of materials) {
-      if (!(material instanceof THREE.MeshStandardMaterial)) {
-        continue;
-      }
-      const baseline = ensureMaterialBaseline(material);
-      if (options.materials === "simple") {
-        material.metalness = 0;
-        material.roughness = 1;
-        material.envMapIntensity = 0;
-      } else {
-        material.metalness = baseline.metalness;
-        material.roughness = baseline.roughness;
-        material.envMapIntensity = baseline.envMapIntensity;
-      }
-      material.needsUpdate = true;
+    let variants = child.userData.graphicsVariants as MaterialVariants | undefined;
+    if (!variants) {
+      const detailed = Array.isArray(child.material) ? child.material : [child.material];
+      variants = { detailed, simple: detailed.map((material) => {
+        if (!(material instanceof THREE.MeshStandardMaterial)) return material;
+        return new THREE.MeshLambertMaterial({ color: material.color, map: material.map,
+          transparent: material.transparent, opacity: material.opacity, alphaTest: material.alphaTest,
+          side: material.side, vertexColors: material.vertexColors, depthWrite: material.depthWrite });
+      }) };
+      child.userData.graphicsVariants = variants;
+    }
+    const selected = options.materials === "simple" ? variants.simple : variants.detailed;
+    child.material = selected.length === 1 ? selected[0] : selected;
+  });
+}
+
+export function disposeCarVisual(root: THREE.Object3D) {
+  const materials = new Set<THREE.Material>();
+  root.traverse((child) => {
+    if (child instanceof THREE.Sprite) {
+      child.material.map?.dispose();
+      materials.add(child.material);
+    } else if (child instanceof THREE.Mesh) {
+      const variants = child.userData.graphicsVariants as MaterialVariants | undefined;
+      const values = variants ? [...variants.detailed, ...variants.simple]
+        : Array.isArray(child.material) ? child.material : [child.material];
+      values.forEach((material) => materials.add(material));
     }
   });
+  materials.forEach((material) => material.dispose());
 }
 
