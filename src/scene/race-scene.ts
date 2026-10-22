@@ -10,14 +10,15 @@ import {
   buildTrackCenterline,
   buildTransform,
   buildVisualCircuitPath,
+  buildTrackCrossSections,
   carLengthInScene,
   createGrassTerrainGeometry,
   createTrackRibbon,
   metersToScene,
-  offsetPolyline,
   TRACK_KERB_WIDTH_METERS,
   trackWidthInScene,
   type SceneTransform,
+  type TrackCrossSection,
   vectorFromPoint,
 } from "./track-geometry";
 import {
@@ -306,17 +307,17 @@ export class RaceScene {
     closed: boolean,
     trackWidth: number,
     kerbWidth: number,
+    crossSections: TrackCrossSection[],
   ) {
-    const depressionHalfWidth = trackWidth / 2 + kerbWidth + 1.5;
     this.ground.geometry.dispose();
     this.ground.geometry = createGrassTerrainGeometry({
       halfExtentMeters: GROUND_PLANE_SIZE_METERS / 2,
-      gridSpacingMeters: 24,
+      gridSpacingMeters: 16,
       grassTileMeters: TRACK_TILE_METERS.grass,
       centerline: pathPoints,
       centerlineClosed: closed,
-      trackDepressionHalfWidthMeters: depressionHalfWidth,
-      depressionClearanceMeters: 0.75,
+      trackHalfWidthMeters: trackWidth / 2 + kerbWidth,
+      crossSections,
       outerClearanceMeters: 0.12,
       clearanceFadeMeters: 28,
     });
@@ -338,6 +339,7 @@ export class RaceScene {
     closed: boolean,
     trackWidth: number,
     kerbWidth: number,
+    crossSections: TrackCrossSection[],
   ) {
     const materials = getTrackSurfaceMaterials();
     for (const material of [materials.road, materials.kerb]) {
@@ -345,7 +347,7 @@ export class RaceScene {
       material.polygonOffsetFactor = -4;
       material.polygonOffsetUnits = -4;
     }
-    const ribbonOptions = { closed };
+    const ribbonOptions = { closed, crossSections };
 
     const roadMesh = new THREE.Mesh(
       createTrackRibbon(pathPoints, trackWidth, {
@@ -354,22 +356,20 @@ export class RaceScene {
       }),
       materials.road,
     );
-    roadMesh.position.y = 0.03;
     roadMesh.receiveShadow = true;
     roadMesh.renderOrder = 2;
     this.root.add(roadMesh);
 
     const kerbOffset = trackWidth / 2 + kerbWidth / 2;
     for (const offset of [kerbOffset, -kerbOffset]) {
-      const kerbPath = offsetPolyline(pathPoints, offset, closed);
       const kerbMesh = new THREE.Mesh(
-        createTrackRibbon(kerbPath, kerbWidth, {
+        createTrackRibbon(pathPoints, kerbWidth, {
           ...ribbonOptions,
+          offsetMeters: offset,
           tileSizeMeters: TRACK_TILE_METERS.kerb,
         }),
         materials.kerb,
       );
-      kerbMesh.position.y = 0.035;
       kerbMesh.receiveShadow = true;
       kerbMesh.renderOrder = 3;
       this.root.add(kerbMesh);
@@ -442,13 +442,14 @@ export class RaceScene {
 
     const trackWidth = trackWidthInScene(transform);
     const kerbWidth = metersToScene(TRACK_KERB_WIDTH_METERS, transform);
+    const crossSections = buildTrackCrossSections(pathPoints, closed, trackWidth / 2 + kerbWidth);
 
     if (pathPoints.length > 1) {
-      this.rebuildGrassTerrain(pathPoints, closed, trackWidth, kerbWidth);
+      this.rebuildGrassTerrain(pathPoints, closed, trackWidth, kerbWidth, crossSections);
     }
 
     if (pathPoints.length > 4) {
-      this.buildTrackSurfaces(pathPoints, closed, trackWidth, kerbWidth);
+      this.buildTrackSurfaces(pathPoints, closed, trackWidth, kerbWidth, crossSections);
     }
 
     this.startFinish = createStartFinishDecor(segment, pathPoints, transform, trackWidth);
