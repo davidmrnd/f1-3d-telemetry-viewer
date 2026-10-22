@@ -456,28 +456,6 @@ export class RaceScene {
       this.root.add(this.startFinish.group);
     }
 
-    for (const corner of segment.circuit.corners) {
-      const markerPoint = vectorFromPoint(
-        {
-          x: corner.x,
-          y: 0,
-          z: corner.y,
-        },
-        transform,
-      );
-      const marker = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.15, 0.15, 1.2, 12),
-        new THREE.MeshStandardMaterial({
-          color: "#ff8c42",
-          emissive: "#ff8c42",
-          emissiveIntensity: 0.35,
-        }),
-      );
-      marker.position.copy(markerPoint);
-      marker.position.y += 0.6;
-      this.root.add(marker);
-    }
-
     segment.drivers.forEach((driver) => {
       const visual = createCarVisual(driver, carLengthInScene(transform));
       this.carVisuals.set(driver.driverNumber, visual);
