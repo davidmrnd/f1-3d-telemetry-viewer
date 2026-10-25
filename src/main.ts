@@ -12,6 +12,7 @@ import { populateCameraDriverSelect } from "./app/camera-controls";
 import { mustQuery } from "./app/dom";
 import { DesktopPlayerView } from "./app/desktop-player-view";
 import { paintFrame } from "./app/frame-ui";
+import { formatReplayTime } from "./app/format";
 import { LoadingView } from "./app/loading-view";
 import { AnimationFrames } from "./app/animation-frames";
 import { RacePickerView } from "./app/race-picker-view";
@@ -259,7 +260,19 @@ async function bootstrap() {
 
     if (!bootstrapped) {
       const graphics = bindGraphicsSettings(scene, queryGraphicsControlElements());
-      bindXr(scene, ui, graphics, () => syncPlayButton(replay.togglePlay()));
+      bindXr(scene, ui, graphics, () => syncPlayButton(replay.togglePlay()), {
+        getPlaybackState: () => {
+          const duration = replay.getController()?.getDuration() ?? 0;
+          return { playing: replay.playing, speed: replay.speed, normalizedTime: duration ? replay.currentTime / duration : 0,
+            timeLabel: `${formatReplayTime(replay.currentTime)} / ${formatReplayTime(duration)}` };
+        },
+        onSeek: ratio => replay.setTimeRatio(ratio),
+        onJump: seconds => {
+          const duration = replay.getController()?.getDuration() ?? 0;
+          if (duration > 0) replay.setTimeRatio((replay.currentTime + seconds * 1000) / duration);
+        },
+        onSetSpeed: speed => { replay.setSpeed(speed); ui.speedSelect.value = String(speed); },
+      });
       bootstrapped = true;
     }
 

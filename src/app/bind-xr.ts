@@ -1,7 +1,8 @@
 import { isImmersiveVrSupported } from "../scene/xr/xr-session";
-import type { RaceScene } from "../scene/race-scene";
+import type { RaceScene, RaceSceneXrHooks } from "../scene/race-scene";
 import type { GraphicsSettingsController } from "./bind-graphics-settings";
 import { syncCameraDriverSelectVisibility } from "./camera-controls";
+import { loadWristTimingVisible, saveWristTimingVisible } from "./xr-ui-preferences";
 
 export type XrUiElements = {
   enterVrButton: HTMLButtonElement;
@@ -10,9 +11,13 @@ export type XrUiElements = {
   cameraDriverWrap: HTMLElement;
 };
 
-export function bindXr(scene: RaceScene, elements: XrUiElements, graphics: GraphicsSettingsController, onTogglePlay: () => void) {
+export function bindXr(scene: RaceScene, elements: XrUiElements, graphics: GraphicsSettingsController, onTogglePlay: () => void,
+  playback: Pick<RaceSceneXrHooks, "getPlaybackState" | "onJump" | "onSeek" | "onSetSpeed">) {
   const { enterVrButton, cameraModeSelect, cameraDriverSelect, cameraDriverWrap } = elements;
   scene.setXrHooks({
+    ...playback,
+    getWristVisible: loadWristTimingVisible,
+    onWristVisible: saveWristTimingVisible,
     onTogglePlay,
     onCameraModeChange: mode => {
       cameraModeSelect.value = mode;

@@ -40,11 +40,13 @@ import {
   createStartFinishDecor,
   type StartFinishDecor,
 } from "./start-finish";
-import type { FrameCarState, ReplayFrame, ReplaySegment, StartingGridSlot } from "../types";
+import type { DriverInfo, FrameCarState, ReplayFrame, ReplaySegment, StartingGridSlot } from "../types";
 import { XrRig } from "./xr/xr-rig";
 import { XrSessionController } from "./xr/xr-session";
 import { XrControllers } from "./xr/xr-controllers";
 import { XrFlight } from "./xr/xr-flight";
+import { XrInterface } from "./xr/xr-interface";
+import type { XrPlaybackState } from "./xr/xr-controls-panel";
 import { RaceLighting } from "./lighting";
 import { CarContactShadows } from "./car-contact-shadows";
 import { createTrackDecor, type TrackDecor } from "./track/track-decor";
@@ -58,6 +60,12 @@ interface CarVisual {
 
 export type RaceSceneXrHooks = {
   onTogglePlay?: () => void;
+  getPlaybackState?: () => XrPlaybackState;
+  onJump?: (seconds: number) => void;
+  onSeek?: (ratio: number) => void;
+  onSetSpeed?: (speed: number) => void;
+  getWristVisible?: () => boolean;
+  onWristVisible?: (visible: boolean) => void;
   onSessionStart?: () => void;
   onSessionEnd?: () => void;
   onCameraModeChange?: (mode: CameraMode) => void;
@@ -102,6 +110,8 @@ export class RaceScene {
   private readonly xrControllers: XrControllers;
   private xrHooks: RaceSceneXrHooks = {};
   private xrDrivers: number[] = [];
+  private xrDriverInfo: DriverInfo[] = [];
+  private xrInterface: XrInterface | null = null;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -170,6 +180,8 @@ export class RaceScene {
     });
 
     this.xrControllers = new XrControllers(this.renderer, {
+      onToggleMenu: () => { if (this.xrHeadValid) this.ensureXrInterface().toggle(this.xrHead); },
+      onSelect: () => this.xrInterface?.select() ?? false,
       onTogglePlay: () => this.xrHooks.onTogglePlay?.(),
       onCameraMode: () => {
         const modes: CameraMode[] = ["broadcast", "onboard", "orbit"];
@@ -183,6 +195,8 @@ export class RaceScene {
         if (this.getCameraMode() !== "onboard") this.setCameraMode("onboard");
       },
     });
+    this.xrControllers.setActive(false);
+    this.xrRig.viewerRoot.add(this.xrControllers.group);
 
     this.cameraController.setMode("broadcast", this.controls);
   }
@@ -223,6 +237,7 @@ export class RaceScene {
     this.xrHead.quaternion.copy(pose.transform.orientation);
     this.xrHead.updateMatrix();
     this.xrRig.calibrate(this.xrHead);
+    this.xrInterface?.prepare(this.xrHead, this.xrControllers);
     this.xrControllers.update();
   }
 
@@ -424,6 +439,8 @@ export class RaceScene {
   }
 
   loadSegment(segment: ReplaySegment) {
+    this.xrDriverInfo = segment.drivers;
+    this.xrInterface?.setDrivers(segment.drivers);
     this.disposeRootContents();
     this.carVisuals.clear();
     const transform = buildTransform(segment);
@@ -586,7 +603,7 @@ export class RaceScene {
       this.camera.quaternion.copy(this.xrYaw);
       if (mode === "orbit") {
         this.xrHead.matrixWorld.multiplyMatrices(this.xrRig.viewerRoot.matrixWorld, this.xrHead.matrix);
-        const turn = this.xrFlight.update(this.camera, this.xrHead, this.xrControllers.getInputSources(), deltaSeconds, !this.xrHeadValid);
+        const turn = this.xrFlight.update(this.camera, this.xrHead, this.xrControllers.getInputSources(), deltaSeconds, !this.xrHeadValid || (this.xrInterface?.isOpen() ?? false));
         if (turn) this.xrYaw.copy(this.camera.quaternion);
       } else {
         this.xrFlight.reset();
@@ -610,6 +627,9 @@ export class RaceScene {
 
     if (xrPresenting) {
       this.xrRig.applyDesiredCamera(this.camera);
+      this.xrInterface?.setFrame(frame);
+      if (this.xrHeadValid) this.xrInterface?.prepare(this.xrHead, this.xrControllers);
+      this.xrInterface?.update(nowMs);
     }
   }
 
@@ -626,10 +646,12 @@ export class RaceScene {
     this.xrRig.setActive(true);
     this.xrControllers.setActive(true);
     this.controls.enabled = false;
+    this.ensureXrInterface();
     this.xrHooks.onSessionStart?.();
   }
 
   private handleXrSessionEnd() {
+    this.xrInterface?.close();
     this.xrHeadValid = false;
     this.xrFlight.reset();
     this.xrRig.setActive(false);
@@ -637,5 +659,28 @@ export class RaceScene {
     this.cameraController.setMode(this.getCameraMode(), this.controls);
     this.applyGraphicsSettings(this.graphicsSettings);
     this.xrHooks.onSessionEnd?.();
+  }
+
+  private ensureXrInterface(): XrInterface {
+    if (this.xrInterface) return this.xrInterface;
+    this.xrInterface = new XrInterface(this.xrRig.viewerRoot, this.xrHooks.getWristVisible?.() ?? true, () => ({
+      ...(this.xrHooks.getPlaybackState?.() ?? { playing: false, normalizedTime: 0, timeLabel: "", speed: 1 }),
+      cameraMode: this.getCameraMode(), followDriver: this.getFollowDriver(),
+    }), action => {
+      if (action.type === "play") this.xrHooks.onTogglePlay?.();
+      else if (action.type === "jump") this.xrHooks.onJump?.(action.seconds);
+      else if (action.type === "seek") this.xrHooks.onSeek?.(action.ratio);
+      else if (action.type === "speed") this.xrHooks.onSetSpeed?.(action.value);
+      else if (action.type === "camera") this.setCameraMode(action.mode);
+      else if (action.type === "driver" || action.type === "follow") {
+        const index = this.xrDrivers.indexOf(this.getFollowDriver() ?? -1);
+        const driver = action.type === "follow" ? action.driver
+          : this.xrDrivers[index < 0 ? action.step > 0 ? 0 : this.xrDrivers.length - 1
+            : (index + action.step + this.xrDrivers.length) % this.xrDrivers.length];
+        if (driver !== undefined) { this.setFollowDriver(driver); if (this.getCameraMode() !== "onboard") this.setCameraMode("onboard"); }
+      }
+    }, visible => this.xrHooks.onWristVisible?.(visible));
+    this.xrInterface.setDrivers(this.xrDriverInfo);
+    return this.xrInterface;
   }
 }
