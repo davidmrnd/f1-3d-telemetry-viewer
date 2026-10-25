@@ -8,6 +8,7 @@ import {
   queryGraphicsControlElements,
 } from "./app/bind-graphics-settings";
 import { bindXr } from "./app/bind-xr";
+import { bindTabletop } from "./app/bind-tabletop";
 import { populateCameraDriverSelect } from "./app/camera-controls";
 import { mustQuery } from "./app/dom";
 import { DesktopPlayerView } from "./app/desktop-player-view";
@@ -47,6 +48,7 @@ const ui = {
   playToggle: mustQuery<HTMLButtonElement>("#play-toggle"),
   resetButton: mustQuery<HTMLButtonElement>("#reset-button"),
   enterVrButton: mustQuery<HTMLButtonElement>("#enter-vr"),
+  enterArButton: mustQuery<HTMLButtonElement>("#enter-ar"),
   speedSelect: mustQuery<HTMLSelectElement>("#speed-select"),
   cameraModeSelect: mustQuery<HTMLSelectElement>("#camera-mode-select"),
   cameraDriverSelect: mustQuery<HTMLSelectElement>("#camera-driver-select"),
@@ -189,6 +191,8 @@ async function loadSelectedRace(entry: RaceCatalogEntry) {
     const initialDriver = scene.getFollowDriver();
     await loadingView.checkpoint(75, "Preparando cámaras…");
     if (!scene.isXrPresenting()) {
+    const initialPresentation = scene.getPresentationMode();
+    scene.setPresentationMode("realistic");
     scene.setCameraMode("onboard");
     for (const [index, driver] of segment.drivers.entries()) {
       scene.setFollowDriver(driver.driverNumber);
@@ -203,6 +207,7 @@ async function loadSelectedRace(entry: RaceCatalogEntry) {
     desktopPlayer.capturePreview(canvas, "broadcast");
     if (initialDriver != null) scene.setFollowDriver(initialDriver);
     scene.setCameraMode(initialMode);
+    scene.setPresentationMode(initialPresentation);
     }
     await loadingView.checkpoint(99, "Últimos detalles…");
     render(initialFrame);
@@ -260,6 +265,7 @@ async function bootstrap() {
 
     if (!bootstrapped) {
       const graphics = bindGraphicsSettings(scene, queryGraphicsControlElements());
+      bindTabletop(scene);
       bindXr(scene, ui, graphics, () => syncPlayButton(replay.togglePlay()), {
         getPlaybackState: () => {
           const duration = replay.getController()?.getDuration() ?? 0;

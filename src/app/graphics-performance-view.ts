@@ -19,7 +19,7 @@ export class GraphicsPerformanceView {
     const renderer = scene.getRenderer();
     const fps = Math.round(this.frames * 1000 / elapsed);
     const triangles = (renderer.info.render.triangles / 1000).toLocaleString("es", { maximumFractionDigits: 0 });
-    const mode = scene.isXrPresenting() ? "VR" : "PC";
+    const mode = scene.isArPresenting() ? "AR" : scene.isXrPresenting() ? "VR" : "PC";
     this.element.textContent = `${mode} · ${fps} FPS · ${(elapsed / this.frames).toFixed(1)} ms/fotograma\n${renderer.domElement.width} × ${renderer.domElement.height} · ${renderer.info.render.calls} llamadas · ${triangles} mil triángulos`;
     this.since = now; this.frames = 0;
   }

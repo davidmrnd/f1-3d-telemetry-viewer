@@ -55,7 +55,7 @@
         <header class="topbar player-chrome">
           <a class="wordmark" href="./" aria-label="APEX, elegir carrera">APEX<span class="brand-slash"></span></a>
           <nav class="main-nav" aria-label="Navegación principal"><span class="nav-active">REPLAY 3D</span><button id="change-race-button" type="button">CARRERAS</button></nav>
-          <div class="topbar-right"><button id="enter-vr" class="control-button vr-button" type="button" hidden>Entrar en VR</button><output id="vr-status" class="vr-status" role="status" hidden></output><span class="data-source"><span class="source-dot"></span> DATOS OPENF1</span><span class="topbar-divider"></span><button id="help-button" class="icon-button" aria-label="Ayuda y atajos de teclado" title="Ayuda y atajos (?)" type="button"><svg class="icon"><use href="#i-info" /></svg></button><span class="edition-tag">BETA</span></div>
+          <div class="topbar-right"><button id="enter-vr" class="control-button vr-button" type="button" hidden>Entrar en VR</button><button id="enter-ar" class="control-button vr-button ar-button" type="button" disabled>Entrar en AR</button><output id="vr-status" class="vr-status" role="status" hidden></output><span class="data-source"><span class="source-dot"></span> DATOS OPENF1</span><span class="topbar-divider"></span><button id="help-button" class="icon-button" aria-label="Ayuda y atajos de teclado" title="Ayuda y atajos (?)" type="button"><svg class="icon"><use href="#i-info" /></svg></button><span class="edition-tag">BETA</span></div>
         </header>
         <section class="race-heading player-chrome" aria-label="Información de la carrera">
           <div class="race-badges"><span class="replay-badge"><span></span> REPLAY</span><span id="timing-lap-tag" class="lap-badge" hidden></span><div id="event-pill" class="event-pill" hidden></div></div>
@@ -96,6 +96,13 @@
         <section id="settings-panel" class="settings-panel floating-panel" aria-label="Ajustes de reproducción" hidden>
           <div class="panel-heading"><h2>AJUSTES</h2><button id="settings-close" class="icon-button small" type="button" aria-label="Cerrar ajustes"><svg class="icon"><use href="#i-close" /></svg></button></div>
           <div class="settings-content">
+            <label class="settings-field"><span>Experiencia</span><select id="presentation-mode"><option value="realistic">Realista · escala real</option><option value="tabletop">Sobremesa AR · ligera</option></select></label>
+            <div id="tabletop-settings" hidden>
+              <p class="graphics-hint">Previsualiza la maqueta con el ratón. En AR verás tu habitación y podrás colocarla manualmente sobre la mesa.</p>
+              <label class="settings-field" for="tabletop-width"><span>Tamaño <output id="tabletop-width-value">1.20 m</output></span><input id="tabletop-width" type="range" min="0.35" max="3" step="0.01" value="1.2" /></label>
+              <label class="settings-field" for="tabletop-rotation"><span>Giro</span><input id="tabletop-rotation" type="range" min="-180" max="180" step="1" value="0" /></label>
+              <p class="graphics-hint">Dentro del visor: mantén un agarre para moverla. Añade el segundo para ampliar, reducir y girar con ambas manos. El menú AR permite ajustar la altura y fijar la posición.</p>
+            </div>
             <label class="settings-field"><span>Cámara</span><select id="camera-mode-select"><option value="broadcast" selected>Retransmisión</option><option value="onboard">A bordo del piloto</option><option value="orbit">Cámara libre</option></select></label>
             <label class="settings-field" id="camera-driver-wrap" hidden><span>Piloto</span><select id="camera-driver-select"></select></label>
             <div class="graphics-intro"><span class="section-label">TU EQUIPO. TU EXPERIENCIA.</span><p>Ajusta el detalle y la fluidez. Los cambios se guardan en este navegador.</p></div>

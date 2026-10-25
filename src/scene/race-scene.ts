@@ -51,6 +51,10 @@ import { RaceLighting } from "./lighting";
 import { CarContactShadows } from "./car-contact-shadows";
 import { createTrackDecor, type TrackDecor } from "./track/track-decor";
 import { DistantCars } from "./distant-cars";
+import { TabletopModel } from "./tabletop/tabletop-model";
+import { TabletopXr } from "./tabletop/tabletop-xr";
+
+export type PresentationMode = "realistic" | "tabletop";
 
 interface CarVisual {
   group: THREE.Group;
@@ -78,6 +82,13 @@ export class RaceScene {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly controls: OrbitControls;
   private readonly root = new THREE.Group();
+  private readonly tabletopScene = new THREE.Scene();
+  private readonly tabletop = new TabletopModel();
+  private readonly tabletopCamera = new THREE.PerspectiveCamera(45, 1, .01, 50);
+  private readonly tabletopControls: OrbitControls;
+  private readonly tabletopXr: TabletopXr;
+  private presentationMode: PresentationMode = "realistic";
+  private modeBeforeXr: PresentationMode = "realistic";
   private readonly carVisuals = new Map<number, CarVisual>();
   private readonly viewportSize = new THREE.Vector2();
   private readonly eventBeacon: THREE.Mesh;
@@ -117,6 +128,7 @@ export class RaceScene {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
+      alpha: true,
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
@@ -129,6 +141,15 @@ export class RaceScene {
     this.controls.maxPolarAngle = Math.PI * 0.495;
     this.controls.minDistance = 2;
     this.controls.maxDistance = 1800;
+    this.tabletopScene.background = new THREE.Color("#0b1520");
+    this.tabletopScene.add(this.tabletop.group);
+    this.tabletopCamera.position.set(1.05, 1.2, 1.05);
+    this.tabletopControls = new OrbitControls(this.tabletopCamera, this.canvas);
+    this.tabletopControls.enableDamping = true;
+    this.tabletopControls.minDistance = .2;
+    this.tabletopControls.maxDistance = 10;
+    this.tabletopControls.maxPolarAngle = Math.PI * .48;
+    this.tabletopControls.enabled = false;
 
     this.scene.add(this.xrRig.worldRoot);
     this.scene.add(this.xrRig.viewerRoot);
@@ -197,6 +218,14 @@ export class RaceScene {
     });
     this.xrControllers.setActive(false);
     this.xrRig.viewerRoot.add(this.xrControllers.group);
+    this.tabletopXr = new TabletopXr(this.renderer, this.tabletopScene, this.tabletop, {
+      getState: () => this.xrHooks.getPlaybackState?.() ?? { playing: false, normalizedTime: 0, timeLabel: "", speed: 1 },
+      togglePlay: () => this.xrHooks.onTogglePlay?.(),
+      seek: ratio => this.xrHooks.onSeek?.(ratio),
+      jump: seconds => this.xrHooks.onJump?.(seconds),
+      speed: value => this.xrHooks.onSetSpeed?.(value),
+      exit: () => { void this.exitVr(); },
+    });
 
     this.cameraController.setMode("broadcast", this.controls);
   }
@@ -214,10 +243,52 @@ export class RaceScene {
   }
 
   async enterVr(): Promise<void> {
+    if (this.isXrPresenting()) return;
+    this.modeBeforeXr = this.presentationMode;
+    this.setPresentationMode("realistic");
     this.renderer.xr.setFramebufferScaleFactor(this.graphicsSettings.xrScale);
     this.renderer.xr.setFoveation(this.graphicsSettings.xrFoveation);
-    await this.xrSession.enterVr();
+    try {
+      await this.xrSession.enterVr();
+    } catch (error) {
+      this.setPresentationMode(this.modeBeforeXr);
+      throw error;
+    }
   }
+
+  async enterAr(): Promise<void> {
+    if (this.isXrPresenting()) return;
+    this.modeBeforeXr = this.presentationMode;
+    this.setPresentationMode("tabletop");
+    this.renderer.xr.setFramebufferScaleFactor(.85);
+    this.renderer.xr.setFoveation(1);
+    try {
+      await this.xrSession.enterAr();
+    } catch (error) {
+      this.setPresentationMode(this.modeBeforeXr);
+      this.renderer.xr.setFramebufferScaleFactor(this.graphicsSettings.xrScale);
+      this.renderer.xr.setFoveation(this.graphicsSettings.xrFoveation);
+      this.applyGraphicsSettings(this.graphicsSettings);
+      throw error;
+    }
+  }
+
+  isArPresenting() { return this.isXrPresenting() && this.xrSession.getMode() === "immersive-ar"; }
+
+  getPresentationMode() { return this.presentationMode; }
+
+  setPresentationMode(mode: PresentationMode) {
+    if (this.isXrPresenting()) return;
+    this.presentationMode = mode;
+    this.tabletopControls.enabled = mode === "tabletop";
+    if (mode === "tabletop") this.controls.enabled = false;
+    else this.cameraController.setMode(this.getCameraMode(), this.controls);
+    this.tabletop.resetTrails();
+  }
+
+  getTabletopWidth() { return this.tabletop.getWidth(); }
+  setTabletopWidth(width: number) { this.tabletop.setWidth(width); }
+  setTabletopRotation(degrees: number) { this.tabletop.group.rotation.y = THREE.MathUtils.degToRad(degrees); }
 
   async exitVr(): Promise<void> {
     await this.xrSession.exitVr();
@@ -236,6 +307,10 @@ export class RaceScene {
     this.xrHead.position.copy(pose.transform.position);
     this.xrHead.quaternion.copy(pose.transform.orientation);
     this.xrHead.updateMatrix();
+    if (this.isArPresenting()) {
+      this.tabletopXr.update(this.xrHead, performance.now());
+      return;
+    }
     this.xrRig.calibrate(this.xrHead);
     this.xrInterface?.prepare(this.xrHead, this.xrControllers);
     this.xrControllers.update();
@@ -417,6 +492,8 @@ export class RaceScene {
       this.renderer.setSize(width, height, false);
       this.camera.aspect = width / height;
       this.camera.updateProjectionMatrix();
+      this.tabletopCamera.aspect = width / height;
+      this.tabletopCamera.updateProjectionMatrix();
     }
   }
 
@@ -469,6 +546,7 @@ export class RaceScene {
     const trackWidth = trackWidthInScene(transform);
     const kerbWidth = metersToScene(TRACK_KERB_WIDTH_METERS, transform);
     const crossSections = buildTrackCrossSections(pathPoints, closed, trackWidth / 2 + kerbWidth);
+    this.tabletop.load(segment.drivers, pathPoints, closed, trackWidth, crossSections);
 
     if (pathPoints.length > 1) {
       this.rebuildGrassTerrain(pathPoints, closed, trackWidth, kerbWidth, crossSections);
@@ -507,6 +585,7 @@ export class RaceScene {
 
   setCameraMode(mode: CameraMode) {
     this.cameraController.setMode(mode, this.controls);
+    if (this.presentationMode === "tabletop") this.controls.enabled = false;
     this.xrHooks.onCameraModeChange?.(mode);
   }
 
@@ -524,6 +603,7 @@ export class RaceScene {
   }
 
   getActiveCameraLabel(): string {
+    if (this.presentationMode === "tabletop") return "AR de sobremesa · vista libre";
     return this.cameraController.getActiveLabel();
   }
 
@@ -557,6 +637,11 @@ export class RaceScene {
       lateralOffsets,
       lateralRates,
     });
+    if (this.presentationMode === "tabletop") {
+      this.tabletop.update(visualPlacements, frame.now);
+      if (!xrPresenting) this.tabletopControls.update();
+      return;
+    }
 
     visualPlacements.forEach(({ car, position, heading }, index) => {
       const visual = this.carVisuals.get(car.driver.driverNumber);
@@ -634,11 +719,34 @@ export class RaceScene {
   }
 
   render() {
+    if (this.presentationMode === "tabletop") {
+      const shadows = this.renderer.shadowMap.enabled;
+      this.renderer.shadowMap.enabled = false;
+      this.renderer.render(this.tabletopScene, this.isXrPresenting() ? this.xrViewCamera : this.tabletopCamera);
+      this.renderer.shadowMap.enabled = shadows;
+      return;
+    }
     this.renderer.render(this.scene, this.isXrPresenting() ? this.xrViewCamera : this.camera);
   }
 
   private handleXrSessionStart() {
     this.xrHeadValid = false;
+    if (this.isArPresenting()) {
+      this.xrRig.setActive(false);
+      this.xrRig.viewerRoot.visible = true;
+      this.xrRig.viewerRoot.updateMatrixWorld(true);
+      this.xrControllers.setActive(false);
+      this.tabletopControls.enabled = false;
+      this.controls.enabled = false;
+      this.xrViewCamera.near = .01;
+      this.xrViewCamera.far = 30;
+      this.xrViewCamera.updateProjectionMatrix();
+      this.tabletopScene.background = null;
+      this.renderer.setClearColor(0x000000, 0);
+      this.tabletopXr.setActive(true, this.tabletopScene, this.xrControllers.group);
+      this.xrHooks.onSessionStart?.();
+      return;
+    }
     this.xrShotKey = null;
     this.xrEuler.setFromQuaternion(this.camera.quaternion, "YXZ");
     this.xrYaw.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, this.xrEuler.y);
@@ -651,6 +759,16 @@ export class RaceScene {
   }
 
   private handleXrSessionEnd() {
+    if (this.xrSession.getMode() === "immersive-ar") {
+      this.tabletopXr.setActive(false, this.tabletopScene, this.xrControllers.group);
+      this.tabletopScene.background = new THREE.Color("#0b1520");
+      this.renderer.setClearColor(0x000000, 1);
+      this.xrViewCamera.near = .05;
+      this.xrViewCamera.far = this.graphicsSettings.drawDistance;
+      this.xrViewCamera.updateProjectionMatrix();
+      this.renderer.xr.setFramebufferScaleFactor(this.graphicsSettings.xrScale);
+      this.renderer.xr.setFoveation(this.graphicsSettings.xrFoveation);
+    }
     this.xrInterface?.close();
     this.xrHeadValid = false;
     this.xrFlight.reset();
@@ -658,6 +776,7 @@ export class RaceScene {
     this.xrControllers.setActive(false);
     this.cameraController.setMode(this.getCameraMode(), this.controls);
     this.applyGraphicsSettings(this.graphicsSettings);
+    this.setPresentationMode(this.modeBeforeXr);
     this.xrHooks.onSessionEnd?.();
   }
 
