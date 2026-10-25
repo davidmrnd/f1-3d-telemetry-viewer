@@ -13,6 +13,7 @@ import { mustQuery } from "./app/dom";
 import { DesktopPlayerView } from "./app/desktop-player-view";
 import { paintFrame } from "./app/frame-ui";
 import { LoadingView } from "./app/loading-view";
+import { AnimationFrames } from "./app/animation-frames";
 import { RacePickerView } from "./app/race-picker-view";
 import { ReplayApp } from "./app/replay-app";
 import { paintSessionMetadata } from "./app/session-ui";
@@ -70,7 +71,9 @@ const timingTower = new TimingTowerView(
 let lastTick = performance.now();
 let bootstrapped = false;
 let loadingRace = false;
-const loadingView = new LoadingView();
+appShell.addEventListener("xrsessionchange", () => { lastTick = performance.now(); });
+const loadingFrames = new AnimationFrames();
+const loadingView = new LoadingView(undefined, loadingFrames);
 const desktopPlayer = new DesktopPlayerView((mode, driver) => {
   if (driver != null) {
     ui.cameraDriverSelect.value = String(driver);
@@ -93,27 +96,23 @@ const syncPlayButton = (playing: boolean) => {
 const render = (frame: Parameters<typeof paintFrame>[0]) => {
   const controller = replay.getController();
   if (!controller) return;
+  if (scene.isXrPresenting()) {
+    scene.update(frame);
+    scene.render();
+    return;
+  }
   paintFrame(frame, controller.getDuration(), scene, timingTower, ui);
   desktopPlayer.update(frame, scene.getCameraMode(), scene.getFollowDriver());
-  const duration = controller.getDuration();
-  scene.syncVrMenuState({
-    normalizedTime: duration > 0 ? frame.now / duration : 0,
-    timeLabel: ui.timeReadout.textContent ?? "",
-    playing: replay.playing,
-    speed: replay.speed,
-    cameraMode: scene.getCameraMode(),
-    followDriver: scene.getFollowDriver(),
-  });
 };
 
 function tick(now: number) {
-  if (loadingRace) return;
+  if (loadingRace) { scene.render(); return; }
   if (!replay.getController()) {
     scene.update({ now: 0, normalized: 0, cars: [], activeEvent: null, trackStatus: null });
     scene.render();
     return;
   }
-  const frame = replay.tick(now - lastTick);
+  const frame = replay.tick(scene.isXrPresenting() ? Math.min(100, Math.max(0, now - lastTick)) : now - lastTick);
   lastTick = now;
   if (frame) {
     render(frame);
@@ -160,8 +159,7 @@ async function pickRace(
 async function loadSelectedRace(entry: RaceCatalogEntry) {
   loadingRace = true;
   appShell.inert = true;
-  loadingView.show(entry);
-  try {
+  loadingView.show(entry);  try {
     ui.statusPill.classList.remove("is-ready");
     ui.statusPill.textContent = "Cargando datos del replay...";
     await loadingView.checkpoint(0);
@@ -189,6 +187,7 @@ async function loadSelectedRace(entry: RaceCatalogEntry) {
     const initialMode = scene.getCameraMode();
     const initialDriver = scene.getFollowDriver();
     await loadingView.checkpoint(75, "Preparando cámaras…");
+    if (!scene.isXrPresenting()) {
     scene.setCameraMode("onboard");
     for (const [index, driver] of segment.drivers.entries()) {
       scene.setFollowDriver(driver.driverNumber);
@@ -203,6 +202,7 @@ async function loadSelectedRace(entry: RaceCatalogEntry) {
     desktopPlayer.capturePreview(canvas, "broadcast");
     if (initialDriver != null) scene.setFollowDriver(initialDriver);
     scene.setCameraMode(initialMode);
+    }
     await loadingView.checkpoint(99, "Últimos detalles…");
     render(initialFrame);
     syncPlayButton(false);
@@ -219,8 +219,7 @@ async function loadSelectedRace(entry: RaceCatalogEntry) {
     lastTick = performance.now();
     loadingRace = false;
     appShell.inert = false;
-    loadingView.hide();
-  }
+    loadingView.hide();  }
 }
 
 async function chooseAndLoadRace(options: { allowQueryShortcut?: boolean } = {}) {
@@ -260,7 +259,7 @@ async function bootstrap() {
 
     if (!bootstrapped) {
       const graphics = bindGraphicsSettings(scene, queryGraphicsControlElements());
-      bindXr(replay, scene, ui, render, syncPlayButton, graphics);
+      bindXr(scene, ui, graphics, () => syncPlayButton(replay.togglePlay()));
       bootstrapped = true;
     }
 
@@ -281,8 +280,9 @@ async function bootstrap() {
 }
 
 void bootstrap();
-scene.setAnimationLoop((time) => {
-  scene.pollXrInput();
+scene.setAnimationLoop((time, frame) => {
+  loadingFrames.flush(time);
+  scene.pollXrInput(frame);
   tick(time);
   if (!loadingRace) graphicsPerformance.update(scene, time);
 });

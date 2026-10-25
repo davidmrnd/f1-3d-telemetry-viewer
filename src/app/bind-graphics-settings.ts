@@ -4,7 +4,7 @@ import {
 } from "../scene/graphics-settings";
 import type { RaceScene } from "../scene/race-scene";
 import { mustQuery } from "./dom";
-import { loadGraphicsSettings, saveGraphicsSettings } from "./graphics-settings-store";
+import { deviceGraphicsMode, loadGraphicsSettings, saveGraphicsSettings, type GraphicsMode } from "./graphics-settings-store";
 
 export type GraphicsControlElements = {
   presetSelect: HTMLSelectElement;
@@ -17,12 +17,15 @@ export type GraphicsControlElements = {
 
 export type GraphicsSettingsController = {
   get: () => GraphicsSettings;
-  set: (settings: GraphicsSettings) => void;
+  set: (settings: GraphicsSettings) => boolean;
+  activate: (mode: GraphicsMode) => void;
+  activateDefault: () => void;
   syncUi: (settings: GraphicsSettings) => void;
 };
 
 export function bindGraphicsSettings(scene: RaceScene, elements: GraphicsControlElements): GraphicsSettingsController {
-  let current = loadGraphicsSettings();
+  let mode = deviceGraphicsMode();
+  let current = loadGraphicsSettings(mode);
   const syncUi = (settings: GraphicsSettings) => {
     current = settings;
     elements.presetSelect.value = settings.preset;
@@ -32,19 +35,20 @@ export function bindGraphicsSettings(scene: RaceScene, elements: GraphicsControl
       field.value = typeof value === "boolean" ? (value ? "on" : "off") : String(value);
     }
   };
-  const apply = (settings: GraphicsSettings) => {
+  const apply = (settings: GraphicsSettings, persist = true) => {
     const normalized = normalizeGraphicsSettings(settings);
     scene.applyGraphicsSettings(normalized);
-    saveGraphicsSettings(normalized);
+    const saved = !persist || saveGraphicsSettings(normalized, mode);
     syncUi(normalized);
     elements.xrNote.hidden = !scene.isXrPresenting();
+    return saved;
   };
-  apply(current);
+  apply(current, false);
   elements.presetSelect.addEventListener("change", () => {
     const preset = elements.presetSelect.value as GraphicsPreset;
     if (GRAPHICS_PRESETS.includes(preset)) apply({ ...settingsFromPreset(preset), showStats: current.showStats });
   });
-  elements.resetButton.addEventListener("click", () => apply({ ...DEFAULT_GRAPHICS_SETTINGS }));
+  elements.resetButton.addEventListener("click", () => apply(mode === "vr" ? settingsFromPreset("vr") : { ...DEFAULT_GRAPHICS_SETTINGS }));
   elements.advancedToggle.addEventListener("click", () => {
     const open = elements.advancedPanel.hidden;
     elements.advancedPanel.hidden = !open;
@@ -59,7 +63,16 @@ export function bindGraphicsSettings(scene: RaceScene, elements: GraphicsControl
       apply({ ...current, [key]: value });
     });
   }
-  return { get: () => ({ ...current }), set: apply, syncUi };
+  const activate = (next: GraphicsMode) => {
+    if (mode === next) return;
+    mode = next;
+    apply(loadGraphicsSettings(mode), false);
+  };
+  return {
+    get: () => ({ ...current }), set: apply, syncUi,
+    activate,
+    activateDefault: () => activate(deviceGraphicsMode()),
+  };
 }
 
 export function queryGraphicsControlElements(): GraphicsControlElements {

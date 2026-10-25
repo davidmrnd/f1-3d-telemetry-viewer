@@ -41,6 +41,10 @@ export class RaceCameraController {
     return this.mode;
   }
 
+  getXrShot() {
+    return this.broadcastMode.getXrShot();
+  }
+
   getActiveLabel(): string {
     return this.activeLabel;
   }
@@ -59,6 +63,8 @@ export class RaceCameraController {
     controls: OrbitControls,
     deltaSeconds: number,
     xrPresenting = false,
+    replayTimeMs = 0,
+    eventDrivers: readonly number[] = [],
   ) {
     this.activeLabel = this.handlers[this.mode].update({
       placements,
@@ -66,6 +72,8 @@ export class RaceCameraController {
       controls,
       deltaSeconds,
       xrPresenting,
+      replayTimeMs,
+      eventDrivers,
     });
   }
 }

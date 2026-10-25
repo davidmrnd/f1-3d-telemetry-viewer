@@ -18,7 +18,10 @@ export class LoadingView {
   private readonly completions: (() => void)[] = [];
   private readonly reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-  constructor() {
+  constructor(
+    private readonly onProgress: (percentage: number, stage: string) => void = () => {},
+    private readonly frames = { request: (callback: FrameRequestCallback) => requestAnimationFrame(callback), cancel: (id: number) => cancelAnimationFrame(id) },
+  ) {
     this.track.addEventListener("error", () => { this.track.hidden = true; });
   }
 
@@ -45,7 +48,7 @@ export class LoadingView {
         this.paint(this.target);
       } else if (!this.animationId) {
         this.lastFrame = performance.now();
-        this.animationId = requestAnimationFrame(this.animate);
+        this.animationId = this.frames.request(this.animate);
       }
     }
     if (stage && this.stage.textContent !== stage) this.stage.textContent = stage;
@@ -58,7 +61,7 @@ export class LoadingView {
     }
     if (!stage && percentage < 100 && performance.now() - this.lastYield < 12) return;
     await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => { requestAnimationFrame(() => resolve()); });
+      this.frames.request(() => { this.frames.request(() => resolve()); });
     });
     this.lastYield = performance.now();
   }
@@ -76,7 +79,7 @@ export class LoadingView {
     const advance = Math.min(gap, elapsed * 0.18, Math.max(elapsed * 0.012, gap * (1 - Math.exp(-elapsed / 90))));
     this.paint(this.value + advance);
     if (this.value < this.target) {
-      this.animationId = requestAnimationFrame(this.animate);
+      this.animationId = this.frames.request(this.animate);
     } else {
       this.stopAnimation();
     }
@@ -88,10 +91,11 @@ export class LoadingView {
     this.percentage.textContent = `${rounded} %`;
     this.progress.setAttribute("aria-valuenow", String(rounded));
     this.progress.style.setProperty("--loading-progress", `${value.toFixed(3)}%`);
+    this.onProgress(rounded, this.stage.textContent ?? "Cargando…");
   }
 
   private stopAnimation() {
-    cancelAnimationFrame(this.animationId);
+    this.frames.cancel(this.animationId);
     this.animationId = 0;
     for (const complete of this.completions.splice(0)) complete();
   }

@@ -65,6 +65,7 @@ export function settingsFromPreset(preset: GraphicsPreset): GraphicsSettings {
     case "ultra": return { ...BASE, preset, maxPixelRatio: 2, shadows: "high", shadowDistance: 240,
       detailedCarDistance: 6000, anisotropy: 16, drawDistance: 6000, xrScale: 1.25, xrFoveation: 0 };
     case "vr": return { ...BASE, preset, maxPixelRatio: 1, shadows: "off", carMaterials: "simple",
+      environment: false, sky: false,
       carShadows: false, surfaceDetail: false, anisotropy: 4, drawDistance: 1600,
       detailedCarDistance: 60, trackside: false, tyreMarks: false, xrScale: 0.75, xrFoveation: 1 };
   }

@@ -42,9 +42,12 @@ export class ReplayApp {
     if (!this.controller) {
       return null;
     }
-    const clamped = Math.max(0, Math.min(1, ratio));
-    this.currentTime = this.controller.getDuration() * clamped;
+    this.setTimeRatio(ratio);
     return this.controller.getFrame(this.currentTime);
+  }
+
+  setTimeRatio(ratio: number): void {
+    if (this.controller) this.currentTime = this.controller.getDuration() * Math.max(0, Math.min(1, ratio));
   }
 
   reset(): ReplayFrame | null {

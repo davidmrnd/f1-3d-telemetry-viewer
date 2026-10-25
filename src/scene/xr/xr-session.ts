@@ -24,19 +24,19 @@ export class XrSessionController {
   }
 
   async enterVr(): Promise<void> {
-    if (this.isPresenting() || !navigator.xr) {
-      return;
-    }
-
-    const supported = await navigator.xr.isSessionSupported("immersive-vr");
-    if (!supported) {
-      throw new Error("Este dispositivo no soporta immersive-vr.");
-    }
+    if (this.isPresenting()) return;
+    if (!window.isSecureContext || !navigator.xr) throw new Error("Abre la página con HTTPS en un navegador compatible con WebXR.");
 
     const session = await navigator.xr.requestSession("immersive-vr", {
       optionalFeatures: ["local-floor", "bounded-floor", "hand-tracking", "layers"],
     });
-    await this.renderer.xr.setSession(session);
+    try {
+      this.renderer.xr.setReferenceSpaceType(session.enabledFeatures?.includes("local-floor") ? "local-floor" : "local");
+      await this.renderer.xr.setSession(session);
+    } catch (error) {
+      await session.end().catch(() => {});
+      throw error;
+    }
   }
 
   async exitVr(): Promise<void> {

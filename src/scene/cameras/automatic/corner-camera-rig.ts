@@ -9,10 +9,7 @@ import {
 import { TrackPath } from "./track-path";
 import type { CornerCameraDefinition } from "./types";
 
-const CAMERA_LATERAL_OFFSET_METERS = 10;
-const CAMERA_HEIGHT_METERS = 4.5;
-const LOOK_AHEAD_METERS = 18;
-const COVERAGE_RADIUS_METERS = 45;
+const MAX_CAMERA_GAP_METERS = 180;
 
 export interface CornerCameraRig {
   path: TrackPath;
@@ -20,68 +17,75 @@ export interface CornerCameraRig {
 }
 
 export function buildCornerCameraRig(segment: ReplaySegment, transform: SceneTransform): CornerCameraRig {
-  const { path: pathPoints } = buildVisualCircuitPath(
+  const { path: pathPoints, closed } = buildVisualCircuitPath(
     buildTrackCenterline(segment).map((point) => vectorFromPoint(point, transform)),
   );
+  const path = new TrackPath(pathPoints, closed);
+  if (path.points.length < 2 || path.totalLength <= 0) return { path, cameras: [] };
 
-  const path = new TrackPath(pathPoints);
-  if (path.points.length < 4 || segment.circuit.corners.length === 0) {
-    return { path, cameras: [] };
+  const cameras = segment.circuit.corners.map((corner) => {
+    const guess = vectorFromPoint({ x: corner.x, y: transform.baseY, z: corner.y }, transform);
+    const distance = path.projectPointPlanar(guess)?.distance ?? 0;
+    return buildCamera(corner.number, `Curva ${corner.number}`, distance, path, false);
+  }).sort((a, b) => a.trackDistance - b.trackDistance);
+  if (cameras.length === 0) {
+    cameras.push(buildCamera(1, "Recta · seguimiento", 0, path, true));
   }
 
-  const centroid = path.centroid;
-  const cameras = segment.circuit.corners
-    .slice()
-    .sort((a, b) => a.number - b.number)
-    .map((corner) => buildCornerCamera(corner, transform, path, centroid));
-
-  return { path, cameras };
+  const anchors = cameras.map((camera) => camera.trackDistance);
+  if (!closed || anchors.length === 0) anchors.unshift(0);
+  anchors.push(closed ? anchors[0] + path.totalLength : path.totalLength);
+  let nextId = Math.max(0, ...cameras.map((camera) => camera.id)) + 1;
+  for (let index = 1; index < anchors.length; index++) {
+    const start = anchors[index - 1];
+    const gap = anchors[index] - start;
+    const count = Math.ceil(gap / MAX_CAMERA_GAP_METERS);
+    for (let step = 1; step < count; step++) {
+      cameras.push(buildCamera(nextId++, "Recta · seguimiento", start + gap * step / count, path, true));
+    }
+  }
+  if (!closed) {
+    if (!cameras.some((camera) => camera.trackDistance < 1)) {
+      cameras.push(buildCamera(nextId++, "Recta · entrada", 0, path, true));
+    }
+    if (!cameras.some((camera) => camera.trackDistance > path.totalLength - 1)) {
+      cameras.push(buildCamera(nextId, "Recta · salida", path.totalLength, path, true));
+    }
+  }
+  return { path, cameras: cameras.sort((a, b) => a.trackDistance - b.trackDistance) };
 }
 
-function buildCornerCamera(
-  corner: { number: number; x: number; y: number },
-  transform: SceneTransform,
+function buildCamera(
+  id: number,
+  label: string,
+  distance: number,
   path: TrackPath,
-  trackCentroid: THREE.Vector3,
+  straight: boolean,
 ): CornerCameraDefinition {
-  const cornerGuess = vectorFromPoint(
-    { x: corner.x, y: transform.baseY, z: corner.y },
-    transform,
-  );
-  const projection = path.projectPointPlanar(cornerGuess);
-  const onTrack = projection?.point ?? cornerGuess;
-  const trackDistance = projection?.distance ?? 0;
-  const tangent = projection ? path.tangentAt(projection) : new THREE.Vector3(0, 0, 1);
-  const outward = outwardNormal(tangent, onTrack, trackCentroid);
-
-  const position = onTrack
-    .clone()
-    .add(outward.multiplyScalar(CAMERA_LATERAL_OFFSET_METERS))
-    .add(new THREE.Vector3(0, CAMERA_HEIGHT_METERS, 0));
-
-  const lookAt = onTrack.clone().add(tangent.clone().multiplyScalar(LOOK_AHEAD_METERS));
-  lookAt.y = Math.max(lookAt.y, onTrack.y + 0.5);
-
-  return {
-    id: corner.number,
-    label: `Curva ${corner.number}`,
-    position,
-    lookAt,
-    trackDistance,
-    coverageRadius: COVERAGE_RADIUS_METERS,
-  };
-}
-
-function outwardNormal(
-  tangent: THREE.Vector3,
-  pointOnTrack: THREE.Vector3,
-  trackCentroid: THREE.Vector3,
-): THREE.Vector3 {
-  const side = new THREE.Vector3(-tangent.z, 0, tangent.x);
-  const toCentroid = trackCentroid.clone().sub(pointOnTrack);
-  toCentroid.y = 0;
-  if (side.dot(toCentroid) > 0) {
-    side.multiplyScalar(-1);
+  const onTrack = path.pointAt(distance);
+  const before = onTrack.clone().sub(path.pointAt(distance - 24)).setY(0).normalize();
+  const after = path.pointAt(distance + 24).sub(onTrack).setY(0).normalize();
+  const tangent = path.pointAt(distance + 5).sub(path.pointAt(distance - 5)).setY(0).normalize();
+  const outward = new THREE.Vector3(-tangent.z, 0, tangent.x);
+  const bend = before.x * after.z - before.z * after.x;
+  if (Math.abs(bend) > 0.08) {
+    if (bend > 0) outward.negate();
+  } else if (outward.dot(path.centroid.sub(onTrack)) > 0) {
+    outward.negate();
   }
-  return side.normalize();
+  let position = onTrack.clone().addScaledVector(outward, straight ? 22 : 26);
+  for (const offset of [26, 34, -26, -34, 42, -42]) {
+    const nearest = path.projectPointPlanar(position);
+    if (nearest && Math.hypot(position.x - nearest.point.x, position.z - nearest.point.z) >= 20) break;
+    position = onTrack.clone().addScaledVector(outward, offset);
+  }
+  position.y += straight ? 5 : id % 3 === 0 ? 9 : 6;
+  return {
+    id,
+    label,
+    position,
+    trackDistance: path.closed ? THREE.MathUtils.euclideanModulo(distance, path.totalLength) : distance,
+    coverageRadius: 650,
+    corner: !straight,
+  };
 }

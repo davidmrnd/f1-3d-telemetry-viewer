@@ -143,6 +143,11 @@ select option { color: #e1e3e9; background: #1c1e24; }
 .quick-driver__copy strong { font-weight: 550; letter-spacing: .5px; font-size: 11px; }
 .quick-driver__copy span { font-size: 9px; color: #989da8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 64px; }
 .view-controls { gap: 0; }
+.topbar .vr-button { padding: 10px 16px; background: #e50914; color: #fff; border: 1px solid #ff3540; border-radius: 5px; font: 600 13px Inter, sans-serif; cursor: pointer; white-space: nowrap; }
+.topbar .vr-button:hover { background: #c80711; }
+.topbar .vr-button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.topbar .vr-button:disabled { opacity: .5; cursor: wait; }
+.vr-status { position: absolute; top: 70px; right: 24px; max-width: 360px; padding: 12px 16px; background: #181013; border: 1px solid #6e2026; border-radius: 5px; color: #ffdadd; font-size: 12px; }
 .view-controls .icon-button { width: 36px; }
 .view-controls .icon { width: 20px; height: 20px; }
 .settings-panel { position: absolute; right: var(--edge); bottom: 125px; width: 380px; max-height: calc(100% - 150px); display: flex; flex-direction: column; z-index: 10; background: rgba(14,15,19,.98); }

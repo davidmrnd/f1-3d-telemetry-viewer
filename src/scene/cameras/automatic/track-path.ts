@@ -12,9 +12,9 @@ export class TrackPath {
 
   private readonly cumulative: number[];
 
-  constructor(points: THREE.Vector3[]) {
-    this.points = points;
-    this.cumulative = buildCumulativeDistances(points);
+  constructor(points: THREE.Vector3[], readonly closed = false) {
+    this.points = closed && points.length > 1 ? [...points, points[0]] : points;
+    this.cumulative = buildCumulativeDistances([...this.points]);
     this.totalLength = this.cumulative.at(-1) ?? 0;
   }
 
@@ -50,24 +50,30 @@ export class TrackPath {
     for (let index = 0; index < this.points.length - 1; index += 1) {
       const start = this.points[index];
       const end = this.points[index + 1];
-      const segment = end.clone().sub(start);
-      const length = segment.length();
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const dz = end.z - start.z;
+      const length = Math.hypot(dx, dy, dz);
       if (length <= 1e-6) {
         continue;
       }
 
-      segment.divideScalar(length);
-      const t = THREE.MathUtils.clamp(point.clone().sub(start).dot(segment), 0, length);
-      const projected = start.clone().add(segment.clone().multiplyScalar(t));
-      const distanceSq = planar
-        ? (projected.x - point.x) ** 2 + (projected.z - point.z) ** 2
-        : projected.distanceToSquared(point);
+      const denominator = planar ? dx * dx + dz * dz : length * length;
+      if (denominator <= 1e-8) continue;
+      const fraction = THREE.MathUtils.clamp(
+        ((point.x - start.x) * dx + (point.z - start.z) * dz + (planar ? 0 : (point.y - start.y) * dy)) / denominator,
+        0, 1,
+      );
+      const px = start.x + dx * fraction;
+      const py = start.y + dy * fraction;
+      const pz = start.z + dz * fraction;
+      const distanceSq = (px - point.x) ** 2 + (pz - point.z) ** 2 + (planar ? 0 : (py - point.y) ** 2);
 
       if (distanceSq < bestDistance) {
         bestDistance = distanceSq;
-        bestPoint = projected;
+        bestPoint.set(px, py, pz);
         bestSegment = index;
-        bestArc = this.cumulative[index] + t;
+        bestArc = this.cumulative[index] + fraction * length;
       }
     }
 
@@ -79,7 +85,29 @@ export class TrackPath {
   }
 
   linearDistance(a: number, b: number): number {
-    return Math.abs(a - b);
+    return Math.abs(this.signedDistance(a, b));
+  }
+
+  signedDistance(from: number, to: number): number {
+    const distance = to - from;
+    if (!this.closed || this.totalLength <= 0) return distance;
+    return THREE.MathUtils.euclideanModulo(distance + this.totalLength / 2, this.totalLength) - this.totalLength / 2;
+  }
+
+  pointAt(distance: number): THREE.Vector3 {
+    if (this.totalLength <= 0) return this.points[0]?.clone() ?? new THREE.Vector3();
+    const arc = this.closed
+      ? THREE.MathUtils.euclideanModulo(distance, this.totalLength)
+      : THREE.MathUtils.clamp(distance, 0, this.totalLength);
+    let lo = 0;
+    let hi = this.cumulative.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (this.cumulative[mid] <= arc) lo = mid;
+      else hi = mid;
+    }
+    const length = this.cumulative[hi] - this.cumulative[lo];
+    return this.points[lo].clone().lerp(this.points[hi], length > 0 ? (arc - this.cumulative[lo]) / length : 0);
   }
 
   tangentAt(projection: TrackProjection): THREE.Vector3 {
