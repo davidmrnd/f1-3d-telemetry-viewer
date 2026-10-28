@@ -5,34 +5,23 @@ import {
   buildVisualPlacements,
   GridLateralOffsetBlender,
 } from "./car-placement";
-import {
-  applyCarVisualQuality,
-  carHeadingToRotationY,
-  createCarVisual,
-  disposeCarVisual,
-} from "./car-models";
+import { CarFleet } from "./car-fleet";
 import {
   buildTrackCenterline,
   buildTransform,
   buildVisualCircuitPath,
   buildTrackCrossSections,
   carLengthInScene,
-  createGrassTerrainGeometry,
-  createTrackRibbon,
   metersToScene,
   TRACK_KERB_WIDTH_METERS,
   trackWidthInScene,
   type SceneTransform,
-  type TrackCrossSection,
   vectorFromPoint,
 } from "./track-geometry";
 import {
   applyTrackEnvironment,
   applySkyQuality,
   applySurfaceQuality,
-  getTrackSurfaceMaterials,
-  GROUND_PLANE_SIZE_METERS,
-  TRACK_TILE_METERS,
 } from "./track-environment";
 import { RaceCameraController } from "./cameras/race-camera-controller";
 import type { CameraMode } from "./cameras/types";
@@ -45,7 +34,7 @@ import {
   createStartFinishDecor,
   type StartFinishDecor,
 } from "./start-finish";
-import type { DriverInfo, FrameCarState, ReplayFrame, ReplaySegment, StartingGridSlot } from "../types";
+import type { DriverInfo, ReplayFrame, ReplaySegment, StartingGridSlot } from "../types";
 import { XrRig } from "./xr/xr-rig";
 import { XrSessionController } from "./xr/xr-session";
 import { XrControllers } from "./xr/xr-controllers";
@@ -53,20 +42,12 @@ import { XrFlight } from "./xr/xr-flight";
 import { XrInterface } from "./xr/xr-interface";
 import type { XrPlaybackState } from "./xr/xr-controls-panel";
 import { RaceLighting } from "./lighting";
-import { CarContactShadows } from "./car-contact-shadows";
+import { RaceTerrain, addTrackSurfaces } from "./track/track-surfaces";
 import { createTrackDecor, type TrackDecor } from "./track/track-decor";
 import { TabletopModel } from "./tabletop/tabletop-model";
 import { TabletopXr } from "./tabletop/tabletop-xr";
 
 export type PresentationMode = "realistic" | "tabletop";
-
-interface CarVisual {
-  group: THREE.Group;
-  detailed: THREE.Group;
-  lowpoly: THREE.Group;
-  label: THREE.Sprite;
-  color: THREE.Color;
-}
 
 export type RaceSceneXrHooks = {
   onTogglePlay?: () => void;
@@ -95,18 +76,14 @@ export class RaceScene {
   private readonly tabletopXr: TabletopXr;
   private presentationMode: PresentationMode = "realistic";
   private modeBeforeXr: PresentationMode = "realistic";
-  private readonly carVisuals = new Map<number, CarVisual>();
+  private readonly cars = new CarFleet(this.root);
   private readonly viewportSize = new THREE.Vector2();
   private readonly eventBeacon: THREE.Mesh;
-  private readonly ground: THREE.Mesh;
-  private readonly groundBase: THREE.Mesh;
+  private readonly terrain: RaceTerrain;
   private readonly lighting: RaceLighting;
   private trackDecor: TrackDecor | null = null;
-  private contactShadows: CarContactShadows | null = null;
 
   private transform: SceneTransform | null = null;
-  private loadedDrivers: DriverInfo[] = [];
-  private carSceneLength = 1;
   private startingGrid: StartingGridSlot[] = [];
   private readonly gridLateralBlender = new GridLateralOffsetBlender();
   private readonly cameraController = new RaceCameraController();
@@ -164,30 +141,7 @@ export class RaceScene {
 
     this.lighting = new RaceLighting(this.xrRig.worldRoot);
 
-    const fallbackGroundMaterial = new THREE.MeshStandardMaterial({
-      color: "#3d5a40",
-      roughness: 0.92,
-      metalness: 0.02,
-    });
-
-    this.groundBase = new THREE.Mesh(
-      new THREE.PlaneGeometry(GROUND_PLANE_SIZE_METERS, GROUND_PLANE_SIZE_METERS),
-      new THREE.MeshStandardMaterial({
-        color: "#2d4a30",
-        roughness: 0.95,
-        metalness: 0,
-      }),
-    );
-    this.groundBase.rotation.x = -Math.PI / 2;
-    this.groundBase.position.y = -3;
-    this.groundBase.receiveShadow = true;
-    this.groundBase.renderOrder = -1;
-    this.xrRig.worldRoot.add(this.groundBase);
-
-    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), fallbackGroundMaterial.clone());
-    this.ground.receiveShadow = true;
-    this.ground.renderOrder = 0;
-    this.xrRig.worldRoot.add(this.ground);
+    this.terrain = new RaceTerrain(this.xrRig.worldRoot);
 
     this.eventBeacon = new THREE.Mesh(
       new THREE.TorusGeometry(2.2, 0.12, 16, 64),
@@ -327,12 +281,7 @@ export class RaceScene {
     applyTrackEnvironment(this.scene, this.renderer);
     this.environmentMap =
       this.scene.environment instanceof THREE.Texture ? this.scene.environment : null;
-    const grass = getTrackSurfaceMaterials().grass;
-    grass.polygonOffset = true;
-    grass.polygonOffsetFactor = 1;
-    grass.polygonOffsetUnits = 1;
-    this.ground.material = grass;
-    this.configureGrassTextureRepeat();
+    this.terrain.applyMaterials();
   }
 
   getGraphicsSettings(): GraphicsSettings {
@@ -359,60 +308,9 @@ export class RaceScene {
     if (changed("sky", "skyStyle", "lighting", "environmentIntensity")) applySkyQuality(this.scene, settings, fogColor);
     if (changed("surfaceDetail", "anisotropy")) applySurfaceQuality(settings, this.renderer);
     if (changed("runoffs", "trackside", "tyreMarks", "shadows")) this.trackDecor?.applySettings(settings);
-    if (this.contactShadows) this.contactShadows.mesh.visible = settings.contactShadows;
-    if (changed("carMaterials", "carShadows", "shadows")) this.applyCarVisualGraphics(settings);
+    this.cars.setContactShadowsVisible(settings.contactShadows);
+    if (changed("carMaterials", "carShadows", "shadows")) this.cars.applyGraphicsSettings(settings);
     this.graphicsInitialized = true;
-  }
-
-  private spawnCarVisuals(drivers: DriverInfo[], sceneLength: number) {
-    for (const driver of drivers) {
-      const visual = createCarVisual(driver, sceneLength);
-      this.carVisuals.set(driver.driverNumber, { ...visual, color: new THREE.Color(driver.teamColor) });
-      this.root.add(visual.group);
-    }
-  }
-
-  private applyCarVisualGraphics(settings: GraphicsSettings) {
-    const castShadows = settings.carShadows && settings.shadows !== "off";
-    for (const visual of this.carVisuals.values()) {
-      applyCarVisualQuality(visual.group, {
-        materials: settings.carMaterials,
-        castShadows,
-      });
-    }
-  }
-
-  private configureGrassTextureRepeat() {
-    const grass = getTrackSurfaceMaterials().grass;
-    const maps = [grass.map, grass.normalMap, grass.roughnessMap, grass.aoMap];
-    for (const map of maps) {
-      if (map) {
-        map.repeat.set(1, 1);
-        map.needsUpdate = true;
-      }
-    }
-  }
-
-  private rebuildGrassTerrain(
-    pathPoints: THREE.Vector3[],
-    closed: boolean,
-    trackWidth: number,
-    kerbWidth: number,
-    crossSections: TrackCrossSection[],
-  ) {
-    this.ground.geometry.dispose();
-    this.ground.geometry = createGrassTerrainGeometry({
-      halfExtentMeters: GROUND_PLANE_SIZE_METERS / 2,
-      gridSpacingMeters: 16,
-      grassTileMeters: TRACK_TILE_METERS.grass,
-      centerline: pathPoints,
-      centerlineClosed: closed,
-      trackHalfWidthMeters: trackWidth / 2 + kerbWidth,
-      crossSections,
-      outerClearanceMeters: 0.12,
-      clearanceFadeMeters: 28,
-    });
-    this.groundBase.visible = false;
   }
 
   private disposeRootContents() {
@@ -428,21 +326,11 @@ export class RaceScene {
       material.dispose();
     });
     this.startFinish = null;
-    this.loadedDrivers = [];
-    for (const visual of this.carVisuals.values()) {
-      this.root.remove(visual.group);
-      disposeCarVisual(visual.group);
-    }
-    this.carVisuals.clear();
+    this.cars.dispose();
     if (this.trackDecor) {
       this.root.remove(this.trackDecor.group);
       this.trackDecor.dispose();
       this.trackDecor = null;
-    }
-    if (this.contactShadows) {
-      this.root.remove(this.contactShadows.mesh);
-      this.contactShadows.dispose();
-      this.contactShadows = null;
     }
     this.root.traverse((object) => {
       if (object instanceof THREE.Mesh) {
@@ -450,43 +338,6 @@ export class RaceScene {
       }
     });
     this.root.clear();
-  }
-
-  private buildTrackSurfaces(
-    pathPoints: THREE.Vector3[],
-    closed: boolean,
-    trackWidth: number,
-    kerbWidth: number,
-    crossSections: TrackCrossSection[],
-  ) {
-    const materials = getTrackSurfaceMaterials();
-    const ribbonOptions = { closed, crossSections };
-
-    const roadMesh = new THREE.Mesh(
-      createTrackRibbon(pathPoints, trackWidth, {
-        ...ribbonOptions,
-        tileSizeMeters: TRACK_TILE_METERS.road,
-      }),
-      materials.road,
-    );
-    roadMesh.receiveShadow = true;
-    roadMesh.renderOrder = 2;
-    this.root.add(roadMesh);
-
-    const kerbOffset = trackWidth / 2 + kerbWidth / 2;
-    for (const offset of [kerbOffset, -kerbOffset]) {
-      const kerbMesh = new THREE.Mesh(
-        createTrackRibbon(pathPoints, kerbWidth, {
-          ...ribbonOptions,
-          offsetMeters: offset,
-          tileSizeMeters: TRACK_TILE_METERS.kerb,
-        }),
-        materials.kerb,
-      );
-      kerbMesh.receiveShadow = true;
-      kerbMesh.renderOrder = 3;
-      this.root.add(kerbMesh);
-    }
   }
 
   resize() {
@@ -531,7 +382,6 @@ export class RaceScene {
     this.xrDriverInfo = segment.drivers;
     this.xrInterface?.setDrivers(segment.drivers);
     this.disposeRootContents();
-    this.carVisuals.clear();
     const transform = buildTransform(segment);
     this.transform = transform;
     this.startingGrid = segment.startingGrid ?? [];
@@ -561,13 +411,13 @@ export class RaceScene {
     this.tabletop.load(segment.drivers, pathPoints, closed, trackWidth, crossSections);
 
     if (pathPoints.length > 1) {
-      this.rebuildGrassTerrain(pathPoints, closed, trackWidth, kerbWidth, crossSections);
+      this.terrain.rebuild(pathPoints, closed, trackWidth, kerbWidth, crossSections);
     }
 
     if (pathPoints.length > 4) {
-      this.buildTrackSurfaces(pathPoints, closed, trackWidth, kerbWidth, crossSections);
+      addTrackSurfaces(this.root, pathPoints, closed, trackWidth, kerbWidth, crossSections);
       this.trackDecor = createTrackDecor(pathPoints, crossSections, closed, trackWidth, kerbWidth,
-        this.ground.geometry, /monte|monaco|baku/i.test(segment.sessionRef.circuitShortName));
+        this.terrain.geometry, /monte|monaco|baku/i.test(segment.sessionRef.circuitShortName));
       this.root.add(this.trackDecor.group);
     }
 
@@ -576,11 +426,7 @@ export class RaceScene {
       this.root.add(this.startFinish.group);
     }
 
-    this.loadedDrivers = [...segment.drivers];
-    this.carSceneLength = carLengthInScene(transform);
-    this.spawnCarVisuals(this.loadedDrivers, this.carSceneLength);
-    this.contactShadows = new CarContactShadows(segment.drivers.length);
-    this.root.add(this.contactShadows.mesh);
+    this.cars.load(segment.drivers, carLengthInScene(transform));
     this.graphicsInitialized = false;
     this.applyGraphicsSettings(this.graphicsSettings);
 
@@ -588,7 +434,6 @@ export class RaceScene {
     if (this.cameraController.getMode() === "orbit") {
       this.framePreviewCamera(samplePoints);
     }
-
   }
 
   setCameraMode(mode: CameraMode) {
@@ -615,8 +460,6 @@ export class RaceScene {
     return this.cameraController.getActiveLabel();
   }
 
-
-  /** Actualiza simulación y cámara; no renderiza (usar con setAnimationLoop). */
   update(frame: ReplayFrame) {
     const nowMs = performance.now();
     const deltaSeconds = Math.min((nowMs - this.lastUpdateMs) / 1000, 0.1);
@@ -651,19 +494,7 @@ export class RaceScene {
       return;
     }
 
-    visualPlacements.forEach(({ car, position, heading }, index) => {
-      const visual = this.carVisuals.get(car.driver.driverNumber);
-      if (!visual) {
-        return;
-      }
-
-      visual.group.position.copy(position);
-      visual.group.rotation.y = carHeadingToRotationY(heading);
-      visual.group.rotation.x = -car.pitch;
-      visual.label.visible = false;
-      this.contactShadows?.setCar(index, position, heading, car.pitch);
-    });
-    this.contactShadows?.finish(visualPlacements.length);
+    this.cars.update(visualPlacements);
 
     this.eventBeacon.visible = false;
     this.startFinish?.update(frame.now);
@@ -703,19 +534,7 @@ export class RaceScene {
       }
     }
     this.lighting.update(this.controls.target);
-    const zoomDetailScale = xrPresenting ? 1 : Math.max(1,
-      Math.tan(THREE.MathUtils.degToRad(30)) / Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)),
-    );
-    const carDistance = this.graphicsSettings.detailedCarDistance;
-    const forceLowPoly = carDistance === "lowpoly";
-    const distance = (forceLowPoly ? 0 : carDistance) * zoomDetailScale;
-    for (const visual of this.carVisuals.values()) {
-      visual.group.visible = true;
-      const useDetailed = !forceLowPoly && visual.group.position.distanceToSquared(this.camera.position)
-        < distance * distance * (visual.detailed.visible ? 1.21 : 0.81);
-      visual.detailed.visible = useDetailed;
-      visual.lowpoly.visible = !useDetailed;
-    }
+    this.cars.updateDetail(this.camera, xrPresenting, this.graphicsSettings.detailedCarDistance);
 
     if (xrPresenting) {
       this.xrRig.applyDesiredCamera(this.camera);

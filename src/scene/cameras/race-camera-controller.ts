@@ -1,5 +1,5 @@
 import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { DriverInfo, ReplaySegment } from "../../types";
+import type { ReplaySegment } from "../../types";
 import type { BaseCarPlacement } from "../car-placement";
 import type { SceneTransform } from "../track-geometry";
 import { BroadcastCameraMode } from "./automatic/broadcast-camera-mode";

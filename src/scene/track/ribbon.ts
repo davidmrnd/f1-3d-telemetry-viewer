@@ -16,7 +16,7 @@ export interface TrackRibbonOptions {
 
 function smoothWidthLimits(sections: TrackCrossSection[], limits: number[], closed: boolean) {
   const radius = 12;
-  const neighborhoods = sections.map((section, index) => {
+  const neighborhoods = sections.map((_section, index) => {
     const neighbors = [{ index, distance: 0 }];
     for (const direction of [-1, 1]) {
       let previous = index;
