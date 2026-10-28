@@ -1,24 +1,16 @@
 import * as THREE from "three";
-import { createXrPanel, panelBox, panelText } from "../xr/xr-panel";
 import type { XrPlaybackState } from "../xr/xr-controls-panel";
 import type { TabletopModel } from "./tabletop-model";
+import { TabletopControlsPanel, type TabletopAction } from "./tabletop-controls-panel";
+import { TabletopDriverPanels } from "./tabletop-driver-panels";
 
-type Action = "play" | "back" | "forward" | "lower" | "higher" | "lock" | "recenter" | "exit";
 type GrabInput = "select" | "squeeze";
 type Grab = { distance: number; offset: THREE.Vector3; held: Set<GrabInput> };
-const BUTTONS: { x: number; y: number; w: number; h: number; label: string; action: Action }[] = [
-  { x: 24, y: 148, w: 160, h: 56, label: "−10 s", action: "back" },
-  { x: 200, y: 148, w: 320, h: 56, label: "", action: "play" },
-  { x: 536, y: 148, w: 160, h: 56, label: "+10 s", action: "forward" },
-  { x: 24, y: 250, w: 328, h: 52, label: "Bajar 3 cm", action: "lower" },
-  { x: 368, y: 250, w: 328, h: 52, label: "Subir 3 cm", action: "higher" },
-  { x: 24, y: 318, w: 328, h: 56, label: "", action: "lock" },
-  { x: 368, y: 318, w: 328, h: 56, label: "Traer delante", action: "recenter" },
-  { x: 24, y: 566, w: 672, h: 48, label: "Salir de AR", action: "exit" },
-];
 
 export class TabletopXr {
-  private readonly panel = createXrPanel(720, 640, .55, "ar-tabletop-controls");
+  private readonly controls = new TabletopControlsPanel();
+  private readonly panel = this.controls.surface;
+  private readonly driverPanels: TabletopDriverPanels;
   private readonly inputs: { ray: THREE.Group; grip: THREE.Group; pointer: THREE.Line; source: XRInputSource | null }[] = [];
   private readonly raycaster = new THREE.Raycaster();
   private readonly plane = new THREE.Plane(new THREE.Vector3(0, 1, 0));
@@ -44,11 +36,13 @@ export class TabletopXr {
       jump: (seconds: number) => void; speed: (speed: number) => void; exit: () => void;
     }) {
     scene.add(this.panel.mesh);
+    this.driverPanels = new TabletopDriverPanels(scene, model);
+    this.raycaster.camera = this.head;
     for (let index = 0; index < 2; index++) {
       const ray = renderer.xr.getController(index);
       const grip = renderer.xr.getControllerGrip(index);
       const pointer = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]),
-        new THREE.LineBasicMaterial({ color: "#e50914", transparent: true, opacity: .85, depthTest: false, toneMapped: false }));
+        new THREE.LineBasicMaterial({ color: "#e50914", transparent: true, opacity: .85, depthTest: false, depthWrite: false, toneMapped: false }));
       pointer.visible = false;
       pointer.renderOrder = 1100;
       ray.add(pointer);
@@ -60,7 +54,7 @@ export class TabletopXr {
       });
       ray.addEventListener("selectstart", () => this.select(index));
       ray.addEventListener("selectend", () => this.endGrab(index, "select"));
-      ray.addEventListener("squeezestart", () => { if (this.active && this.placed) this.startGrab(index, "squeeze"); });
+      ray.addEventListener("squeezestart", () => this.squeeze(index));
       ray.addEventListener("squeezeend", () => this.endGrab(index, "squeeze"));
     }
   }
@@ -68,8 +62,7 @@ export class TabletopXr {
   setActive(active: boolean, scene: THREE.Scene, viewerRoot: THREE.Group) {
     this.active = active;
     this.placed = false;
-    this.clearGrabs();
-    this.locked = false;
+    this.resetInteraction();
     this.menuPressed = false;
     this.lastUpdate = 0;
     this.panel.mesh.visible = active;
@@ -88,10 +81,21 @@ export class TabletopXr {
     }
   }
 
+  resetInteraction() {
+    this.locked = false;
+    this.clearGrabs();
+    this.controls.release();
+    this.driverPanels.reset();
+    this.model.setHoveredDrivers(new Set());
+    this.panel.mesh.visible = this.active;
+    this.lastPaint = -Infinity;
+  }
+
   update(head: THREE.Camera, now: number) {
     if (!this.active) return;
     this.head.position.copy(head.position);
     this.head.quaternion.copy(head.quaternion);
+    this.head.updateMatrixWorld(true);
     if (!this.placed) {
       this.recenter();
       this.placed = true;
@@ -101,7 +105,7 @@ export class TabletopXr {
     const menu = this.inputs.some(({ source }) => source?.gamepad?.buttons[3]?.pressed);
     if (menu && !this.menuPressed) this.toggleMenu();
     this.menuPressed = menu;
-    for (const index of this.grabs.keys()) {
+    for (let index = 0; index < this.inputs.length; index++) {
       if (!this.isTracked(index)) this.endGrab(index);
     }
     if (this.grabs.size === 2) this.updateTwoHand();
@@ -110,15 +114,27 @@ export class TabletopXr {
       this.setRay(index);
       this.raycaster.ray.at(grab.distance, this.point);
       this.model.group.position.copy(this.point).add(grab.offset);
-    } else if (!this.locked) this.moveWithSticks(dt);
+    } else if (!this.locked && !this.controls.isDragging()) this.moveWithSticks(dt);
+    this.driverPanels.update(now, this.head);
+    const hovered = new Set<number>();
     for (let index = 0; index < this.inputs.length; index++) {
       const input = this.inputs[index];
-      input.pointer.visible = input.ray.visible && input.source !== null;
+      input.pointer.visible = this.isTracked(index);
+      if (!input.pointer.visible) continue;
       this.setRay(index);
-      const hit = this.panel.mesh.visible ? this.raycaster.intersectObject(this.panel.mesh)[0] : null;
-      input.pointer.scale.z = hit?.distance ?? this.boardDistance() ?? .8;
+      this.controls.updateGrab(index, this.raycaster.ray);
+      this.driverPanels.updateGrab(index, this.raycaster.ray);
+      const hit = this.intersectUi();
+      const driver = this.locked && !hit ? this.model.pickDriver(this.raycaster) : null;
+      if (driver) hovered.add(driver.driverNumber);
+      input.pointer.scale.z = hit?.distance ?? driver?.distance ?? this.boardDistance() ?? .8;
+      (input.pointer.material as THREE.LineBasicMaterial).color.set(driver ? "#84f4c8" : hit ? "#ffffff" : "#e50914");
     }
-    if (now - this.lastPaint > 150) this.paint(now);
+    this.model.setHoveredDrivers(hovered);
+    if (this.panel.mesh.visible && now - this.lastPaint > 150) {
+      this.controls.paint(this.playback.getState(), this.locked, this.model.getWidth());
+      this.lastPaint = now;
+    }
   }
 
   private setRay(index: number) {
@@ -164,6 +180,8 @@ export class TabletopXr {
   }
 
   private endGrab(index: number, held?: GrabInput) {
+    this.controls.endGrab(index, held);
+    this.driverPanels.endGrab(index, held);
     const grab = this.grabs.get(index);
     if (!grab) return;
     if (held) {
@@ -217,34 +235,68 @@ export class TabletopXr {
   }
 
   private select(index: number) {
-    if (!this.active || !this.placed || !this.inputs[index].ray.visible) return;
+    if (!this.active || !this.placed || !this.isTracked(index)) return;
+    if (this.controls.hold(index, "select")) return;
+    if (this.driverPanels.hold(index, "select")) return;
     if (this.grabs.size) { this.startGrab(index, "select"); return; }
     this.setRay(index);
-    const hit = this.panel.mesh.visible ? this.raycaster.intersectObject(this.panel.mesh)[0] : null;
+    const hit = this.intersectUi();
     if (hit?.uv) {
-      const x = hit.uv.x * 720, y = (1 - hit.uv.y) * 640;
-      if (y >= 100 && y <= 135 && x >= 24 && x <= 696) this.playback.seek(THREE.MathUtils.clamp((x - 24) / 672, 0, 1));
-      else if (y >= 516 && y <= 554 && x >= 24 && x <= 696) this.playback.speed([.5, 1, 1.5, 2][Math.min(3, Math.floor((x - 24) / 168))]);
-      else {
-        const button = BUTTONS.find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
-        if (button) this.act(button.action);
+      if (hit.object === this.controls.bar.mesh) {
+        const action = this.controls.interact(index, hit, "select", this.locked);
+        if (action) this.act(action);
+      } else if (hit.object === this.panel.mesh) {
+        const action = this.controls.hit(hit.uv.x, hit.uv.y, this.locked);
+        if (action) this.act(action);
+      } else this.driverPanels.interact(index, hit, this.raycaster.ray, this.head, "select");
+    } else if (this.locked) {
+      const driver = this.model.pickDriver(this.raycaster);
+      if (driver) {
+        this.driverPanels.showDriver(driver.driverNumber, this.head);
+        this.panel.mesh.visible = false;
+      } else if (!this.panel.mesh.visible) {
+        this.panel.mesh.visible = true;
+        this.placeMenu();
       }
-    } else {
-      this.startGrab(index, "select");
-      if (!this.grabs.size) this.toggleMenu();
-    }
+    } else this.startGrab(index, "select");
     this.lastPaint = -Infinity;
   }
 
-  private act(action: Action) {
+  private squeeze(index: number) {
+    if (!this.active || !this.placed || !this.isTracked(index)) return;
+    if (this.controls.hold(index, "squeeze")) return;
+    if (this.driverPanels.hold(index, "squeeze")) return;
+    this.setRay(index);
+    const hit = this.intersectUi();
+    if (hit) {
+      if (hit.object === this.controls.bar.mesh) this.controls.interact(index, hit, "squeeze", this.locked);
+      else if (hit.object !== this.panel.mesh) this.driverPanels.interact(index, hit, this.raycaster.ray, this.head, "squeeze");
+    } else this.startGrab(index, "squeeze");
+  }
+
+  private intersectUi() {
+    const controls = this.controls.intersect(this.raycaster);
+    const driver = this.driverPanels.intersect(this.raycaster);
+    return controls && (!driver || controls.distance <= driver.distance) ? controls : driver;
+  }
+
+  private act(action: TabletopAction) {
     const group = this.model.group;
-    if (action === "play") this.playback.togglePlay();
-    else if (action === "back" || action === "forward") this.playback.jump(action === "back" ? -10 : 10);
-    else if (action === "lock") { this.locked = !this.locked; this.clearGrabs(); }
-    else if (action === "exit") this.playback.exit();
+    if (action.type === "play") this.playback.togglePlay();
+    else if (action.type === "back" || action.type === "forward") this.playback.jump(action.type === "back" ? -10 : 10);
+    else if (action.type === "seek") this.playback.seek(action.value);
+    else if (action.type === "speed") this.playback.speed(action.value);
+    else if (action.type === "lock") {
+      this.controls.release();
+      this.locked = !this.locked;
+      this.clearGrabs();
+      this.driverPanels.reset();
+      this.model.setHoveredDrivers(new Set());
+    } else if (action.type === "hide" && this.locked) { this.panel.mesh.visible = false; this.controls.release(); }
+    else if (action.type === "exit") this.playback.exit();
     else if (!this.locked) {
-      if (action === "recenter") this.recenter();
-      else if (action === "higher" || action === "lower") group.position.y += action === "higher" ? .03 : -.03;
+      if (action.type === "recenter") this.recenter();
+      else if (action.type === "higher" || action.type === "lower") group.position.y += action.type === "higher" ? .03 : -.03;
     }
   }
 
@@ -257,14 +309,16 @@ export class TabletopXr {
   }
 
   private placeMenu() {
+    this.controls.release();
     this.yaw.setFromQuaternion(this.head.quaternion, "YXZ");
     this.panel.mesh.rotation.set(0, this.yaw.y - .35, 0);
-    this.panel.mesh.position.set(.52, -.05, -.85).applyAxisAngle(THREE.Object3D.DEFAULT_UP, this.yaw.y).add(this.head.position);
+    this.panel.mesh.position.set(.52, -.02, -.95).applyAxisAngle(THREE.Object3D.DEFAULT_UP, this.yaw.y).add(this.head.position);
     this.lastPaint = -Infinity;
   }
 
   private toggleMenu() {
-    this.panel.mesh.visible = !this.panel.mesh.visible;
+    this.controls.release();
+    this.panel.mesh.visible = !this.locked || !this.panel.mesh.visible;
     if (this.panel.mesh.visible) this.placeMenu();
   }
 
@@ -284,47 +338,5 @@ export class TabletopXr {
         this.model.setWidth(this.model.getWidth() * Math.exp(-y * dt));
       }
     }
-  }
-
-  private paint(now: number) {
-    if (!this.panel.mesh.visible) return;
-    const state = this.playback.getState();
-    const ctx = this.panel.context;
-    ctx.clearRect(0, 0, 720, 640);
-    ctx.fillStyle = "#08090b"; ctx.fillRect(0, 0, 720, 640);
-    ctx.fillStyle = "#e50914"; ctx.fillRect(0, 0, 720, 3);
-    panelText(ctx, "APEX", 24, 35, 30, "#fff", 800);
-    panelText(ctx, "AR DE SOBREMESA", 140, 35, 16, "#9b9da8", 600);
-    panelText(ctx, state.playing ? "REPRODUCIENDO" : "EN PAUSA", 24, 78, 17, state.playing ? "#e50914" : "#b7b8c3", 700);
-    panelText(ctx, state.timeLabel, 400, 78, 20, "#e1e1e8", 500, 296);
-    ctx.fillStyle = "#2b2c33"; ctx.fillRect(24, 114, 672, 4);
-    ctx.fillStyle = "#e50914"; ctx.fillRect(24, 114, 672 * state.normalizedTime, 4);
-    ctx.beginPath(); ctx.arc(24 + 672 * state.normalizedTime, 116, 6, 0, Math.PI * 2); ctx.fillStyle = "#fff"; ctx.fill();
-    panelText(ctx, "MESA", 24, 230, 14, "#92949f", 600);
-    panelText(ctx, `${this.model.getWidth().toFixed(2)} m · ${this.locked ? "posición fijada" : "ajuste manual"}`, 90, 230, 16, "#e1e1e8", 500);
-    for (const b of BUTTONS) {
-      panelBox(ctx, b.x, b.y, b.w, b.h, b.action === "lock" && this.locked);
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.font = "600 21px Inter, sans-serif";
-      ctx.fillStyle = this.locked && ["lower", "higher", "recenter"].includes(b.action) ? "#8e909c" : "#f0f0f5";
-      const label = b.action === "play" ? state.playing ? "Pausar" : "Reproducir"
-        : b.action === "lock" ? this.locked ? "Desbloquear posición" : "Fijar posición" : b.label;
-      ctx.fillText(label, b.x + b.w / 2, b.y + b.h / 2, b.w - 12);
-    }
-    panelText(ctx, "Un agarre: mover · Dos agarres: separar / juntar y girar.", 24, 404, 16, "#8e909c");
-    panelText(ctx, "Mantén gatillos, agarres o pinzas con ambas manos.", 24, 431, 16, "#8e909c");
-    panelText(ctx, "Stick izq.: mover · Der.: giro / tamaño · Vacío: menú", 24, 458, 16, "#8e909c");
-    panelText(ctx, "VELOCIDAD", 24, 498, 14, "#92949f", 600);
-    for (const [i, speed] of [.5, 1, 1.5, 2].entries()) {
-      panelBox(ctx, 24 + i * 168, 516, 160, 38, state.speed === speed);
-      ctx.font = "600 20px Inter, sans-serif";
-      ctx.fillStyle = "#f0f0f5";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(`${speed}×`, 24 + i * 168 + 80, 535);
-    }
-    this.panel.texture.needsUpdate = true;
-    this.lastPaint = now;
   }
 }

@@ -409,6 +409,7 @@ export class RaceScene {
     const kerbWidth = metersToScene(TRACK_KERB_WIDTH_METERS, transform);
     const crossSections = buildTrackCrossSections(pathPoints, closed, trackWidth / 2 + kerbWidth);
     this.tabletop.load(segment.drivers, pathPoints, closed, trackWidth, crossSections);
+    this.tabletopXr.resetInteraction();
 
     if (pathPoints.length > 1) {
       this.terrain.rebuild(pathPoints, closed, trackWidth, kerbWidth, crossSections);
