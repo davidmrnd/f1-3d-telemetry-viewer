@@ -5,7 +5,12 @@ import {
   buildVisualPlacements,
   GridLateralOffsetBlender,
 } from "./car-placement";
-import { applyCarVisualQuality, carHeadingToRotationY, createCarVisual, disposeCarVisual } from "./car-models";
+import {
+  applyCarVisualQuality,
+  carHeadingToRotationY,
+  createCarVisual,
+  disposeCarVisual,
+} from "./car-models";
 import {
   buildTrackCenterline,
   buildTransform,
@@ -50,7 +55,6 @@ import type { XrPlaybackState } from "./xr/xr-controls-panel";
 import { RaceLighting } from "./lighting";
 import { CarContactShadows } from "./car-contact-shadows";
 import { createTrackDecor, type TrackDecor } from "./track/track-decor";
-import { DistantCars } from "./distant-cars";
 import { TabletopModel } from "./tabletop/tabletop-model";
 import { TabletopXr } from "./tabletop/tabletop-xr";
 
@@ -58,6 +62,8 @@ export type PresentationMode = "realistic" | "tabletop";
 
 interface CarVisual {
   group: THREE.Group;
+  detailed: THREE.Group;
+  lowpoly: THREE.Group;
   label: THREE.Sprite;
   color: THREE.Color;
 }
@@ -97,9 +103,10 @@ export class RaceScene {
   private readonly lighting: RaceLighting;
   private trackDecor: TrackDecor | null = null;
   private contactShadows: CarContactShadows | null = null;
-  private distantCars: DistantCars | null = null;
 
   private transform: SceneTransform | null = null;
+  private loadedDrivers: DriverInfo[] = [];
+  private carSceneLength = 1;
   private startingGrid: StartingGridSlot[] = [];
   private readonly gridLateralBlender = new GridLateralOffsetBlender();
   private readonly cameraController = new RaceCameraController();
@@ -357,6 +364,14 @@ export class RaceScene {
     this.graphicsInitialized = true;
   }
 
+  private spawnCarVisuals(drivers: DriverInfo[], sceneLength: number) {
+    for (const driver of drivers) {
+      const visual = createCarVisual(driver, sceneLength);
+      this.carVisuals.set(driver.driverNumber, { ...visual, color: new THREE.Color(driver.teamColor) });
+      this.root.add(visual.group);
+    }
+  }
+
   private applyCarVisualGraphics(settings: GraphicsSettings) {
     const castShadows = settings.carShadows && settings.shadows !== "off";
     for (const visual of this.carVisuals.values()) {
@@ -413,10 +428,12 @@ export class RaceScene {
       material.dispose();
     });
     this.startFinish = null;
+    this.loadedDrivers = [];
     for (const visual of this.carVisuals.values()) {
       this.root.remove(visual.group);
       disposeCarVisual(visual.group);
     }
+    this.carVisuals.clear();
     if (this.trackDecor) {
       this.root.remove(this.trackDecor.group);
       this.trackDecor.dispose();
@@ -426,11 +443,6 @@ export class RaceScene {
       this.root.remove(this.contactShadows.mesh);
       this.contactShadows.dispose();
       this.contactShadows = null;
-    }
-    if (this.distantCars) {
-      this.root.remove(this.distantCars.group);
-      this.distantCars.dispose();
-      this.distantCars = null;
     }
     this.root.traverse((object) => {
       if (object instanceof THREE.Mesh) {
@@ -564,15 +576,11 @@ export class RaceScene {
       this.root.add(this.startFinish.group);
     }
 
-    segment.drivers.forEach((driver) => {
-      const visual = createCarVisual(driver, carLengthInScene(transform));
-      this.carVisuals.set(driver.driverNumber, { ...visual, color: new THREE.Color(driver.teamColor) });
-      this.root.add(visual.group);
-    });
+    this.loadedDrivers = [...segment.drivers];
+    this.carSceneLength = carLengthInScene(transform);
+    this.spawnCarVisuals(this.loadedDrivers, this.carSceneLength);
     this.contactShadows = new CarContactShadows(segment.drivers.length);
     this.root.add(this.contactShadows.mesh);
-    this.distantCars = new DistantCars(segment.drivers.length);
-    this.root.add(this.distantCars.group);
     this.graphicsInitialized = false;
     this.applyGraphicsSettings(this.graphicsSettings);
 
@@ -695,20 +703,19 @@ export class RaceScene {
       }
     }
     this.lighting.update(this.controls.target);
-    let distantCount = 0;
     const zoomDetailScale = xrPresenting ? 1 : Math.max(1,
       Math.tan(THREE.MathUtils.degToRad(30)) / Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)),
     );
-    const distance = this.graphicsSettings.detailedCarDistance * zoomDetailScale;
+    const carDistance = this.graphicsSettings.detailedCarDistance;
+    const forceLowPoly = carDistance === "lowpoly";
+    const distance = (forceLowPoly ? 0 : carDistance) * zoomDetailScale;
     for (const visual of this.carVisuals.values()) {
-      const threshold = distance * (visual.group.visible ? 1.1 : 0.9);
-      visual.group.visible = visual.group.position.distanceToSquared(this.camera.position) < threshold * threshold;
-      if (!visual.group.visible) {
-        visual.group.updateMatrix();
-        this.distantCars?.setCar(distantCount++, visual.group.matrix, visual.color);
-      }
+      visual.group.visible = true;
+      const useDetailed = !forceLowPoly && visual.group.position.distanceToSquared(this.camera.position)
+        < distance * distance * (visual.detailed.visible ? 1.21 : 0.81);
+      visual.detailed.visible = useDetailed;
+      visual.lowpoly.visible = !useDetailed;
     }
-    this.distantCars?.finish(distantCount);
 
     if (xrPresenting) {
       this.xrRig.applyDesiredCamera(this.camera);

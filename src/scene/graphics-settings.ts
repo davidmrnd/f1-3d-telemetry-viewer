@@ -15,7 +15,7 @@ export type GraphicsSettingsValues = {
   xrFoveation: number;
   carMaterials: CarMaterialQuality;
   carShadows: boolean;
-  detailedCarDistance: number;
+  detailedCarDistance: number | "lowpoly";
   contactShadows: boolean;
   surfaceDetail: boolean;
   anisotropy: number;
@@ -75,7 +75,7 @@ export const GRAPHICS_OPTIONS: { [K in keyof GraphicsSettingsValues]: readonly G
   maxPixelRatio: PIXEL_RATIO_OPTIONS, shadows: ["off", "low", "medium", "high"], shadowDistance: [60, 120, 240],
   environment: [true, false], environmentIntensity: [0.3, 0.6, 1], fog: [true, false], drawDistance: [800, 1600, 3200, 6000],
   xrScale: XR_SCALE_OPTIONS, xrFoveation: [0, 0.5, 1], carMaterials: ["pbr", "simple"], carShadows: [true, false],
-  detailedCarDistance: [60, 120, 240, 6000],
+  detailedCarDistance: [60, 120, 240, 6000, "lowpoly"],
   contactShadows: [true, false], surfaceDetail: [true, false], anisotropy: [1, 4, 8, 16], sky: [true, false],
   skyStyle: ["clear", "hdri"],
   exposure: [0.8, 1, 1.2], lighting: ["day", "warm", "overcast"], runoffs: [true, false],

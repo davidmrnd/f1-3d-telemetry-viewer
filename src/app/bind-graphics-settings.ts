@@ -58,8 +58,10 @@ export function bindGraphicsSettings(scene: RaceScene, elements: GraphicsControl
   for (const field of elements.fields) {
     field.addEventListener("change", () => {
       const key = field.dataset.graphics as keyof GraphicsSettingsValues;
-      const value = typeof current[key] === "boolean" ? field.value === "on"
-        : typeof current[key] === "number" ? Number(field.value) : field.value;
+      const raw = field.value;
+      const value = typeof current[key] === "boolean" ? raw === "on"
+        : key === "detailedCarDistance" && raw === "lowpoly" ? "lowpoly"
+        : typeof current[key] === "number" || key === "detailedCarDistance" ? Number(raw) : raw;
       apply({ ...current, [key]: value });
     });
   }

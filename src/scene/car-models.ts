@@ -15,18 +15,25 @@ export const CAR_TEMPLATE_LENGTH = 0.32;
 /** Yaw del mesh Blender respecto al eje de avance de la telemetría. */
 export const CAR_MODEL_YAW_OFFSET = Math.PI / 2;
 
+export const LOWPOLY_CAR_MESH_URL = "/models/cars/f1lowpoly/lowpolyf1.glb";
+
+export type CarMeshStyle = "detailed" | "lowpoly";
+
 export function carHeadingToRotationY(heading: number): number {
   return CAR_MODEL_YAW_OFFSET - heading;
 }
 
 let preparedTemplate: THREE.Group | null = null;
+let preparedLowPolyTemplate: THREE.Group | null = null;
 let loadPromise: Promise<void> | null = null;
 const liveryBodyTextures = new Map<string, THREE.Texture>();
 
 export interface CarVisualParts {
-  /** Anclaje en el mundo (telemetría); el mesh va en `model`. */
+  /** Anclaje en el mundo (telemetría); los meshes van en `detailed` / `lowpoly`. */
   group: THREE.Group;
   model: THREE.Group;
+  detailed: THREE.Group;
+  lowpoly: THREE.Group;
   label: THREE.Sprite;
 }
 
@@ -114,6 +121,64 @@ function applyLiveryBody(root: THREE.Object3D, bodyTexture: THREE.Texture) {
   });
 }
 
+function materialSlotName(material: THREE.Material): string {
+  return material.name.replace(/\s+/g, "_");
+}
+
+function applyLowPolyTeamColors(root: THREE.Object3D, teamColor: string) {
+  const primary = new THREE.Color(teamColor);
+  const secondary = primary.clone().lerp(new THREE.Color("#ffffff"), 0.32);
+  const accent = primary.clone().lerp(new THREE.Color("#111111"), 0.4);
+
+  root.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) {
+      return;
+    }
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    const painted = materials.map((material) => {
+      const cloned = cloneMaterial(material);
+      if (!(cloned instanceof THREE.MeshStandardMaterial)) {
+        return cloned;
+      }
+      const slot = materialSlotName(cloned);
+      if (slot === "BaseColor") {
+        cloned.color.copy(primary);
+      } else if (slot === "2ndColor") {
+        cloned.color.copy(secondary);
+      } else if (slot === "3rdColor") {
+        cloned.color.copy(accent);
+      }
+      cloned.emissive.set("#000000");
+      cloned.emissiveIntensity = 0;
+      return cloned;
+    });
+    child.material = painted.length === 1 ? painted[0] : painted;
+  });
+}
+
+function finalizeTemplate(source: THREE.Group): THREE.Group {
+  const template = prepareTemplate(source);
+  template.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+  return template;
+}
+
+function loadGltfScene(url: string): Promise<THREE.Group> {
+  const loader = new GLTFLoader();
+  return new Promise((resolve, reject) => {
+    loader.load(
+      url,
+      (gltf) => resolve(gltf.scene),
+      undefined,
+      (error) => reject(error instanceof Error ? error : new Error(String(error))),
+    );
+  });
+}
+
 function prepareTemplate(source: THREE.Group): THREE.Group {
   const wrapper = new THREE.Group();
   wrapper.add(source);
@@ -157,70 +222,89 @@ function loadLiveryBodyTexture(url: string): Promise<THREE.Texture> {
 }
 
 export function preloadCarModels(): Promise<void> {
-  if (preparedTemplate) {
+  if (preparedTemplate && preparedLowPolyTemplate) {
     return Promise.resolve();
   }
   if (loadPromise) {
     return loadPromise;
   }
 
-  loadPromise = loadCarsManifest().then(() => {
-    const loader = new GLTFLoader();
-    return new Promise<void>((resolve, reject) => {
-      loader.load(
-        getCarsManifest().mesh,
-        (gltf) => {
-          preparedTemplate = prepareTemplate(gltf.scene);
-          preparedTemplate.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-              child.castShadow = true;
-              child.receiveShadow = true;
-            }
-          });
-          Promise.all(getLiveryTextureUrls().map(loadLiveryBodyTexture))
-            .then(() => resolve())
-            .catch(reject);
-        },
-        undefined,
-        (error) => {
-          loadPromise = null;
-          reject(error instanceof Error ? error : new Error(String(error)));
-        },
-      );
+  loadPromise = loadCarsManifest()
+    .then(async () => {
+      const [detailedScene, lowPolyScene] = await Promise.all([
+        loadGltfScene(getCarsManifest().mesh),
+        loadGltfScene(LOWPOLY_CAR_MESH_URL),
+      ]);
+      await Promise.all(getLiveryTextureUrls().map(loadLiveryBodyTexture));
+      preparedTemplate = finalizeTemplate(detailedScene);
+      preparedLowPolyTemplate = finalizeTemplate(lowPolyScene);
+    })
+    .catch((error) => {
+      loadPromise = null;
+      throw error instanceof Error ? error : new Error(String(error));
     });
-  });
 
   return loadPromise;
 }
 
-export function createCarVisual(driver: DriverInfo, sceneLength = CAR_TEMPLATE_LENGTH): CarVisualParts {
-  if (!preparedTemplate) {
+function buildStyledCarModel(
+  driver: DriverInfo,
+  sceneLength: number,
+  style: CarMeshStyle,
+): { model: THREE.Group; height: number } {
+  const template = style === "lowpoly" ? preparedLowPolyTemplate : preparedTemplate;
+  if (!template) {
     throw new Error("Modelos de coche no precargados. Llama a preloadCarModels() antes.");
   }
 
-  const livery = resolveCarLivery(driver);
-  const bodyTexture = liveryBodyTextures.get(livery.body);
-  if (!bodyTexture) {
-    throw new Error(`Textura de livery no precargada: ${livery.body}`);
+  const lengthScale = sceneLength / CAR_TEMPLATE_LENGTH;
+  const model = template.clone(true);
+  model.scale.multiplyScalar(lengthScale);
+  const height = alignCarToGround(model);
+
+  if (style === "lowpoly") {
+    applyLowPolyTeamColors(model, driver.teamColor);
+  } else {
+    const livery = resolveCarLivery(driver);
+    const bodyTexture = liveryBodyTextures.get(livery.body);
+    if (!bodyTexture) {
+      throw new Error(`Textura de livery no precargada: ${livery.body}`);
+    }
+    applyTeamTint(model, driver.teamColor);
+    applyLiveryBody(model, bodyTexture);
   }
 
+  return { model, height };
+}
+
+export function createCarVisual(
+  driver: DriverInfo,
+  sceneLength = CAR_TEMPLATE_LENGTH,
+): CarVisualParts {
   const lengthScale = sceneLength / CAR_TEMPLATE_LENGTH;
   const anchor = new THREE.Group();
   anchor.rotation.order = "YXZ";
-  const model = preparedTemplate.clone(true);
-  model.scale.multiplyScalar(lengthScale);
-  const carHeight = alignCarToGround(model);
-  applyTeamTint(model, driver.teamColor);
-  applyLiveryBody(model, bodyTexture);
+
+  const detailed = buildStyledCarModel(driver, sceneLength, "detailed");
+  const lowpoly = buildStyledCarModel(driver, sceneLength, "lowpoly");
+  const carHeight = Math.max(detailed.height, lowpoly.height);
 
   const label = createLabelSprite(driver.acronym, driver.teamColor);
   label.position.set(0, carHeight + 0.15, 0);
   label.scale.multiplyScalar(lengthScale);
   label.visible = false;
-  model.add(label);
-  anchor.add(model);
 
-  return { group: anchor, model, label };
+  detailed.model.visible = true;
+  lowpoly.model.visible = false;
+  anchor.add(detailed.model, lowpoly.model, label);
+
+  return {
+    group: anchor,
+    model: detailed.model,
+    detailed: detailed.model,
+    lowpoly: lowpoly.model,
+    label,
+  };
 }
 
 type MaterialVariants = { detailed: THREE.Material[]; simple: THREE.Material[] };
