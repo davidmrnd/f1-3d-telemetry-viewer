@@ -16,6 +16,7 @@ export const CAR_TEMPLATE_LENGTH = 0.32;
 export const CAR_MODEL_YAW_OFFSET = Math.PI / 2;
 
 export const LOWPOLY_CAR_MESH_URL = "/models/cars/f1lowpoly/lowpolyf1.glb";
+export const LOWPOLY_CAR_SCALE = 0.90;
 
 export type CarMeshStyle = "detailed" | "lowpoly";
 
@@ -259,7 +260,7 @@ function buildStyledCarModel(
 
   const lengthScale = sceneLength / CAR_TEMPLATE_LENGTH;
   const model = template.clone(true);
-  model.scale.multiplyScalar(lengthScale);
+  model.scale.multiplyScalar(style === "lowpoly" ? lengthScale * LOWPOLY_CAR_SCALE : lengthScale);
   const height = alignCarToGround(model);
 
   if (style === "lowpoly") {
