@@ -4,10 +4,13 @@ import { createXrPanel, panelBox, panelText } from "./xr-panel";
 
 export type XrPlaybackState = { playing: boolean; normalizedTime: number; timeLabel: string; speed: number };
 export type XrControlsState = XrPlaybackState & { cameraMode: CameraMode; driverLabel: string; wristVisible: boolean };
-export type XrUiAction = { type: "play" | "close" | "wrist" } | { type: "jump"; seconds: number }
+export type XrUiAction = { type: "play" | "close" | "wrist" | "exit" } | { type: "jump"; seconds: number }
   | { type: "seek"; ratio: number } | { type: "camera"; mode: CameraMode }
   | { type: "driver"; step: number } | { type: "speed"; value: number };
 type Button = { x: number; y: number; w: number; h: number; label: string; action: XrUiAction };
+
+const PANEL_W = 768;
+const PANEL_H = 580;
 
 const BUTTONS: Button[] = [
   { x: 696, y: 16, w: 48, h: 40, label: "×", action: { type: "close" } },
@@ -23,10 +26,11 @@ const BUTTONS: Button[] = [
   ...[.5, 1, 1.5, 2].map((value, i) => ({ x: 24 + i * 104, y: 412, w: 92, h: 44,
     label: `${value}×`, action: { type: "speed" as const, value } })),
   { x: 464, y: 412, w: 280, h: 44, label: "", action: { type: "wrist" } },
+  { x: 24, y: 508, w: 720, h: 48, label: "Salir de VR", action: { type: "exit" } },
 ];
 
 export class XrControlsPanel {
-  readonly surface = createXrPanel(768, 512, .76, "xr-replay-controls");
+  readonly surface = createXrPanel(PANEL_W, PANEL_H, .76, "xr-replay-controls");
   private signature = "";
   private lastPaint = -Infinity;
   private dirty = true;
@@ -45,7 +49,7 @@ export class XrControlsPanel {
   needsUpdate(now: number) { return this.surface.mesh.visible && (this.dirty || now - this.lastPaint >= 500); }
 
   hit(u: number, v: number): XrUiAction | null {
-    const x = u * 768, y = (1 - v) * 512;
+    const x = u * PANEL_W, y = (1 - v) * PANEL_H;
     if (x >= 24 && x <= 744 && y >= 100 && y <= 138) return { type: "seek", ratio: THREE.MathUtils.clamp((x - 24) / 720, 0, 1) };
     return BUTTONS.find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h)?.action ?? null;
   }
@@ -64,9 +68,9 @@ export class XrControlsPanel {
 
   private paint(state: XrControlsState) {
     const { context: ctx } = this.surface;
-    ctx.clearRect(0, 0, 768, 512);
-    ctx.fillStyle = "#08090b"; ctx.fillRect(0, 0, 768, 512);
-    ctx.fillStyle = "#e50914"; ctx.fillRect(0, 0, 768, 3);
+    ctx.clearRect(0, 0, PANEL_W, PANEL_H);
+    ctx.fillStyle = "#08090b"; ctx.fillRect(0, 0, PANEL_W, PANEL_H);
+    ctx.fillStyle = "#e50914"; ctx.fillRect(0, 0, PANEL_W, 3);
     panelText(ctx, "APEX", 24, 35, 30, "#fff", 800);
     panelText(ctx, "CONTROL DE CARRERA", 140, 35, 16, "#9b9da8", 600);
     panelText(ctx, state.playing ? "REPRODUCIENDO" : "EN PAUSA", 24, 80, 17, state.playing ? "#e50914" : "#b7b8c3", 700);
@@ -88,6 +92,6 @@ export class XrControlsPanel {
       ctx.fillStyle = "#f0f0f5"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText(label, b.x + b.w / 2, b.y + b.h / 2, b.w - 12);
     }
-    panelText(ctx, "Clic en stick izq.: menú   ·   Apunta y pulsa el gatillo derecho", 24, 489, 16, "#8e909c");
+    panelText(ctx, "Clic en stick izq.: menú   ·   Apunta y pulsa el gatillo derecho", 24, 478, 16, "#8e909c");
   }
 }

@@ -791,6 +791,7 @@ export class RaceScene {
       else if (action.type === "seek") this.xrHooks.onSeek?.(action.ratio);
       else if (action.type === "speed") this.xrHooks.onSetSpeed?.(action.value);
       else if (action.type === "camera") this.setCameraMode(action.mode);
+      else if (action.type === "exit") void this.exitVr();
       else if (action.type === "driver" || action.type === "follow") {
         const index = this.xrDrivers.indexOf(this.getFollowDriver() ?? -1);
         const driver = action.type === "follow" ? action.driver
