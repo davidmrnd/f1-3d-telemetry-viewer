@@ -48,7 +48,7 @@ export class TabletopXr {
       const ray = renderer.xr.getController(index);
       const grip = renderer.xr.getControllerGrip(index);
       const pointer = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]),
-        new THREE.LineBasicMaterial({ color: "#74e2eb", transparent: true, opacity: .7, depthTest: false, toneMapped: false }));
+        new THREE.LineBasicMaterial({ color: "#e50914", transparent: true, opacity: .85, depthTest: false, toneMapped: false }));
       pointer.visible = false;
       pointer.renderOrder = 1100;
       ray.add(pointer);
@@ -291,28 +291,38 @@ export class TabletopXr {
     const state = this.playback.getState();
     const ctx = this.panel.context;
     ctx.clearRect(0, 0, 720, 640);
-    ctx.fillStyle = "#08141d"; ctx.fillRect(0, 0, 720, 640);
-    ctx.fillStyle = "#74e2eb"; ctx.fillRect(0, 0, 720, 3);
-    panelText(ctx, "APEX · AR DE SOBREMESA", 24, 35, 26, "#e3fbff", 700);
-    panelText(ctx, state.timeLabel, 24, 78, 20);
-    ctx.fillStyle = "#294452"; ctx.fillRect(24, 114, 672, 5);
-    ctx.fillStyle = "#74e2eb"; ctx.fillRect(24, 114, 672 * state.normalizedTime, 5);
-    panelText(ctx, `TAMAÑO ${this.model.getWidth().toFixed(2)} m · ${this.locked ? "POSICIÓN FIJADA" : "AJUSTE MANUAL"}`, 24, 230, 18, "#74e2eb");
+    ctx.fillStyle = "#08090b"; ctx.fillRect(0, 0, 720, 640);
+    ctx.fillStyle = "#e50914"; ctx.fillRect(0, 0, 720, 3);
+    panelText(ctx, "APEX", 24, 35, 30, "#fff", 800);
+    panelText(ctx, "AR DE SOBREMESA", 140, 35, 16, "#9b9da8", 600);
+    panelText(ctx, state.playing ? "REPRODUCIENDO" : "EN PAUSA", 24, 78, 17, state.playing ? "#e50914" : "#b7b8c3", 700);
+    panelText(ctx, state.timeLabel, 400, 78, 20, "#e1e1e8", 500, 296);
+    ctx.fillStyle = "#2b2c33"; ctx.fillRect(24, 114, 672, 4);
+    ctx.fillStyle = "#e50914"; ctx.fillRect(24, 114, 672 * state.normalizedTime, 4);
+    ctx.beginPath(); ctx.arc(24 + 672 * state.normalizedTime, 116, 6, 0, Math.PI * 2); ctx.fillStyle = "#fff"; ctx.fill();
+    panelText(ctx, "MESA", 24, 230, 14, "#92949f", 600);
+    panelText(ctx, `${this.model.getWidth().toFixed(2)} m · ${this.locked ? "posición fijada" : "ajuste manual"}`, 90, 230, 16, "#e1e1e8", 500);
     for (const b of BUTTONS) {
       panelBox(ctx, b.x, b.y, b.w, b.h, b.action === "lock" && this.locked);
       ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
       ctx.font = "600 21px Inter, sans-serif";
-      ctx.fillStyle = this.locked && ["lower", "higher", "recenter"].includes(b.action) ? "#65727b" : "#edf8fa";
+      ctx.fillStyle = this.locked && ["lower", "higher", "recenter"].includes(b.action) ? "#8e909c" : "#f0f0f5";
       const label = b.action === "play" ? state.playing ? "Pausar" : "Reproducir"
         : b.action === "lock" ? this.locked ? "Desbloquear posición" : "Fijar posición" : b.label;
-      ctx.fillText(label, b.x + b.w / 2, b.y + b.h / 2);
+      ctx.fillText(label, b.x + b.w / 2, b.y + b.h / 2, b.w - 12);
     }
-    panelText(ctx, "Un agarre: mover · Dos agarres: separar / juntar y girar.", 24, 404, 17);
-    panelText(ctx, "Mantén gatillos, agarres o pinzas con ambas manos.", 24, 431, 17, "#9cb2bf");
-    panelText(ctx, "Stick izq.: mover · Der.: giro / tamaño · Vacío: menú", 24, 458, 17, "#9cb2bf");
+    panelText(ctx, "Un agarre: mover · Dos agarres: separar / juntar y girar.", 24, 404, 16, "#8e909c");
+    panelText(ctx, "Mantén gatillos, agarres o pinzas con ambas manos.", 24, 431, 16, "#8e909c");
+    panelText(ctx, "Stick izq.: mover · Der.: giro / tamaño · Vacío: menú", 24, 458, 16, "#8e909c");
+    panelText(ctx, "VELOCIDAD", 24, 498, 14, "#92949f", 600);
     for (const [i, speed] of [.5, 1, 1.5, 2].entries()) {
       panelBox(ctx, 24 + i * 168, 516, 160, 38, state.speed === speed);
-      panelText(ctx, `${speed}×`, 80 + i * 168, 535, 20);
+      ctx.font = "600 20px Inter, sans-serif";
+      ctx.fillStyle = "#f0f0f5";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(`${speed}×`, 24 + i * 168 + 80, 535);
     }
     this.panel.texture.needsUpdate = true;
     this.lastPaint = now;
