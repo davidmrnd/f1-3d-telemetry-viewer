@@ -24,6 +24,7 @@ export function bindXr(scene: RaceScene, elements: XrUiElements, graphics: Graph
     enterVrButton.textContent = presenting && !ar ? "Salir de VR" : "Entrar en VR";
     enterArButton.textContent = ar ? "Salir de AR" : "Entrar en AR";
     enterVrButton.hidden = !vrSupported && !(presenting && !ar);
+    enterArButton.hidden = !arSupported && !ar;
     enterVrButton.disabled = pending || (presenting && ar);
     enterArButton.disabled = pending || (!arSupported && !ar) || (presenting && !ar);
     enterVrButton.classList.toggle("is-xr-active", presenting && !ar);
