@@ -6,10 +6,11 @@ import type { TabletopModel } from "./tabletop-model";
 type Surface = ReturnType<typeof createXrPanel>;
 type DriverWindow = { surface: Surface; bar: Surface | null; connector: THREE.Line | null; driver: DriverInfo; detailed: boolean; following: boolean; height: number; lastPaint: number };
 type GrabInput = "select" | "squeeze";
-type PanelGrab = { window: DriverWindow; distance: number; offset: THREE.Vector3; held: Set<GrabInput> };
+type PanelGrab = { window: DriverWindow; distance: number; localPoint: THREE.Vector3; held: Set<GrabInput> };
 type Photo = { image: HTMLImageElement; ready: boolean };
 
 const COMPOUNDS: Record<string, string> = { SOFT: "Blando", MEDIUM: "Medio", HARD: "Duro", INTERMEDIATE: "Intermedio", INTER: "Intermedio", WET: "Lluvia" };
+const COMPOUND_COLORS: Record<string, string> = { SOFT: "#ff545e", MEDIUM: "#f3d14c", HARD: "#f1f5fc", INTERMEDIATE: "#63e5b2", INTER: "#63e5b2", WET: "#64aaff" };
 const value = (number: number | null | undefined, suffix = "", digits = 0) =>
   number != null && Number.isFinite(number) ? `${number.toFixed(digits)}${suffix}` : "—";
 
@@ -20,6 +21,8 @@ export class TabletopDriverPanels {
   private readonly yaw = new THREE.Euler(0, 0, 0, "YXZ");
   private readonly point = new THREE.Vector3();
   private readonly anchor = new THREE.Vector3();
+  private readonly viewer = new THREE.Vector3();
+  private readonly grabOffset = new THREE.Vector3();
 
   constructor(private readonly scene: THREE.Scene, private readonly model: TabletopModel) {}
 
@@ -52,15 +55,15 @@ export class TabletopDriverPanels {
     return true;
   }
 
-  interact(index: number, hit: THREE.Intersection, ray: THREE.Ray, head: THREE.Camera, input: GrabInput) {
+  interact(index: number, hit: THREE.Intersection, head: THREE.Camera, input: GrabInput) {
     const window = this.windows.find(window => window.surface.mesh === hit.object || window.bar?.mesh === hit.object);
     if (!window || !hit.uv) return;
+    this.viewer.copy(head.position);
     const x = hit.uv.x * 720, y = (1 - hit.uv.y) * window.height;
     if (hit.object === window.bar?.mesh && x >= 112 && x <= 708 && hit.uv.y >= .1 && hit.uv.y <= .9) {
       if ([...this.grabs.values()].some(grab => grab.window === window)) return;
-      ray.at(hit.distance, this.point);
       this.grabs.set(index, { window, distance: hit.distance,
-        offset: window.surface.mesh.position.clone().sub(this.point), held: new Set([input]) });
+        localPoint: window.surface.mesh.worldToLocal(hit.point.clone()), held: new Set([input]) });
     } else if (input === "select" && (hit.object === window.bar?.mesh && x >= 8 && x <= 88 && hit.uv.y >= .1 && hit.uv.y <= .9
       || !window.detailed && x >= 640 && x <= 704 && y >= 12 && y <= 64)) {
       this.close(window);
@@ -80,8 +83,14 @@ export class TabletopDriverPanels {
   updateGrab(index: number, ray: THREE.Ray) {
     const grab = this.grabs.get(index);
     if (!grab) return;
-    ray.at(grab.distance, this.point);
-    grab.window.surface.mesh.position.copy(this.point).add(grab.offset);
+    const mesh = grab.window.surface.mesh;
+    for (let step = 0; step < 3; step++) {
+      mesh.lookAt(this.viewer);
+      this.grabOffset.copy(grab.localPoint).applyQuaternion(mesh.quaternion);
+      ray.at(grab.distance, this.point);
+      mesh.position.copy(this.point).sub(this.grabOffset);
+    }
+    mesh.lookAt(this.viewer);
   }
 
   endGrab(index: number, input?: GrabInput) {
@@ -95,8 +104,10 @@ export class TabletopDriverPanels {
   }
 
   update(now: number, head: THREE.Camera) {
+    this.viewer.copy(head.position);
     for (const window of this.windows) {
       if (window.following) this.followDriver(window, head);
+      else if (window.detailed && window.surface.mesh.visible) window.surface.mesh.lookAt(head.position);
       if (!window.surface.mesh.visible || now - window.lastPaint < 200) continue;
       this.paint(window, this.model.getDriverState(window.driver.driverNumber));
       window.lastPaint = now;
@@ -138,9 +149,10 @@ export class TabletopDriverPanels {
       surface.mesh.add(bar.mesh);
       const ctx = bar.context;
       ctx.fillStyle = "rgba(43, 48, 58, .96)";
-      ctx.beginPath(); ctx.roundRect(8, 8, 80, 72, 36); ctx.fill();
       ctx.beginPath(); ctx.roundRect(112, 8, 596, 72, 36); ctx.fill();
-      panelText(ctx, "×", 31, 44, 40, "#f5f7fa");
+      ctx.fillStyle = "rgba(255, 84, 94, .18)";
+      ctx.beginPath(); ctx.roundRect(8, 8, 80, 72, 36); ctx.fill();
+      panelText(ctx, "×", 31, 44, 40, "#ff545e");
       ctx.fillStyle = "#d5dce7";
       ctx.beginPath(); ctx.roundRect(250, 25, 316, 6, 3); ctx.fill();
       panelText(ctx, "Mantén para mover", 282, 57, 19, "#d5dce7");
@@ -180,6 +192,7 @@ export class TabletopDriverPanels {
     const mesh = window.surface.mesh;
     mesh.rotation.set(0, this.yaw.y, 0);
     mesh.position.set(offset, -.02, -.9).applyAxisAngle(THREE.Object3D.DEFAULT_UP, this.yaw.y).add(head.position);
+    mesh.lookAt(head.position);
   }
 
   private close(window: DriverWindow) {
@@ -217,7 +230,7 @@ export class TabletopDriverPanels {
     ctx.beginPath(); ctx.roundRect(1, 1, 718, height - 2, 27); ctx.stroke();
     ctx.fillStyle = driver.teamColor; ctx.beginPath(); ctx.roundRect(24, 15, 5, 34, 2); ctx.fill();
     panelText(ctx, detailed ? "PILOTO · DETALLES" : "PILOTO SELECCIONADO", 40, 32, 17, "#c4cdd9", 700);
-    if (!detailed) panelText(ctx, "×", 659, 38, 34, "#e5ebf4");
+    if (!detailed) panelText(ctx, "×", 659, 38, 34, "#ff545e");
     panelBox(ctx, 24, 60, 132, 150);
     const photo = this.photos.get(driver.headshotUrl);
     if (photo?.ready) {
@@ -227,20 +240,23 @@ export class TabletopDriverPanels {
     } else panelText(ctx, driver.acronym, 39, 134, 38, driver.teamColor, 800);
     panelText(ctx, `#${driver.driverNumber} · ${driver.acronym}`, 180, 78, 22, driver.teamColor, 700);
     panelText(ctx, driver.fullName, 180, 120, 31, "#fff", 700, 510);
-    panelText(ctx, driver.teamName, 180, 160, 23, "#c4cdd9", 500, 510);
-    panelText(ctx, car ? "Datos del instante del replay" : "Sin datos en este instante", 180, 194, 17, "#93a1b4");
+    panelText(ctx, driver.teamName, 180, 160, 23, driver.teamColor, 500, 510);
+    if (!car) panelText(ctx, "Sin datos en este instante", 180, 194, 17, "#93a1b4");
     this.metric(ctx, 24, 234, 212, "POSICIÓN", sample?.position != null ? `P${sample.position}` : "—");
     this.metric(ctx, 254, 234, 212, "VELOCIDAD", value(sample?.speed, " km/h"));
-    this.metric(ctx, 484, 234, 212, "NEUMÁTICO", COMPOUNDS[sample?.compound?.toUpperCase() ?? ""] ?? "—");
+    const compound = sample?.compound?.toUpperCase() ?? "";
+    this.metric(ctx, 484, 234, 212, "NEUMÁTICO", COMPOUNDS[compound] ?? "—", COMPOUND_COLORS[compound]);
     if (detailed) {
       this.metric(ctx, 24, 338, 328, "DIFERENCIA AL LÍDER", sample?.position === 1 ? "Líder" : value(sample?.gapToLeader, " s", 2));
       this.metric(ctx, 368, 338, 328, "INTERVALO AL DE DELANTE", sample?.position === 1 ? "—" : value(sample?.intervalToAhead, " s", 2));
       this.metric(ctx, 24, 442, 212, "MARCHA", value(sample?.gear));
       this.metric(ctx, 254, 442, 212, "REVOLUCIONES", value(sample?.rpm, " rpm"));
       const drs = sample?.drs;
-      this.metric(ctx, 484, 442, 212, "DRS", drs == null ? "—" : [10, 12, 14].includes(drs) ? "Abierto" : [0, 1, 2, 3, 8, 9].includes(drs) ? "Cerrado" : "—");
+      const open = drs != null && [10, 12, 14].includes(drs);
+      const closed = drs != null && [0, 1, 2, 3, 8, 9].includes(drs);
+      this.metric(ctx, 484, 442, 212, "DRS", open ? "Abierto" : closed ? "Cerrado" : "—", open ? "#63e5b2" : closed ? "#ff545e" : undefined);
       this.metric(ctx, 24, 546, 212, "ACELERADOR", value(sample?.throttle, " %"));
-      this.metric(ctx, 254, 546, 212, "FRENO", sample?.brake != null ? sample.brake > 0 ? "Activo" : "Inactivo" : "—");
+      this.metric(ctx, 254, 546, 212, "FRENO", value(sample?.brake, " %"));
       this.metric(ctx, 484, 546, 212, "EDAD NEUMÁTICO", value(sample?.tyreAge, " vueltas"));
       panelText(ctx, "RADIOS DEL PILOTO", 24, 674, 17, "#a7b4c6", 700);
       panelText(ctx, "Historial de radios · próximamente", 24, 706, 21, "#7e8b9f");
@@ -252,10 +268,10 @@ export class TabletopDriverPanels {
     texture.needsUpdate = true;
   }
 
-  private metric(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, label: string, text: string) {
+  private metric(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, label: string, text: string, color = "#f1f5fc") {
     ctx.fillStyle = "rgba(0, 0, 0, .19)";
     ctx.beginPath(); ctx.roundRect(x, y, width, 88, 14); ctx.fill();
     panelText(ctx, label, x + 14, y + 23, 14, "#9facbf", 600, width - 28);
-    panelText(ctx, text, x + 14, y + 59, 27, "#f1f5fc", 700, width - 28);
+    panelText(ctx, text, x + 14, y + 59, 27, color, 700, width - 28);
   }
 }

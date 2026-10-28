@@ -20,8 +20,9 @@ const BUTTONS: Button[] = [
 export class TabletopControlsPanel {
   readonly surface = createXrPanel(720, 800, .55, "ar-tabletop-controls");
   readonly bar = createXrPanel(720, 88, .36, "ar-tabletop-handle");
-  private grab: { index: number; distance: number; offset: THREE.Vector3; held: Set<string> } | null = null;
+  private grab: { index: number; distance: number; localPoint: THREE.Vector3; held: Set<string> } | null = null;
   private readonly point = new THREE.Vector3();
+  private readonly grabOffset = new THREE.Vector3();
 
   constructor() {
     this.bar.mesh.position.y = -(.55 * 800 / 720) / 2 - .018 - (.36 * 88 / 720) / 2;
@@ -50,15 +51,21 @@ export class TabletopControlsPanel {
     if (hit.uv.y < .1 || hit.uv.y > .9) return null;
     if (x >= 8 && x <= 88 && input === "select" && locked) return { type: "hide" };
     if (x >= 112 && x <= 708 && !this.grab) {
-      this.grab = { index, distance: hit.distance, offset: this.surface.mesh.position.clone().sub(hit.point), held: new Set([input]) };
+      this.grab = { index, distance: hit.distance, localPoint: this.surface.mesh.worldToLocal(hit.point.clone()), held: new Set([input]) };
     }
     return null;
   }
 
-  updateGrab(index: number, ray: THREE.Ray) {
+  updateGrab(index: number, ray: THREE.Ray, head: THREE.Camera) {
     if (this.grab?.index !== index) return;
-    ray.at(this.grab.distance, this.point);
-    this.surface.mesh.position.copy(this.point).add(this.grab.offset);
+    const mesh = this.surface.mesh;
+    for (let step = 0; step < 3; step++) {
+      mesh.lookAt(head.position);
+      this.grabOffset.copy(this.grab.localPoint).applyQuaternion(mesh.quaternion);
+      ray.at(this.grab.distance, this.point);
+      mesh.position.copy(this.point).sub(this.grabOffset);
+    }
+    mesh.lookAt(head.position);
   }
 
   endGrab(index: number, input?: string) {
@@ -134,15 +141,16 @@ export class TabletopControlsPanel {
       this.box(ctx, 24 + i * 168, 612, 160, 44, state.speed === speed);
       panelText(ctx, `${speed}×`, 84 + i * 168, 634, 21);
     }
-    panelText(ctx, locked ? "Stick pulsado: mostrar / ocultar este menú" : "Stick izq.: mover · Stick der.: giro / tamaño", 24, 692, 18, "#929eaf");
+    panelText(ctx, locked ? "Menú / X del mando izquierdo: abrir o cerrar ajustes" : "Stick izq.: mover · Stick der.: giro / tamaño", 24, 692, 18, "#929eaf");
     panelText(ctx, locked ? "Puedes abrir detalles de varios pilotos a la vez." : "Paso necesario: fija el circuito para seleccionar pilotos.", 24, 720, 17, "#b3c0ce");
     this.surface.texture.needsUpdate = true;
     const bar = this.bar.context;
     bar.clearRect(0, 0, 720, 88);
     bar.fillStyle = "rgba(43, 48, 58, .96)";
-    bar.beginPath(); bar.roundRect(8, 8, 80, 72, 36); bar.fill();
     bar.beginPath(); bar.roundRect(112, 8, 596, 72, 36); bar.fill();
-    panelText(bar, locked ? "×" : "1", locked ? 31 : 36, 44, locked ? 40 : 28, locked ? "#f5f7fa" : "#84f4c8");
+    bar.fillStyle = locked ? "rgba(255, 84, 94, .18)" : "rgba(43, 48, 58, .96)";
+    bar.beginPath(); bar.roundRect(8, 8, 80, 72, 36); bar.fill();
+    panelText(bar, locked ? "×" : "1", locked ? 31 : 36, 44, locked ? 40 : 28, locked ? "#ff545e" : "#84f4c8");
     bar.fillStyle = "#d5dce7"; bar.beginPath(); bar.roundRect(250, 25, 316, 6, 3); bar.fill();
     panelText(bar, "Mantén para mover", 282, 57, 19, "#d5dce7");
     this.bar.texture.needsUpdate = true;

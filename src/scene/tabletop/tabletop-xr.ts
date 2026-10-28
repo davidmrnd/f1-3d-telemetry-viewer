@@ -102,7 +102,9 @@ export class TabletopXr {
     }
     const dt = this.lastUpdate ? Math.min((now - this.lastUpdate) / 1000, .05) : 0;
     this.lastUpdate = now;
-    const menu = this.inputs.some(({ source }) => source?.gamepad?.buttons[3]?.pressed);
+    const left = this.inputs.find(({ source }) => source?.handedness === "left");
+    const buttons = left?.source?.gamepad?.buttons;
+    const menu = Boolean(buttons?.[7]?.pressed || buttons?.[4]?.pressed);
     if (menu && !this.menuPressed) this.toggleMenu();
     this.menuPressed = menu;
     for (let index = 0; index < this.inputs.length; index++) {
@@ -122,7 +124,7 @@ export class TabletopXr {
       input.pointer.visible = this.isTracked(index);
       if (!input.pointer.visible) continue;
       this.setRay(index);
-      this.controls.updateGrab(index, this.raycaster.ray);
+      this.controls.updateGrab(index, this.raycaster.ray, this.head);
       this.driverPanels.updateGrab(index, this.raycaster.ray);
       const hit = this.intersectUi();
       const driver = this.locked && !hit ? this.model.pickDriver(this.raycaster) : null;
@@ -248,13 +250,13 @@ export class TabletopXr {
       } else if (hit.object === this.panel.mesh) {
         const action = this.controls.hit(hit.uv.x, hit.uv.y, this.locked);
         if (action) this.act(action);
-      } else this.driverPanels.interact(index, hit, this.raycaster.ray, this.head, "select");
+      } else this.driverPanels.interact(index, hit, this.head, "select");
     } else if (this.locked) {
       const driver = this.model.pickDriver(this.raycaster);
       if (driver) {
         this.driverPanels.showDriver(driver.driverNumber, this.head);
         this.panel.mesh.visible = false;
-      } else if (!this.panel.mesh.visible) {
+      } else if (!this.panel.mesh.visible && this.inputs[index].source?.hand) {
         this.panel.mesh.visible = true;
         this.placeMenu();
       }
@@ -270,7 +272,7 @@ export class TabletopXr {
     const hit = this.intersectUi();
     if (hit) {
       if (hit.object === this.controls.bar.mesh) this.controls.interact(index, hit, "squeeze", this.locked);
-      else if (hit.object !== this.panel.mesh) this.driverPanels.interact(index, hit, this.raycaster.ray, this.head, "squeeze");
+      else if (hit.object !== this.panel.mesh) this.driverPanels.interact(index, hit, this.head, "squeeze");
     } else this.startGrab(index, "squeeze");
   }
 
