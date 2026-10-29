@@ -1,10 +1,10 @@
 import * as THREE from "three";
 import type { CameraMode } from "../cameras/types";
-import { createXrPanel, panelBox, panelText } from "./xr-panel";
+import { createXrPanel, createXrWindowBar, panelRoundedBox, panelText, panelWindowBackground } from "./xr-panel";
 
 export type XrPlaybackState = { playing: boolean; normalizedTime: number; timeLabel: string; speed: number };
 export type XrControlsState = XrPlaybackState & { cameraMode: CameraMode; driverLabel: string; wristVisible: boolean };
-export type XrUiAction = { type: "play" | "close" | "wrist" | "exit" } | { type: "jump"; seconds: number }
+export type XrUiAction = { type: "play" | "close" | "wrist" | "exit" | "drivers" } | { type: "jump"; seconds: number }
   | { type: "seek"; ratio: number } | { type: "camera"; mode: CameraMode }
   | { type: "driver"; step: number } | { type: "speed"; value: number };
 type Button = { x: number; y: number; w: number; h: number; label: string; action: XrUiAction };
@@ -13,7 +13,6 @@ const PANEL_W = 768;
 const PANEL_H = 580;
 
 const BUTTONS: Button[] = [
-  { x: 696, y: 16, w: 48, h: 40, label: "×", action: { type: "close" } },
   { x: 24, y: 154, w: 120, h: 56, label: "−30 s", action: { type: "jump", seconds: -30 } },
   { x: 160, y: 154, w: 120, h: 56, label: "−10 s", action: { type: "jump", seconds: -10 } },
   { x: 296, y: 154, w: 176, h: 56, label: "", action: { type: "play" } },
@@ -21,8 +20,7 @@ const BUTTONS: Button[] = [
   { x: 624, y: 154, w: 120, h: 56, label: "+30 s", action: { type: "jump", seconds: 30 } },
   ...(["broadcast", "onboard", "orbit"] as CameraMode[]).map((mode, i) => ({ x: 24 + i * 245, y: 258, w: 230, h: 52,
     label: ["Automática", "A bordo", "Libre"][i], action: { type: "camera" as const, mode } })),
-  { x: 24, y: 326, w: 72, h: 52, label: "‹", action: { type: "driver", step: -1 } },
-  { x: 672, y: 326, w: 72, h: 52, label: "›", action: { type: "driver", step: 1 } },
+  { x: 24, y: 326, w: 720, h: 52, label: "Elegir piloto · fotos y detalles", action: { type: "drivers" } },
   ...[.5, 1, 1.5, 2].map((value, i) => ({ x: 24 + i * 104, y: 412, w: 92, h: 44,
     label: `${value}×`, action: { type: "speed" as const, value } })),
   { x: 464, y: 412, w: 280, h: 44, label: "", action: { type: "wrist" } },
@@ -31,6 +29,7 @@ const BUTTONS: Button[] = [
 
 export class XrControlsPanel {
   readonly surface = createXrPanel(PANEL_W, PANEL_H, .76, "xr-replay-controls");
+  readonly bar = createXrWindowBar(this.surface, PANEL_W, PANEL_H, .76, "xr-replay-handle");
   private signature = "";
   private lastPaint = -Infinity;
   private dirty = true;
@@ -68,30 +67,27 @@ export class XrControlsPanel {
 
   private paint(state: XrControlsState) {
     const { context: ctx } = this.surface;
-    ctx.clearRect(0, 0, PANEL_W, PANEL_H);
-    ctx.fillStyle = "#08090b"; ctx.fillRect(0, 0, PANEL_W, PANEL_H);
-    ctx.fillStyle = "#e50914"; ctx.fillRect(0, 0, PANEL_W, 3);
-    panelText(ctx, "APEX", 24, 35, 30, "#fff", 800);
-    panelText(ctx, "CONTROL DE CARRERA", 140, 35, 16, "#9b9da8", 600);
-    panelText(ctx, state.playing ? "REPRODUCIENDO" : "EN PAUSA", 24, 80, 17, state.playing ? "#e50914" : "#b7b8c3", 700);
+    panelWindowBackground(ctx, PANEL_W, PANEL_H);
+    ctx.fillStyle = "#63e5b2"; ctx.beginPath(); ctx.roundRect(24, 18, 5, 34, 2); ctx.fill();
+    panelText(ctx, "APEX", 40, 35, 30, "#fff", 800);
+    panelText(ctx, "CONTROL DE CARRERA · VR", 156, 35, 16, "#c4cdd9", 600);
+    panelText(ctx, state.playing ? "REPRODUCIENDO" : "EN PAUSA", 24, 80, 17, state.playing ? "#63e5b2" : "#b7b8c3", 700);
     panelText(ctx, state.timeLabel, 450, 80, 20, "#e1e1e8", 500, 294);
     ctx.fillStyle = "#2b2c33"; ctx.fillRect(24, 115, 720, 4);
     ctx.fillStyle = "#e50914"; ctx.fillRect(24, 115, 720 * state.normalizedTime, 4);
     ctx.beginPath(); ctx.arc(24 + 720 * state.normalizedTime, 117, 6, 0, Math.PI * 2); ctx.fillStyle = "#fff"; ctx.fill();
     panelText(ctx, "PUNTO DE VISTA", 24, 238, 15, "#92949f", 600);
-    panelText(ctx, state.cameraMode === "onboard" ? "PILOTO SELECCIONADO" : "PILOTO · LAS FLECHAS ACTIVAN A BORDO", 112, 337, 12, "#92949f", 600);
-    panelText(ctx, state.driverLabel, 112, 361, 22, "#eee", 600, 535);
     panelText(ctx, "VELOCIDAD", 24, 398, 14, "#92949f", 600);
     panelText(ctx, "OPCIONES", 464, 398, 14, "#92949f", 600);
     for (const b of BUTTONS) {
       const a = b.action;
       const active = a.type === "camera" && a.mode === state.cameraMode || a.type === "speed" && a.value === state.speed || a.type === "wrist" && state.wristVisible;
-      panelBox(ctx, b.x, b.y, b.w, b.h, active);
-      const label = a.type === "play" ? state.playing ? "Pausar" : "Reproducir" : a.type === "wrist" ? `Tabla en muñeca · ${state.wristVisible ? "SÍ" : "NO"}` : b.label;
-      ctx.font = `600 ${a.type === "wrist" ? 17 : a.type === "close" ? 30 : 22}px Inter, sans-serif`;
+      panelRoundedBox(ctx, b.x, b.y, b.w, b.h, active);
+      const label = a.type === "play" ? state.playing ? "Pausar" : "Reproducir" : a.type === "wrist" ? `Clasificación · ${state.wristVisible ? "SÍ" : "NO"}` : b.label;
+      ctx.font = `600 ${a.type === "wrist" ? 17 : 22}px Inter, sans-serif`;
       ctx.fillStyle = "#f0f0f5"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText(label, b.x + b.w / 2, b.y + b.h / 2, b.w - 12);
     }
-    panelText(ctx, "Clic en stick izq.: menú   ·   Apunta y pulsa el gatillo derecho", 24, 478, 16, "#8e909c");
+    panelText(ctx, "Menú / X izq.: ajustes · A: piloto · B: cámara · Gatillo: seleccionar", 24, 478, 16, "#a7b4c6");
   }
 }

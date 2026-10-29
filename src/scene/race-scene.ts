@@ -164,6 +164,7 @@ export class RaceScene {
     this.xrControllers = new XrControllers(this.renderer, {
       onToggleMenu: () => { if (this.xrHeadValid) this.ensureXrInterface().toggle(this.xrHead); },
       onSelect: () => this.xrInterface?.select() ?? false,
+      onSqueeze: () => this.xrInterface?.squeeze(),
       onTogglePlay: () => this.xrHooks.onTogglePlay?.(),
       onCameraMode: () => {
         const modes: CameraMode[] = ["broadcast", "onboard", "orbit"];
@@ -528,7 +529,7 @@ export class RaceScene {
       this.camera.quaternion.copy(this.xrYaw);
       if (mode === "orbit") {
         this.xrHead.matrixWorld.multiplyMatrices(this.xrRig.viewerRoot.matrixWorld, this.xrHead.matrix);
-        const turn = this.xrFlight.update(this.camera, this.xrHead, this.xrControllers.getInputSources(), deltaSeconds, !this.xrHeadValid || (this.xrInterface?.isOpen() ?? false));
+        const turn = this.xrFlight.update(this.camera, this.xrHead, this.xrControllers.getInputSources(), deltaSeconds, !this.xrHeadValid || (this.xrInterface?.isInteracting() ?? false));
         if (turn) this.xrYaw.copy(this.camera.quaternion);
       } else {
         this.xrFlight.reset();

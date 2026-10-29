@@ -10,11 +10,12 @@ export class XrControllers {
   private driverPressed = false;
   private playPressed = false;
   private menuPressed = false;
+  private squeezePressed = false;
   private active = false;
 
   constructor(renderer: WebGLRenderer, private readonly actions: {
     onCameraMode: () => void; onNextDriver: () => void; onTogglePlay?: () => void;
-    onToggleMenu?: () => void; onSelect?: () => boolean;
+    onToggleMenu?: () => void; onSelect?: () => boolean; onSqueeze?: () => void;
   }) {
     for (let index = 0; index < 2; index++) {
       const controller = renderer.xr.getController(index);
@@ -32,23 +33,29 @@ export class XrControllers {
     this.driverPressed = false;
     this.playPressed = false;
     this.menuPressed = false;
+    this.squeezePressed = false;
     this.group.visible = active;
   }
 
   update() {
     if (!this.active) return;
-    const camera = this.sources.some(source => source?.gamepad?.buttons[5]?.pressed);
-    const driver = this.sources.some(source => source?.gamepad?.buttons[4]?.pressed);
-    const play = Boolean(this.sources.find(source => source?.handedness === "right")?.gamepad?.buttons[0]?.pressed);
-    const menu = Boolean(this.sources.find(source => source?.handedness === "left")?.gamepad?.buttons[3]?.pressed);
+    const right = this.sources.find(source => source?.handedness === "right")?.gamepad?.buttons;
+    const left = this.sources.find(source => source?.handedness === "left")?.gamepad?.buttons;
+    const camera = Boolean(right?.[5]?.pressed);
+    const driver = Boolean(right?.[4]?.pressed);
+    const play = Boolean(right?.[0]?.pressed);
+    const menu = Boolean(left?.[7]?.pressed || left?.[4]?.pressed);
+    const squeeze = Boolean(right?.[1]?.pressed);
     if (menu && !this.menuPressed) this.actions.onToggleMenu?.();
     if (camera && !this.cameraPressed) this.actions.onCameraMode();
     if (driver && !this.driverPressed) this.actions.onNextDriver();
     if (play && !this.playPressed && !this.actions.onSelect?.()) this.actions.onTogglePlay?.();
+    if (squeeze && !this.squeezePressed) this.actions.onSqueeze?.();
     this.cameraPressed = camera;
     this.driverPressed = driver;
     this.playPressed = play;
     this.menuPressed = menu;
+    this.squeezePressed = squeeze;
   }
 
   getInputSources(): readonly (XRInputSource | null)[] { return this.sources; }
