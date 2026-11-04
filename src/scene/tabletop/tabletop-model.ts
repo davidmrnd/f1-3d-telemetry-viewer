@@ -1,13 +1,28 @@
 import * as THREE from "three";
 import type { DriverInfo, FrameCarState } from "../../types";
 import type { BaseCarPlacement } from "../car-placement";
-import { createTrackRibbon, type TrackCrossSection } from "../track-geometry";
+import {
+  carHeadingToRotationY,
+  createLowPolyCarModel,
+  disposeCarVisual,
+} from "../car-models";
+import { F1_CAR_LENGTH_METERS, createTrackRibbon, type TrackCrossSection } from "../track-geometry";
 
 const TRAIL_SAMPLES = 64;
 const TRAIL_DURATION_MS = 2400;
+const TABLETOP_CAR_SCALE = 3;
 
 type TrailPoint = { position: THREE.Vector3; time: number };
-type Marker = { label: THREE.Sprite; color: THREE.Color; history: TrailPoint[]; position: THREE.Vector3; car: FrameCarState | null };
+type Marker = {
+  model: THREE.Group;
+  label: THREE.Sprite;
+  color: THREE.Color;
+  history: TrailPoint[];
+  position: THREE.Vector3;
+  height: number;
+  baseScale: number;
+  car: FrameCarState | null;
+};
 
 export class TabletopModel {
   readonly group = new THREE.Group();
@@ -15,13 +30,12 @@ export class TabletopModel {
   private readonly markers = new Map<number, Marker>();
   private readonly center = new THREE.Vector3();
   private extent = 1;
-  private dots: THREE.InstancedMesh | null = null;
+  private carLength = 0.004;
   private halos: THREE.InstancedMesh | null = null;
   private trails: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> | null = null;
   private lastTime: number | null = null;
   private readonly matrix = new THREE.Object3D();
   private readonly point = new THREE.Vector3();
-  private readonly pickSphere = new THREE.Sphere();
   private readonly pickPoint = new THREE.Vector3();
   private readonly hoverColor = new THREE.Color("#ffffff");
   private selectedDriver: number | null = null;
@@ -53,24 +67,28 @@ export class TabletopModel {
   pickDriver(raycaster: THREE.Raycaster): { driverNumber: number; distance: number } | null {
     this.group.updateWorldMatrix(true, true);
     let closest: { driverNumber: number; distance: number } | null = null;
-    let closestOffset = Infinity;
     for (const [driverNumber, marker] of this.markers) {
-      if (!marker.label.visible || !marker.car) continue;
-      this.pickSphere.center.copy(marker.position).applyMatrix4(this.content.matrixWorld);
-      this.pickSphere.radius = Math.max(.012, this.width * .008);
-      const point = raycaster.ray.intersectSphere(this.pickSphere, this.pickPoint);
-      if (!point) continue;
-      const distance = raycaster.ray.origin.distanceTo(point);
-      const offset = raycaster.ray.distanceSqToPoint(this.pickSphere.center);
-      if (distance < raycaster.near || distance > raycaster.far || offset >= closestOffset) continue;
-      closest = { driverNumber, distance };
-      closestOffset = offset;
+      if (!marker.model.visible || !marker.car) continue;
+      const hit = raycaster.intersectObject(marker.model, true)[0]
+        ?? raycaster.intersectObject(marker.label)[0];
+      if (hit && (!closest || hit.distance < closest.distance)) {
+        closest = { driverNumber, distance: hit.distance };
+      }
     }
     if (closest) return closest;
+    const pickRadius = Math.max(.008, this.carLength * .9);
+    let closestOffset = Infinity;
     for (const [driverNumber, marker] of this.markers) {
-      if (!marker.label.visible || !marker.car) continue;
-      const hit = raycaster.intersectObject(marker.label)[0];
-      if (hit && (!closest || hit.distance < closest.distance)) closest = { driverNumber, distance: hit.distance };
+      if (!marker.model.visible || !marker.car) continue;
+      const center = this.pickPoint.copy(marker.position).applyMatrix4(this.content.matrixWorld);
+      center.y += marker.height * this.group.scale.y * .35;
+      const offset = raycaster.ray.distanceSqToPoint(center);
+      const radius = pickRadius * this.group.scale.x;
+      if (offset >= radius * radius || offset >= closestOffset) continue;
+      const distance = raycaster.ray.origin.distanceTo(center);
+      if (distance < raycaster.near || distance > raycaster.far) continue;
+      closest = { driverNumber, distance };
+      closestOffset = offset;
     }
     return closest;
   }
@@ -93,6 +111,7 @@ export class TabletopModel {
     bounds.getCenter(this.center);
     this.center.y = bounds.min.y;
     this.extent = Math.max(size.x, size.z, 1) + trackWidth * 8;
+    this.carLength = F1_CAR_LENGTH_METERS / this.extent * TABLETOP_CAR_SCALE;
     const points = path.map(point => this.normalizePoint(point));
     const crossSections = sections.map(section => ({ ...section, center: this.normalizePoint(section.center) }));
     const width = Math.max(trackWidth / this.extent, .007);
@@ -106,15 +125,13 @@ export class TabletopModel {
     ribbon(width, "#325261", .0003);
     for (const side of [-1, 1]) ribbon(.001, "#b4e6ec", .0006, side * width * .56);
 
-    this.dots = new THREE.InstancedMesh(new THREE.SphereGeometry(.0035, 12, 8),
-      new THREE.MeshBasicMaterial({ toneMapped: false }), drivers.length);
-    this.halos = new THREE.InstancedMesh(new THREE.CircleGeometry(.008, 16),
+    const haloRadius = Math.max(.003, this.carLength * .55);
+    this.halos = new THREE.InstancedMesh(new THREE.CircleGeometry(haloRadius, 16),
       new THREE.MeshBasicMaterial({ transparent: true, opacity: .24, depthWrite: false, toneMapped: false }), drivers.length);
-    this.dots.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.halos.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.dots.frustumCulled = this.halos.frustumCulled = false;
-    this.dots.count = this.halos.count = 0;
-    this.content.add(this.halos, this.dots);
+    this.halos.frustumCulled = false;
+    this.halos.count = 0;
+    this.content.add(this.halos);
     const geometry = new THREE.BufferGeometry();
     const vertices = drivers.length * (TRAIL_SAMPLES - 1) * 6;
     geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(vertices * 3), 3).setUsage(THREE.DynamicDrawUsage));
@@ -126,8 +143,18 @@ export class TabletopModel {
     }));
     this.trails.frustumCulled = false;
     this.content.add(this.trails);
+
     for (const driver of drivers) {
       const color = new THREE.Color(driver.teamColor);
+      const { model, height } = createLowPolyCarModel(driver, this.carLength);
+      model.visible = false;
+      model.traverse(child => {
+        if (!(child instanceof THREE.Mesh)) return;
+        child.castShadow = false;
+        child.receiveShadow = false;
+      });
+      this.content.add(model);
+
       const canvas = document.createElement("canvas");
       canvas.width = 192; canvas.height = 112;
       const ctx = canvas.getContext("2d");
@@ -146,15 +173,25 @@ export class TabletopModel {
       label.center.set(.5, 0);
       label.visible = false;
       this.content.add(label);
-      this.markers.set(driver.driverNumber, { label, color, history: [], position: new THREE.Vector3(), car: null });
+      this.markers.set(driver.driverNumber, {
+        model,
+        label,
+        color,
+        history: [],
+        position: new THREE.Vector3(),
+        height,
+        baseScale: model.scale.x,
+        car: null,
+      });
     }
   }
 
   update(placements: BaseCarPlacement[], now: number) {
-    if (!this.dots || !this.halos || !this.trails) return;
+    if (!this.halos || !this.trails) return;
     const reset = this.lastTime !== null && (now < this.lastTime || now - this.lastTime > 500);
     this.lastTime = now;
     for (const marker of this.markers.values()) {
+      marker.model.visible = false;
       marker.label.visible = false;
       marker.car = null;
       if (reset) marker.history.length = 0;
@@ -163,27 +200,25 @@ export class TabletopModel {
     const colors = this.trails.geometry.getAttribute("color") as THREE.BufferAttribute;
     let vertex = 0;
     let index = 0;
-    for (const { car, position } of placements) {
+    for (const { car, position, heading } of placements) {
       const marker = this.markers.get(car.driver.driverNumber);
       if (!marker) continue;
       this.normalizePoint(position, this.point);
-      this.point.y += .004;
       marker.position.copy(this.point);
       marker.car = car;
       const highlighted = this.selectedDriver === car.driver.driverNumber || this.hoveredDrivers.has(car.driver.driverNumber);
+      marker.model.visible = true;
+      marker.model.position.copy(this.point);
+      marker.model.rotation.set(-car.pitch, carHeadingToRotationY(heading), 0, "YXZ");
+      marker.model.scale.setScalar(marker.baseScale * (highlighted ? 1.35 : 1));
       this.matrix.position.copy(this.point);
-      this.matrix.rotation.set(0, 0, 0);
-      this.matrix.scale.setScalar(highlighted ? 1.6 : 1);
-      this.matrix.updateMatrix();
-      this.dots.setMatrixAt(index, this.matrix.matrix);
-      this.dots.setColorAt(index, marker.color);
-      this.matrix.rotation.x = -Math.PI / 2;
-      this.matrix.scale.setScalar(highlighted ? 2 : 1);
-      this.matrix.position.y -= .002;
+      this.matrix.position.y += .0004;
+      this.matrix.rotation.set(-Math.PI / 2, 0, 0);
+      this.matrix.scale.setScalar(highlighted ? 2.2 : 1.2);
       this.matrix.updateMatrix();
       this.halos.setMatrixAt(index, this.matrix.matrix);
       this.halos.setColorAt(index++, highlighted ? this.hoverColor : marker.color);
-      marker.label.position.copy(this.point).y += .012;
+      marker.label.position.copy(this.point).y += marker.height * (highlighted ? 1.35 : 1) + .006;
       marker.label.visible = true;
       const history = marker.history;
       while (history.length && now - history[0].time > TRAIL_DURATION_MS) history.shift();
@@ -208,9 +243,8 @@ export class TabletopModel {
         }
       }
     }
-    this.dots.count = this.halos.count = index;
-    this.dots.instanceMatrix.needsUpdate = this.halos.instanceMatrix.needsUpdate = true;
-    if (this.dots.instanceColor) this.dots.instanceColor.needsUpdate = true;
+    this.halos.count = index;
+    this.halos.instanceMatrix.needsUpdate = true;
     if (this.halos.instanceColor) this.halos.instanceColor.needsUpdate = true;
     positions.needsUpdate = colors.needsUpdate = true;
     this.trails.geometry.setDrawRange(0, vertex);
@@ -223,6 +257,13 @@ export class TabletopModel {
   }
 
   dispose() {
+    for (const marker of this.markers.values()) {
+      this.content.remove(marker.model, marker.label);
+      disposeCarVisual(marker.model);
+      marker.label.material.map?.dispose();
+      marker.label.material.dispose();
+    }
+    this.markers.clear();
     this.content.traverse(object => {
       if (object instanceof THREE.Mesh || object instanceof THREE.Sprite) {
         if (object instanceof THREE.Mesh) object.geometry.dispose();
@@ -235,8 +276,7 @@ export class TabletopModel {
       }
     });
     this.content.clear();
-    this.markers.clear();
-    this.dots = this.halos = null;
+    this.halos = null;
     this.trails = null;
     this.lastTime = null;
     this.selectedDriver = null;

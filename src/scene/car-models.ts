@@ -326,6 +326,13 @@ function buildStyledCarModel(
   return { model, height };
 }
 
+export function createLowPolyCarModel(
+  driver: DriverInfo,
+  sceneLength = CAR_TEMPLATE_LENGTH,
+): { model: THREE.Group; height: number } {
+  return buildStyledCarModel(driver, sceneLength, "lowpoly");
+}
+
 export function createCarVisual(
   driver: DriverInfo,
   sceneLength = CAR_TEMPLATE_LENGTH,

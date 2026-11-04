@@ -7,8 +7,6 @@ import { loadReplaySegmentFromRace } from "../data/load-replay-segment";
 import { ReplayController } from "../replay/replay-controller";
 import type { RaceScene } from "../scene/race-scene";
 import type { ReplayFrame } from "../types";
-import { captureCameraPreviews } from "./camera-previews";
-import { populateCameraDriverSelect } from "./camera-controls";
 import type { DesktopPlayerView } from "./desktop-player-view";
 import { mustQuery } from "./dom";
 import type { LoadingView } from "./loading-view";
@@ -19,7 +17,6 @@ import { paintSessionMetadata } from "./session-ui";
 import type { TimingTowerView } from "./timing-tower-view";
 
 interface RaceLoaderOptions {
-  canvas: HTMLCanvasElement;
   appShell: HTMLElement;
   changeRaceButton: HTMLButtonElement;
   racePicker: RacePickerView;
@@ -36,7 +33,7 @@ interface RaceLoaderOptions {
 
 export function createRaceLoader(options: RaceLoaderOptions) {
   const {
-    canvas, appShell, changeRaceButton, racePicker, ui, scene, replay,
+    appShell, changeRaceButton, racePicker, ui, scene, replay,
     timingTower, desktopPlayer, loadingView, render, syncPlayButton, resetClock,
   } = options;
   let loadingRace = false;
@@ -93,8 +90,7 @@ export function createRaceLoader(options: RaceLoaderOptions) {
       replay.playing = false;
       await loadingView.checkpoint(60, "Construyendo el circuito…");
       scene.loadSegment(segment);
-      populateCameraDriverSelect(ui.cameraDriverSelect, segment.drivers);
-      scene.setFollowDriver(Number(ui.cameraDriverSelect.value));
+      if (scene.getCameraMode() === "onboard") scene.setCameraMode("broadcast");
       paintSessionMetadata(segment, ui);
       timingTower.setSegment(segment);
       timingTower.clear();
@@ -103,7 +99,6 @@ export function createRaceLoader(options: RaceLoaderOptions) {
       appShell.hidden = false;
       scene.resize();
       const initialFrame = controller.getFrame(0);
-      await captureCameraPreviews(canvas, scene, desktopPlayer, segment, initialFrame, loadingView);
       await loadingView.checkpoint(99, "Últimos detalles…");
       render(initialFrame);
       syncPlayButton(false);

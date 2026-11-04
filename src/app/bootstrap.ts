@@ -47,15 +47,6 @@ export function startReplayApplication() {
   appShell.addEventListener("xrsessionchange", resetClock);
   const loadingFrames = new AnimationFrames();
   const loadingView = new LoadingView(undefined, loadingFrames);
-  const desktopPlayer = new DesktopPlayerView((mode, driver) => {
-    if (driver != null) {
-      ui.cameraDriverSelect.value = String(driver);
-      ui.cameraDriverSelect.dispatchEvent(new Event("change"));
-    }
-    ui.cameraModeSelect.value = mode;
-    ui.cameraModeSelect.dispatchEvent(new Event("change"));
-  });
-
   const syncPlayButton = (playing: boolean) => {
     const label = playing ? "Pausar" : "Reproducir";
     if (ui.playToggle.getAttribute("aria-label") === label) return;
@@ -77,9 +68,17 @@ export function startReplayApplication() {
     paintFrame(frame, controller.getDuration(), scene, timingTower, ui);
     desktopPlayer.update(frame, scene.getCameraMode(), scene.getFollowDriver());
   };
+  const { showInspector } = bindPlayerChrome(replay, render);
+  const desktopPlayer = new DesktopPlayerView((mode, driver) => {
+    if (scene.isXrPresenting() || scene.getPresentationMode() === "tabletop") return;
+    if (driver != null) scene.setFollowDriver(driver);
+    if (mode !== scene.getCameraMode()) scene.setCameraMode(mode);
+    const controller = replay.getController();
+    if (controller) render(controller.getFrame(replay.currentTime));
+  }, showInspector);
 
   const raceLoader = createRaceLoader({
-    canvas, appShell, changeRaceButton, racePicker, ui, scene, replay,
+    appShell, changeRaceButton, racePicker, ui, scene, replay,
     timingTower, desktopPlayer, loadingView, render, syncPlayButton, resetClock,
   });
 
@@ -101,8 +100,7 @@ export function startReplayApplication() {
   }
 
   async function bootstrap() {
-    bindControls(replay, scene, ui, render, syncPlayButton);
-    bindPlayerChrome(replay, render);
+    bindControls(replay, ui, render, syncPlayButton);
     window.addEventListener("resize", () => scene.resize());
     changeRaceButton.addEventListener("click", () => {
       void raceLoader.chooseAndLoadRace({ allowQueryShortcut: false }).catch((error) => {

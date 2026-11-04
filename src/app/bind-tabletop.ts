@@ -7,6 +7,8 @@ export function bindTabletop(scene: RaceScene) {
   const width = mustQuery<HTMLInputElement>("#tabletop-width");
   const rotation = mustQuery<HTMLInputElement>("#tabletop-rotation");
   const readout = mustQuery<HTMLOutputElement>("#tabletop-width-value");
+  const cameraModes = mustQuery<HTMLElement>("#camera-modes");
+  const driverOnboard = mustQuery<HTMLButtonElement>("#driver-onboard");
   const sync = () => {
     const tabletop = scene.getPresentationMode() === "tabletop";
     mode.value = scene.getPresentationMode();
@@ -15,7 +17,9 @@ export function bindTabletop(scene: RaceScene) {
     width.value = String(scene.getTabletopWidth());
     readout.value = `${scene.getTabletopWidth().toFixed(2)} m`;
     for (const field of [width, rotation]) field.disabled = scene.isXrPresenting();
-    mustQuery<HTMLSelectElement>("#camera-mode-select").disabled = tabletop;
+    cameraModes.inert = tabletop;
+    driverOnboard.disabled = tabletop;
+    driverOnboard.title = tabletop ? "Disponible en la experiencia realista" : "";
     mustQuery<HTMLElement>("#app").classList.toggle("is-tabletop", tabletop);
     mustQuery<HTMLElement>(".view-caption-detail").textContent = tabletop ? "MAQUETA · AR" : "ESCALA REAL · 3D";
   };

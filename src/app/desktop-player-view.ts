@@ -2,8 +2,12 @@ import type { CameraMode } from "../scene/cameras/types";
 import type { DriverInfo, ReplayFrame, ReplaySegment } from "../types";
 import { projectCircuit } from "./circuit-map";
 import { mustQuery } from "./dom";
+import { formatDelta } from "./format";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
+const COMPOUNDS: Record<string, string> = {
+  SOFT: "Blando", MEDIUM: "Medio", HARD: "Duro", INTERMEDIATE: "Intermedio", INTER: "Intermedio", WET: "Lluvia",
+};
 
 function label(tag: string, className: string, text: string) {
   const element = document.createElement(tag);
@@ -12,54 +16,54 @@ function label(tag: string, className: string, text: string) {
   return element;
 }
 
-function driverSurname(driver: DriverInfo) {
-  return driver.fullName.split(" ").slice(1).join(" ").toLocaleLowerCase("es").replace(/(^|[ -])\p{L}/gu, (letter) => letter.toLocaleUpperCase("es"));
+function driverName(name: string) {
+  return name.toLocaleLowerCase("es").replace(/(^|[ '-])\p{L}/gu, (letter) => letter.toLocaleUpperCase("es"));
 }
 
-function makeIcon(name: string) {
-  const svg = document.createElementNS(SVG_NS, "svg");
-  svg.classList.add("icon");
-  const use = document.createElementNS(SVG_NS, "use");
-  use.setAttribute("href", `#i-${name}`);
-  svg.append(use);
-  return svg;
-}
-
-function onboardPreview(color: string, number: number) {
-  const svg = document.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("viewBox", "0 0 140 90");
-  const shapes = [
-    ["path", { d: "M0 0h140v90H0z", fill: "#303a43" }],
-    ["path", { d: "M0 45 55 20h30l55 25v45H0z", fill: "#575c60" }],
-    ["path", { d: "m20 90 42-68m58 68L78 22", stroke: "#c6c5bb", "stroke-width": "2", fill: "none" }],
-    ["path", { d: "M0 76Q70 32 140 76M70 51v33", fill: "none", stroke: "#0a0b0e", "stroke-width": "12" }],
-    ["path", { d: "m42 90 10-28h36l10 28", fill: color }],
-    ["ellipse", { cx: "70", cy: "86", rx: "19", ry: "13", fill: "#111319", stroke: "#c5c7cf", "stroke-width": "1" }],
-  ] as const;
-  for (const [tag, attributes] of shapes) {
-    const shape = document.createElementNS(SVG_NS, tag);
-    for (const [key, value] of Object.entries(attributes)) shape.setAttribute(key, value);
-    svg.append(shape);
+function driverPortrait(driver: DriverInfo) {
+  const portrait = label("span", "driver-portrait", driver.acronym);
+  portrait.setAttribute("aria-hidden", "true");
+  if (driver.headshotUrl) {
+    const image = document.createElement("img");
+    image.alt = "";
+    image.decoding = "async";
+    image.loading = "lazy";
+    image.addEventListener("load", () => { image.classList.add("is-loaded"); }, { once: true });
+    image.src = driver.headshotUrl;
+    portrait.append(image);
   }
-  const preview = label("span", "camera-card__preview", "");
-  preview.append(svg, label("span", "camera-card__number", String(number)));
-  return preview;
+  return portrait;
 }
 
 export class DesktopPlayerView {
-  private readonly cameraList = mustQuery<HTMLElement>("#camera-list");
-  private readonly quickDrivers = mustQuery<HTMLElement>("#quick-drivers");
+  private readonly drivers = new Map<number, DriverInfo>();
+  private readonly panel = mustQuery<HTMLElement>("#panel-drivers");
+  private readonly driversTab = mustQuery<HTMLButtonElement>("#tab-drivers");
+  private readonly gallery = mustQuery<HTMLElement>("#driver-gallery");
+  private readonly grid = mustQuery<HTMLElement>("#driver-grid");
+  private readonly detail = mustQuery<HTMLElement>("#driver-detail");
+  private readonly portrait = mustQuery<HTMLElement>("#driver-portrait");
+  private readonly code = mustQuery<HTMLElement>("#driver-code");
+  private readonly onboard = mustQuery<HTMLButtonElement>("#driver-onboard");
+  private readonly onboardLabel = mustQuery<HTMLElement>("#driver-onboard span");
+  private readonly auto = mustQuery<HTMLButtonElement>("#camera-auto");
+  private readonly free = mustQuery<HTMLButtonElement>("#camera-free");
+  private readonly timingTower = mustQuery<HTMLElement>("#timing-tower");
   private readonly mapDrivers = mustQuery<SVGGElement>("#map-drivers");
-  private readonly cameraCards = new Map<string, HTMLButtonElement>();
-  private readonly driverButtons = new Map<number, HTMLButtonElement>();
+  private readonly driverCards = new Map<number, HTMLButtonElement>();
   private readonly mapDots = new Map<number, SVGCircleElement>();
   private projection: ReturnType<typeof projectCircuit> = null;
-  private selectionKey = "";
+  private selectedDriver: number | null = null;
+  private galleryScroll = 0;
+  private cameraKey = "";
   private lastUpdate = -Infinity;
-  private selectedTab = "cameras";
+  private selectedTab = "drivers";
   private readonly telemetry = {
     driver: mustQuery<HTMLElement>("#telemetry-driver"),
     team: mustQuery<HTMLElement>("#telemetry-team"),
+    position: mustQuery<HTMLElement>("#telemetry-position"),
+    tyre: mustQuery<HTMLElement>("#telemetry-tyre"),
+    gap: mustQuery<HTMLElement>("#telemetry-gap"),
     speed: mustQuery<HTMLElement>("#telemetry-speed"),
     gear: mustQuery<HTMLElement>("#telemetry-gear"),
     rpm: mustQuery<HTMLElement>("#telemetry-rpm"),
@@ -70,7 +74,10 @@ export class DesktopPlayerView {
     brakeBar: mustQuery<HTMLElement>("#brake-bar"),
   };
 
-  constructor(private readonly onCamera: (mode: CameraMode, driver?: number) => void) {
+  constructor(
+    private readonly onCamera: (mode: CameraMode, driver?: number) => void,
+    private readonly showInspector: () => void,
+  ) {
     const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-tab]"));
     const activateTab = (tab: HTMLButtonElement, focus = false) => {
       this.selectedTab = tab.dataset.tab!;
@@ -96,42 +103,51 @@ export class DesktopPlayerView {
         activateTab(tabs[target], true);
       });
     }
-    mustQuery("#drivers-previous").addEventListener("click", () => this.scrollDrivers(-1));
-    mustQuery("#drivers-next").addEventListener("click", () => this.scrollDrivers(1));
-    mustQuery("#timing-tower").addEventListener("click", (event) => {
+    this.auto.addEventListener("click", () => this.onCamera("broadcast"));
+    this.free.addEventListener("click", () => this.onCamera("orbit"));
+    this.onboard.addEventListener("click", () => {
+      if (this.selectedDriver != null) this.onCamera("onboard", this.selectedDriver);
+    });
+    mustQuery("#driver-back").addEventListener("click", () => {
+      this.showGallery();
+      if (this.selectedDriver != null) this.driverCards.get(this.selectedDriver)?.focus({ preventScroll: true });
+    });
+    this.timingTower.addEventListener("click", (event) => {
       const row = (event.target as HTMLElement).closest<HTMLElement>("[data-driver]");
-      if (row) this.onCamera("onboard", Number(row.dataset.driver));
+      const driver = row && this.drivers.get(Number(row.dataset.driver));
+      if (driver) this.inspectDriver(driver);
     });
   }
 
   setSegment(segment: ReplaySegment) {
-    this.selectionKey = "";
+    this.selectedDriver = null;
+    this.galleryScroll = 0;
+    this.cameraKey = "";
     this.lastUpdate = -Infinity;
-    this.cameraCards.clear();
-    this.driverButtons.clear();
+    this.drivers.clear();
+    this.driverCards.clear();
     this.mapDots.clear();
-    this.cameraList.replaceChildren();
-    this.quickDrivers.replaceChildren();
-    this.quickDrivers.scrollLeft = 0;
+    this.grid.replaceChildren();
     this.mapDrivers.replaceChildren();
-    this.addCamera("broadcast", "Cámara principal", "Realización automática", makeIcon("camera"));
-    this.addCamera("orbit", "Cámara libre", "Explora el circuito · WASD + ratón", makeIcon("orbit"));
-    this.cameraList.append(label("p", "camera-group-label", "A BORDO · TODOS LOS PILOTOS"));
+    this.driversTab.click();
+    this.showGallery();
+
     for (const driver of segment.drivers) {
-      const surname = driverSurname(driver);
-      this.addCamera("onboard", `A bordo · ${surname}`, driver.teamName, onboardPreview(driver.teamColor, driver.driverNumber), driver.driverNumber);
-      const quick = document.createElement("button");
-      quick.type = "button";
-      quick.className = "quick-driver";
-      quick.style.setProperty("--team-color", driver.teamColor);
-      quick.setAttribute("aria-label", `Cámara a bordo de ${driver.fullName}`);
-      quick.title = `${driver.fullName} · ${driver.teamName}`;
-      const copy = label("span", "quick-driver__copy", "");
-      copy.append(label("strong", "", driver.acronym), label("span", "", surname));
-      quick.append(label("span", "quick-driver__number", String(driver.driverNumber)), copy);
-      quick.addEventListener("click", () => this.onCamera("onboard", driver.driverNumber));
-      this.quickDrivers.append(quick);
-      this.driverButtons.set(driver.driverNumber, quick);
+      const number = driver.driverNumber;
+      const name = driverName(driver.fullName);
+      const surname = name.split(" ").slice(1).join(" ") || name;
+      this.drivers.set(number, driver);
+
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "driver-card";
+      card.style.setProperty("--team-color", driver.teamColor);
+      card.setAttribute("aria-label", `Ver ficha de ${name}`);
+      card.title = `${name} · ${driver.teamName}`;
+      card.append(driverPortrait(driver), label("span", "driver-card__number", `#${number}`), label("strong", "", surname));
+      card.addEventListener("click", () => this.inspectDriver(driver));
+      this.grid.append(card);
+      this.driverCards.set(number, card);
 
       const dot = document.createElementNS(SVG_NS, "circle");
       dot.classList.add("map-driver");
@@ -141,9 +157,8 @@ export class DesktopPlayerView {
       title.textContent = driver.fullName;
       dot.append(title);
       this.mapDrivers.append(dot);
-      this.mapDots.set(driver.driverNumber, dot);
+      this.mapDots.set(number, dot);
     }
-    mustQuery("#camera-count").textContent = String(segment.drivers.length + 2).padStart(2, "0");
     this.projection = projectCircuit(segment.circuit.centerline);
     for (const id of ["#map-track", "#map-track-outline"]) {
       mustQuery(id).setAttribute("d", this.projection?.path ?? "");
@@ -152,53 +167,30 @@ export class DesktopPlayerView {
     mustQuery("#circuit-map").setAttribute("aria-label", `Mapa de ${segment.sessionRef.circuitShortName} con posiciones de pilotos`);
   }
 
-  update(frame: ReplayFrame, mode: CameraMode, driverNumber: number | null) {
-    const key = `${mode}:${driverNumber}`;
-    if (key !== this.selectionKey) {
-      this.selectionKey = key;
+  update(frame: ReplayFrame, mode: CameraMode, followDriver: number | null) {
+    const cameraKey = `${mode}:${followDriver}`;
+    if (cameraKey !== this.cameraKey) {
+      this.cameraKey = cameraKey;
+      this.auto.setAttribute("aria-pressed", String(mode === "broadcast"));
+      this.free.setAttribute("aria-pressed", String(mode === "orbit"));
       this.lastUpdate = -Infinity;
-      for (const [cardKey, card] of this.cameraCards) {
-        const active = cardKey === (mode === "onboard" ? `onboard:${driverNumber}` : mode);
-        card.classList.toggle("is-active", active);
-        card.setAttribute("aria-pressed", String(active));
-      }
-      for (const [number, button] of this.driverButtons) {
-        const active = mode === "onboard" && number === driverNumber;
-        button.classList.toggle("is-active", active);
-        button.setAttribute("aria-pressed", String(active));
-        if (active) {
-          const left = button.offsetLeft - this.quickDrivers.offsetLeft;
-          this.quickDrivers.scrollTo({ left: Math.max(0, left - this.quickDrivers.clientWidth / 2 + button.clientWidth / 2), behavior: "smooth" });
-        }
-      }
-      document.querySelectorAll<HTMLElement>(".timing-row").forEach((row) => {
-        const active = mode === "onboard" && Number(row.dataset.driver) === driverNumber;
-        row.classList.toggle("is-selected", active);
-        row.setAttribute("aria-pressed", String(active));
-      });
     }
+
     const now = performance.now();
     if (now - this.lastUpdate < 100) return;
     this.lastUpdate = now;
-    if (this.selectedTab === "data") {
-      const car = frame.cars.find((car) => car.driver.driverNumber === driverNumber) ?? frame.cars[0];
-      if (car) {
-        const { driver, sample } = car;
-        this.telemetry.driver.textContent = driver.fullName.toLocaleLowerCase("es").replace(/(^|[ -])\p{L}/gu, (letter) => letter.toLocaleUpperCase("es"));
-        this.telemetry.driver.style.setProperty("--team-color", driver.teamColor);
-        this.telemetry.team.textContent = driver.teamName;
-        this.telemetry.speed.textContent = String(Math.round(sample.speed));
-        this.telemetry.gear.textContent = sample.gear === 0 ? "N" : String(sample.gear);
-        this.telemetry.rpm.textContent = Math.round(sample.rpm).toLocaleString("es");
-        this.telemetry.drs.textContent = [10, 12, 14].includes(sample.drs) ? "ABIERTO" : "CERRADO";
-        const throttle = Math.max(0, Math.min(100, sample.throttle));
-        const brake = Math.max(0, Math.min(100, sample.brake));
-        this.telemetry.throttle.textContent = `${Math.round(throttle)} %`;
-        this.telemetry.brake.textContent = `${Math.round(brake)} %`;
-        this.telemetry.throttleBar.style.width = `${throttle}%`;
-        this.telemetry.brakeBar.style.width = `${brake}%`;
-      }
+
+    const onboard = mode === "onboard" && followDriver === this.selectedDriver && this.selectedDriver != null;
+    this.onboard.setAttribute("aria-pressed", String(onboard));
+    this.onboardLabel.textContent = onboard ? "A bordo ahora" : "Ver a bordo";
+
+    for (const row of this.timingTower.querySelectorAll<HTMLElement>(".timing-row")) {
+      const selected = Number(row.dataset.driver) === this.selectedDriver;
+      row.classList.toggle("is-selected", selected);
+      row.setAttribute("aria-pressed", String(selected));
     }
+
+    if (this.selectedTab === "drivers" && !this.detail.hidden) this.updateTelemetry(frame);
     if (this.selectedTab === "map" && this.projection) {
       for (const car of frame.cars) {
         const dot = this.mapDots.get(car.driver.driverNumber);
@@ -206,7 +198,7 @@ export class DesktopPlayerView {
         const point = this.projection.project(car.sample.x, car.sample.z);
         dot.setAttribute("cx", point.x.toFixed(1));
         dot.setAttribute("cy", point.y.toFixed(1));
-        const selected = car.driver.driverNumber === driverNumber;
+        const selected = car.driver.driverNumber === this.selectedDriver;
         dot.classList.toggle("is-selected", selected);
         dot.setAttribute("r", selected ? "5" : "3.5");
         if (selected) this.mapDrivers.append(dot);
@@ -214,43 +206,53 @@ export class DesktopPlayerView {
     }
   }
 
-  capturePreview(canvas: HTMLCanvasElement, mode: CameraMode, driverNumber?: number) {
-    const key = mode === "onboard" ? `onboard:${driverNumber}` : mode;
-    const card = this.cameraCards.get(key);
-    const preview = card?.querySelector<HTMLElement>(".camera-card__preview");
-    if (!preview || !canvas.width || !canvas.height) return;
-    const small = document.createElement("canvas");
-    small.width = 160;
-    small.height = 90;
-    const context = small.getContext("2d");
-    if (!context) return;
-    const cropWidth = Math.min(canvas.width, canvas.height * 16 / 9);
-    const cropHeight = cropWidth * 9 / 16;
-    context.drawImage(canvas, (canvas.width - cropWidth) / 2, (canvas.height - cropHeight) / 2, cropWidth, cropHeight, 0, 0, 160, 90);
-    const image = document.createElement("img");
-    image.alt = "";
-    image.width = 160;
-    image.height = 90;
-    image.src = small.toDataURL("image/jpeg", 0.75);
-    preview.replaceChildren(image);
+  private inspectDriver(driver: DriverInfo) {
+    this.showInspector();
+    this.driversTab.click();
+    this.selectDriver(driver);
+    this.telemetry.driver.focus({ preventScroll: true });
   }
 
-  private addCamera(mode: CameraMode, title: string, subtitle: string, visual: Element, driver?: number) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "camera-card";
-    button.setAttribute("aria-pressed", "false");
-    const preview = visual.classList.contains("camera-card__preview") ? visual : label("span", "camera-card__preview", "");
-    if (preview !== visual) preview.append(visual);
-    const copy = label("span", "camera-card__copy", "");
-    copy.append(label("span", "camera-card__title", title), label("span", "camera-card__subtitle", subtitle));
-    button.append(preview, copy, label("span", "camera-card__indicator", ""));
-    button.addEventListener("click", () => this.onCamera(mode, driver));
-    this.cameraList.append(button);
-    this.cameraCards.set(mode === "onboard" ? `onboard:${driver}` : mode, button);
+  private selectDriver(driver: DriverInfo) {
+    if (!this.gallery.hidden && !this.panel.hidden) this.galleryScroll = this.panel.scrollTop;
+    const resetScroll = !this.gallery.hidden || this.selectedDriver !== driver.driverNumber;
+    if (this.selectedDriver !== driver.driverNumber) {
+      this.selectedDriver = driver.driverNumber;
+      this.detail.style.setProperty("--team-color", driver.teamColor);
+      this.portrait.replaceChildren(driverPortrait(driver));
+      this.code.textContent = `#${driver.driverNumber} · ${driver.acronym}`;
+      this.telemetry.driver.textContent = driverName(driver.fullName);
+      this.telemetry.team.textContent = driver.teamName;
+    }
+    this.gallery.hidden = true;
+    this.detail.hidden = false;
+    if (resetScroll) this.panel.scrollTop = 0;
+    this.lastUpdate = -Infinity;
   }
 
-  private scrollDrivers(direction: number) {
-    this.quickDrivers.scrollBy({ left: direction * this.quickDrivers.clientWidth * 0.8, behavior: "smooth" });
+  private showGallery() {
+    this.gallery.hidden = false;
+    this.detail.hidden = true;
+    this.panel.scrollTop = this.galleryScroll;
+  }
+
+  private updateTelemetry(frame: ReplayFrame) {
+    const sample = frame.cars.find((car) => car.driver.driverNumber === this.selectedDriver)?.sample;
+    const { position, tyre, gap, speed, gear, rpm, drs, throttle, brake, throttleBar, brakeBar } = this.telemetry;
+    position.textContent = sample?.position != null ? `P${sample.position}` : "—";
+    const compound = sample?.compound?.toUpperCase() ?? "";
+    tyre.textContent = COMPOUNDS[compound] ?? "—";
+    tyre.dataset.compound = compound.toLowerCase();
+    gap.textContent = sample?.position === 1 ? "Líder" : sample?.gapToLeader != null ? formatDelta(sample.gapToLeader) : "—";
+    speed.textContent = sample ? String(Math.round(sample.speed)) : "—";
+    gear.textContent = sample ? (sample.gear === 0 ? "N" : String(sample.gear)) : "—";
+    rpm.textContent = sample ? Math.round(sample.rpm).toLocaleString("es") : "—";
+    drs.textContent = sample ? ([10, 12, 14].includes(sample.drs) ? "Abierto" : "Cerrado") : "—";
+    const throttleValue = sample ? Math.max(0, Math.min(100, sample.throttle)) : 0;
+    const brakeValue = sample ? Math.max(0, Math.min(100, sample.brake)) : 0;
+    throttle.textContent = sample ? `${Math.round(throttleValue)} %` : "—";
+    brake.textContent = sample ? `${Math.round(brakeValue)} %` : "—";
+    throttleBar.style.width = `${throttleValue}%`;
+    brakeBar.style.width = `${brakeValue}%`;
   }
 }

@@ -126,7 +126,13 @@ export class RaceScene {
     this.controls.minDistance = 2;
     this.controls.maxDistance = 1800;
     this.tabletopScene.background = new THREE.Color("#0b1520");
-    this.tabletopScene.add(this.tabletop.group);
+    const tabletopKey = new THREE.DirectionalLight("#ffffff", 1.35);
+    tabletopKey.position.set(1.4, 2, .8);
+    this.tabletopScene.add(
+      new THREE.HemisphereLight("#f2f6fb", "#243041", 1.15),
+      tabletopKey,
+      this.tabletop.group,
+    );
     this.tabletopCamera.position.set(1.05, 1.2, 1.05);
     this.tabletopControls = new OrbitControls(this.tabletopCamera, this.canvas);
     this.tabletopControls.enableDamping = true;

@@ -33,17 +33,16 @@ export function bindPlayerChrome(replay: ReplayApp, onFrame: (frame: ReplayFrame
     for (const panel of Object.values(panels)) panel.inert = active;
     syncPanelButtons();
   };
-  const togglePanel = (name: keyof typeof panels) => {
-    const panel = panels[name];
-    const wasTheater = theater;
+  const setPanel = (name: keyof typeof panels, open: boolean) => {
     if (theater) setTheater(false);
-    panel.hidden = wasTheater ? false : !panel.hidden;
-    if (!panel.hidden && compact.matches) {
+    panels[name].hidden = !open;
+    if (open && compact.matches) {
       const other = name === "classification" ? "inspector" : "classification";
       panels[other].hidden = true;
     }
     syncPanelButtons();
   };
+  const togglePanel = (name: keyof typeof panels) => setPanel(name, theater || panels[name].hidden);
   const applyResponsivePanels = () => {
     panels.classification.hidden = compact.matches;
     panels.inspector.hidden = medium.matches;
@@ -131,4 +130,5 @@ export function bindPlayerChrome(replay: ReplayApp, onFrame: (frame: ReplayFrame
     }
   });
   wake();
+  return { showInspector: () => setPanel("inspector", true) };
 }
