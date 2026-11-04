@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { TeamRadioControls } from "../../types";
 import type { XrPlaybackState } from "../xr/xr-controls-panel";
 import type { TabletopModel } from "./tabletop-model";
 import { TabletopControlsPanel, type TabletopAction } from "./tabletop-controls-panel";
@@ -34,9 +35,9 @@ export class TabletopXr {
     private readonly playback: {
       getState: () => XrPlaybackState; togglePlay: () => void; seek: (ratio: number) => void;
       jump: (seconds: number) => void; speed: (speed: number) => void; exit: () => void;
-    }) {
+    }, radio: TeamRadioControls) {
     scene.add(this.panel.mesh);
-    this.driverPanels = new TabletopDriverPanels(scene, model);
+    this.driverPanels = new TabletopDriverPanels(scene, model, radio);
     this.raycaster.camera = this.head;
     for (let index = 0; index < 2; index++) {
       const ray = renderer.xr.getController(index);
@@ -53,6 +54,7 @@ export class TabletopXr {
         this.endGrab(index);
       });
       ray.addEventListener("selectstart", () => this.select(index));
+      ray.addEventListener("select", () => this.selectRadio(index));
       ray.addEventListener("selectend", () => this.endGrab(index, "select"));
       ray.addEventListener("squeezestart", () => this.squeeze(index));
       ray.addEventListener("squeezeend", () => this.endGrab(index, "squeeze"));
@@ -262,6 +264,13 @@ export class TabletopXr {
       }
     } else this.startGrab(index, "select");
     this.lastPaint = -Infinity;
+  }
+
+  private selectRadio(index: number) {
+    if (!this.active || !this.placed || !this.isTracked(index) || this.grabs.size) return;
+    this.setRay(index);
+    const hit = this.intersectUi();
+    if (hit) this.driverPanels.selectRadio(hit);
   }
 
   private squeeze(index: number) {

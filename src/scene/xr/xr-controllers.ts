@@ -16,6 +16,7 @@ export class XrControllers {
   constructor(renderer: WebGLRenderer, private readonly actions: {
     onCameraMode: () => void; onNextDriver: () => void; onTogglePlay?: () => void;
     onToggleMenu?: () => void; onSelect?: () => boolean; onSqueeze?: () => void;
+    onSelectRadio?: () => void;
   }) {
     for (let index = 0; index < 2; index++) {
       const controller = renderer.xr.getController(index);
@@ -24,6 +25,9 @@ export class XrControllers {
       this.group.add(controller, grip);
       controller.addEventListener("connected", event => { this.sources[index] = event.data; });
       controller.addEventListener("disconnected", () => { this.sources[index] = null; });
+      controller.addEventListener("select", event => {
+        if (this.active && event.data.handedness === "right") this.actions.onSelectRadio?.();
+      });
     }
   }
 

@@ -13,6 +13,8 @@ import { formatReplayTime } from "./format";
 import { LoadingView } from "./loading-view";
 import { AnimationFrames } from "./animation-frames";
 import { RacePickerView } from "./race-picker-view";
+import { RadioBroadcastView } from "./radio-broadcast-view";
+import { RadioPlayer } from "./radio-player";
 import { ReplayApp } from "./replay-app";
 import { TimingTowerView } from "./timing-tower-view";
 import { preloadCarModels } from "../scene/car-models";
@@ -35,9 +37,11 @@ export function startReplayApplication() {
 
   const ui = queryReplayElements();
 
-  const scene = new RaceScene(canvas);
+  const radioPlayer = new RadioPlayer();
+  const radioBroadcast = new RadioBroadcastView();
+  const scene = new RaceScene(canvas, radioPlayer);
   const graphicsPerformance = new GraphicsPerformanceView(mustQuery<HTMLOutputElement>("#graphics-stats"));
-  const replay = new ReplayApp();
+  const replay = new ReplayApp(radioPlayer);
   const timingTower = new TimingTowerView(
     mustQuery<HTMLDivElement>("#timing-tower"),
     mustQuery<HTMLElement>("#timing-lap-tag"),
@@ -60,11 +64,15 @@ export function startReplayApplication() {
   const render = (frame: Parameters<typeof paintFrame>[0]) => {
     const controller = replay.getController();
     if (!controller) return;
+    const broadcast = radioPlayer.getBroadcast();
     if (scene.isXrPresenting()) {
+      radioBroadcast.update(null);
       scene.update(frame);
+      scene.updateRadioBroadcast(broadcast);
       scene.render();
       return;
     }
+    radioBroadcast.update(broadcast);
     paintFrame(frame, controller.getDuration(), scene, timingTower, ui);
     desktopPlayer.update(frame, scene.getCameraMode(), scene.getFollowDriver());
   };
@@ -75,11 +83,11 @@ export function startReplayApplication() {
     if (mode !== scene.getCameraMode()) scene.setCameraMode(mode);
     const controller = replay.getController();
     if (controller) render(controller.getFrame(replay.currentTime));
-  }, showInspector);
+  }, showInspector, radioPlayer);
 
   const raceLoader = createRaceLoader({
     appShell, changeRaceButton, racePicker, ui, scene, replay,
-    timingTower, desktopPlayer, loadingView, render, syncPlayButton, resetClock,
+    timingTower, desktopPlayer, loadingView, radioPlayer, render, syncPlayButton, resetClock,
   });
 
   function tick(now: number) {

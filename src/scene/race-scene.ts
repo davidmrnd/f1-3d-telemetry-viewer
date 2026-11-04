@@ -34,7 +34,9 @@ import {
   createStartFinishDecor,
   type StartFinishDecor,
 } from "./start-finish";
-import type { DriverInfo, ReplayFrame, ReplaySegment, StartingGridSlot } from "../types";
+import type { DriverInfo, RadioBroadcastState, ReplayFrame, ReplaySegment, StartingGridSlot, TeamRadioClip, TeamRadioControls } from "../types";
+import { paintRadioBroadcast, RADIO_CARD_HEIGHT, RADIO_CARD_WIDTH } from "./radio-broadcast-graphic";
+import { createXrPanel } from "./xr/xr-panel";
 import { XrRig } from "./xr/xr-rig";
 import { XrSessionController } from "./xr/xr-session";
 import { XrControllers } from "./xr/xr-controllers";
@@ -96,6 +98,9 @@ export class RaceScene {
   private readonly xrRig = new XrRig();
   private readonly xrViewCamera = new THREE.PerspectiveCamera(60, 1, 0.05, 8000);
   private readonly xrHead = new THREE.PerspectiveCamera();
+  private readonly xrRadio = createXrPanel(RADIO_CARD_WIDTH, RADIO_CARD_HEIGHT, .54, "xr-radio-broadcast");
+  private xrRadioClip: TeamRadioClip | null = null;
+  private xrRadioPaintedAt = -Infinity;
   private xrHeadValid = false;
   private readonly xrFlight = new XrFlight();
   private readonly xrYaw = new THREE.Quaternion();
@@ -108,7 +113,7 @@ export class RaceScene {
   private xrDriverInfo: DriverInfo[] = [];
   private xrInterface: XrInterface | null = null;
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
+  constructor(private readonly canvas: HTMLCanvasElement, private readonly radio: TeamRadioControls) {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
@@ -170,6 +175,7 @@ export class RaceScene {
     this.xrControllers = new XrControllers(this.renderer, {
       onToggleMenu: () => { if (this.xrHeadValid) this.ensureXrInterface().toggle(this.xrHead); },
       onSelect: () => this.xrInterface?.select() ?? false,
+      onSelectRadio: () => this.xrInterface?.selectRadio(),
       onSqueeze: () => this.xrInterface?.squeeze(),
       onTogglePlay: () => this.xrHooks.onTogglePlay?.(),
       onCameraMode: () => {
@@ -194,7 +200,7 @@ export class RaceScene {
       jump: seconds => this.xrHooks.onJump?.(seconds),
       speed: value => this.xrHooks.onSetSpeed?.(value),
       exit: () => { void this.exitVr(); },
-    });
+    }, radio);
 
     this.cameraController.setMode("broadcast", this.controls);
   }
@@ -568,8 +574,29 @@ export class RaceScene {
     this.renderer.render(this.scene, this.isXrPresenting() ? this.xrViewCamera : this.camera);
   }
 
+  updateRadioBroadcast(state: RadioBroadcastState | null) {
+    const { mesh, context, texture } = this.xrRadio;
+    mesh.visible = Boolean(state && this.xrHeadValid);
+    if (!state || !mesh.visible) {
+      this.xrRadioClip = null;
+      return;
+    }
+    mesh.position.set(0, -.32, -1.35).applyQuaternion(this.xrHead.quaternion).add(this.xrHead.position);
+    mesh.quaternion.copy(this.xrHead.quaternion);
+    const now = performance.now();
+    if (state.clip === this.xrRadioClip && now - this.xrRadioPaintedAt < 33) return;
+    paintRadioBroadcast(context, state);
+    texture.needsUpdate = true;
+    this.xrRadioClip = state.clip;
+    this.xrRadioPaintedAt = now;
+  }
+
   private handleXrSessionStart() {
     this.xrHeadValid = false;
+    this.renderer.xr.getSession()?.addEventListener("select", this.radio.unlock);
+    const radioParent = this.isArPresenting() ? this.tabletopScene : this.xrRig.viewerRoot;
+    this.xrRadio.mesh.renderOrder = 1200;
+    radioParent.add(this.xrRadio.mesh);
     if (this.isArPresenting()) {
       this.xrRig.setActive(false);
       this.xrRig.viewerRoot.visible = true;
@@ -599,6 +626,8 @@ export class RaceScene {
   }
 
   private handleXrSessionEnd() {
+    this.updateRadioBroadcast(null);
+    this.xrRadio.mesh.removeFromParent();
     if (this.xrSession.getMode() === "immersive-ar") {
       this.tabletopXr.setActive(false, this.tabletopScene, this.xrControllers.group);
       this.tabletopScene.background = new THREE.Color("#0b1520");
@@ -639,7 +668,7 @@ export class RaceScene {
             : (index + action.step + this.xrDrivers.length) % this.xrDrivers.length];
         if (driver !== undefined) { this.setFollowDriver(driver); if (this.getCameraMode() !== "onboard") this.setCameraMode("onboard"); }
       }
-    }, visible => this.xrHooks.onWristVisible?.(visible));
+    }, visible => this.xrHooks.onWristVisible?.(visible), this.radio);
     this.xrInterface.setDrivers(this.xrDriverInfo);
     return this.xrInterface;
   }

@@ -92,12 +92,16 @@
             <div class="telemetry-stats"><div><span>MARCHA</span><strong id="telemetry-gear">—</strong></div><div><span>RPM</span><strong id="telemetry-rpm">—</strong></div><div><span>DRS</span><strong id="telemetry-drs">—</strong></div></div>
             <div class="pedal"><div><span>ACELERADOR</span><span id="throttle-value">—</span></div><div class="pedal-track"><span id="throttle-bar"></span></div></div>
             <div class="pedal brake"><div><span>FRENO</span><span id="brake-value">—</span></div><div class="pedal-track"><span id="brake-bar"></span></div></div>
+              <p class="section-label">HISTORIAL DE RADIOS</p>
+              <div id="driver-radios" class="driver-radios"></div>
             </div>
           </section>
           <section id="panel-map" class="tab-content map-content" role="tabpanel" aria-labelledby="tab-map" hidden><p class="section-label">POSICIONES EN PISTA</p><svg id="circuit-map" viewBox="0 0 280 260" role="img" aria-label="Mapa del circuito y posición de los pilotos"><path id="map-track-outline"></path><path id="map-track"></path><g id="map-drivers"></g></svg><div class="map-caption"><span class="source-dot"></span><span id="map-circuit-name">Circuito</span></div><p class="data-note">Trazado y posiciones aproximadas a partir de los datos de la sesión.</p></section>
           <div class="inspector-footer"><span class="recording-dot"></span> SINCRONIZADO CON EL REPLAY</div>
         </aside>
         <div class="view-caption player-chrome"><span class="caption-rule"></span><div id="camera-pill" class="camera-pill" hidden></div><span class="view-caption-detail">ESCALA REAL · 3D</span></div>
+        <div id="radio-broadcast" class="radio-broadcast" hidden><canvas aria-hidden="true"></canvas></div>
+        <span id="radio-announcement" class="sr-only" role="status"></span>
         <div id="status-pill" class="status-pill" role="status">Preparando experiencia…</div>
         <output id="graphics-stats" class="graphics-stats" aria-label="Rendimiento de la escena" hidden></output>
         <footer class="player-controls player-chrome" aria-label="Controles del reproductor">

@@ -1,16 +1,95 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeCircuitPreview } from "./circuit-preview.mjs";
+import { fetchRaceTotalLaps } from "./race-total-laps.mjs";
+import { buildRaceOperations, enrichExistingSnapshots } from "./race-operations.mjs";
+import { decodeReplaySegmentBinary, encodeReplaySegmentBinary } from "./replay-segment-binary.mjs";
+import { cacheTeamRadio, writeAtomically } from "./cache-team-radio.mjs";
 
 const OPEN_F1_BASE = "https://api.openf1.org/v1";
 const DEFAULT_COUNTRY = "Spain";
-const DEFAULT_YEAR = 2024;
-const DEFAULT_SESSION_KEY = 9539;
+const DEFAULT_YEAR = 2025;
+const DEFAULT_SESSION_KEY = 9971;
 const DEFAULT_DRIVER_FOR_TRACK = 1;
 const DEFAULT_REPLAY_DURATION_MS = 5 * 60 * 1000;
 const FETCH_CHUNK_MS = 45_000;
-const FETCH_CHUNK_DELAY_MS = 400;
-const SEGMENT_DRIVER_COUNT = 4;
+const SEGMENT_DRIVER_COUNT = 20;
+const FORMATION_LEAD_MS = 2.5 * 60 * 1000;
+const RACE_CONTROL_LOOKBACK_MS = 120_000;
+const STANDING_SPEED_KMH = 5;
+const LAUNCH_SPEED_KMH = 30;
+const SPEED_PROBE_STEP_MS = 500;
+const DEFAULT_SAMPLE_HZ = 2;
+const OPENF1_MAX_PER_SECOND = 3;
+const OPENF1_MAX_PER_MINUTE = 30;
+const OPENF1_MAX_CONCURRENT = 3;
+
+function createOpenF1RateLimiter({
+  maxPerSecond = OPENF1_MAX_PER_SECOND,
+  maxPerMinute = OPENF1_MAX_PER_MINUTE,
+  maxConcurrent = OPENF1_MAX_CONCURRENT,
+} = {}) {
+  const recent = [];
+  let active = 0;
+  const waiters = [];
+
+  function prune(now) {
+    while (recent.length > 0 && now - recent[0] >= 60_000) {
+      recent.shift();
+    }
+  }
+
+  function delayUntilSlot(now) {
+    prune(now);
+    if (active >= maxConcurrent) {
+      return null;
+    }
+    const inLastSecond = recent.filter((stamp) => now - stamp < 1_000);
+    if (inLastSecond.length >= maxPerSecond) {
+      return Math.max(1, 1_000 - (now - inLastSecond[0]) + 1);
+    }
+    if (recent.length >= maxPerMinute) {
+      return Math.max(1, 60_000 - (now - recent[0]) + 1);
+    }
+    return 0;
+  }
+
+  function pump() {
+    while (waiters.length > 0) {
+      const now = Date.now();
+      const waitMs = delayUntilSlot(now);
+      if (waitMs == null) {
+        return;
+      }
+      if (waitMs > 0) {
+        setTimeout(pump, waitMs + 5);
+        return;
+      }
+      const next = waiters.shift();
+      active += 1;
+      recent.push(Date.now());
+      next();
+    }
+  }
+
+  return {
+    async schedule(task) {
+      await new Promise((resolve) => {
+        waiters.push(resolve);
+        pump();
+      });
+      try {
+        return await task();
+      } finally {
+        active -= 1;
+        pump();
+      }
+    },
+  };
+}
+
+const openF1Limiter = createOpenF1RateLimiter();
 
 function parseCliOptions() {
   const options = {
@@ -18,6 +97,7 @@ function parseCliOptions() {
     durationMs: DEFAULT_REPLAY_DURATION_MS,
     country: DEFAULT_COUNTRY,
     year: DEFAULT_YEAR,
+    sampleHz: DEFAULT_SAMPLE_HZ,
   };
 
   for (const arg of process.argv.slice(2)) {
@@ -30,6 +110,8 @@ function parseCliOptions() {
       options.country = arg.slice("--country=".length);
     } else if (arg.startsWith("--year=")) {
       options.year = Number.parseInt(arg.slice("--year=".length), 10);
+    } else if (arg.startsWith("--sample-hz=")) {
+      options.sampleHz = Number.parseFloat(arg.slice("--sample-hz=".length));
     }
   }
 
@@ -39,11 +121,122 @@ function parseCliOptions() {
   if (!Number.isFinite(options.durationMs) || options.durationMs < 10_000) {
     throw new Error("duration debe ser al menos 10 segundos.");
   }
+  if (!Number.isFinite(options.sampleHz) || options.sampleHz < 0) {
+    throw new Error("sample-hz debe ser >= 0 (0 = sin downsample).");
+  }
 
   return options;
 }
 
-function computeReplayWindow(candidate, session, durationMs) {
+function slugifyPathSegment(value) {
+  const slug = String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "race";
+}
+
+function buildRaceArtifactNames(meeting, session) {
+  const year = meeting.year;
+  const raceSlug = slugifyPathSegment(meeting.circuit_short_name);
+  const sessionKey = session.session_key;
+  const id = `${year}-${raceSlug}-${sessionKey}`;
+  const fileName = `${raceSlug}-${year}-${sessionKey}.bin`;
+  const relativeDir = `${year}/${raceSlug}`;
+  const path = `/data/${relativeDir}/${fileName}`;
+  return { year, raceSlug, sessionKey, id, fileName, relativeDir, path };
+}
+
+async function upsertRacesCatalog(dataRoot, entry) {
+  const catalogPath = join(dataRoot, "races-catalog.json");
+  let catalog = { races: [], activeId: null };
+  try {
+    catalog = JSON.parse(await readFile(catalogPath, "utf8"));
+  } catch {
+  }
+
+  const races = Array.isArray(catalog.races)
+    ? catalog.races.filter((race) => race.id !== entry.id)
+    : [];
+  races.push(entry);
+  races.sort((a, b) => {
+    if (b.year !== a.year) {
+      return b.year - a.year;
+    }
+    return String(a.circuitShortName).localeCompare(String(b.circuitShortName), "es");
+  });
+
+  const next = {
+    races,
+    activeId: entry.id,
+  };
+  await writeFile(catalogPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  return next;
+}
+
+function downsampleSampleSeries(samples, maxHz) {
+  if (!(maxHz > 0) || samples.length <= 2) {
+    return samples;
+  }
+
+  const minIntervalMs = 1000 / maxHz;
+  const kept = [samples[0]];
+  let lastKeptT = samples[0].t;
+  let lastKeptPosition = samples[0].position;
+
+  for (let index = 1; index < samples.length - 1; index += 1) {
+    const sample = samples[index];
+    const positionChanged =
+      sample.position != null &&
+      lastKeptPosition != null &&
+      sample.position !== lastKeptPosition;
+    if (sample.t - lastKeptT < minIntervalMs && !positionChanged) {
+      continue;
+    }
+    kept.push(sample);
+    lastKeptT = sample.t;
+    lastKeptPosition = sample.position ?? lastKeptPosition;
+  }
+
+  const last = samples[samples.length - 1];
+  if (kept[kept.length - 1].t !== last.t) {
+    kept.push(last);
+  }
+  return kept;
+}
+
+function downsampleSamplesMap(samples, maxHz) {
+  if (!(maxHz > 0)) {
+    return samples;
+  }
+  return Object.fromEntries(
+    Object.entries(samples).map(([driverNumber, series]) => [
+      driverNumber,
+      downsampleSampleSeries(series, maxHz),
+    ]),
+  );
+}
+
+function findFormationStartMs(raceControlEvents) {
+  const started = raceControlEvents.find(
+    (event) =>
+      event.category === "SessionStatus" && /SESSION\s+STARTED/i.test(event.message ?? ""),
+  );
+  return started ? toTimestamp(started.date) : null;
+}
+
+function computeReplayWindow({ formationStartMs, candidate, session, durationMs }) {
+  if (formationStartMs != null) {
+    const sessionFloor = toTimestamp(session.date_start);
+    const rangeStart = Math.max(sessionFloor, formationStartMs - FORMATION_LEAD_MS);
+    return {
+      rangeStart,
+      rangeEnd: rangeStart + durationMs,
+    };
+  }
+
   const halfDuration = Math.floor(durationMs / 2);
   if (candidate) {
     return {
@@ -70,22 +263,23 @@ function buildUrl(path, params) {
 }
 
 async function fetchJson(url, { emptyOnNotFound = false } = {}) {
-  const response = await fetch(url);
-  if (response.status === 429) {
-    await new Promise((resolve) => setTimeout(resolve, 900));
-    return fetchJson(url, { emptyOnNotFound });
-  }
-  if (response.status === 404 && emptyOnNotFound) {
-    const body = await response.text();
-    if (body.includes("No results found")) {
-      return [];
+  return openF1Limiter.schedule(async () => {
+    for (;;) {
+      const response = await fetch(url);
+      if (response.status === 429) {
+        await new Promise((resolve) => setTimeout(resolve, 1_200));
+        continue;
+      }
+      if (!response.ok) {
+        const body = await response.text();
+        if (emptyOnNotFound && (response.status === 404 || body.includes("No results found"))) {
+          return [];
+        }
+        throw new Error(`Request failed (${response.status}) for ${url}: ${body.slice(0, 240)}`);
+      }
+      return response.json();
     }
-  }
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Request failed (${response.status}) for ${url}: ${body.slice(0, 240)}`);
-  }
-  return response.json();
+  });
 }
 
 async function fetchJsonTimeRange(path, params, rangeStart, rangeEnd) {
@@ -93,20 +287,45 @@ async function fetchJsonTimeRange(path, params, rangeStart, rangeEnd) {
     return [];
   }
 
-  const chunks = [];
+  const windows = [];
   for (let chunkStart = rangeStart; chunkStart < rangeEnd; chunkStart += FETCH_CHUNK_MS) {
-    const chunkEnd = Math.min(chunkStart + FETCH_CHUNK_MS, rangeEnd);
-    const url = `${buildUrl(path, params)}&date>${encodeURIComponent(toIsoTime(chunkStart))}&date<${encodeURIComponent(toIsoTime(chunkEnd))}`;
-    const data = await fetchJson(url, { emptyOnNotFound: true });
+    windows.push({
+      chunkStart,
+      chunkEnd: Math.min(chunkStart + FETCH_CHUNK_MS, rangeEnd),
+    });
+  }
+
+  const parts = await Promise.all(
+    windows.map(({ chunkStart, chunkEnd }) => {
+      const url = `${buildUrl(path, params)}&date>${encodeURIComponent(toIsoTime(chunkStart))}&date<${encodeURIComponent(toIsoTime(chunkEnd))}`;
+      return fetchJson(url, { emptyOnNotFound: true });
+    }),
+  );
+
+  const chunks = [];
+  for (const data of parts) {
     if (Array.isArray(data) && data.length > 0) {
       chunks.push(...data);
     }
-    if (chunkEnd < rangeEnd) {
-      await new Promise((resolve) => setTimeout(resolve, FETCH_CHUNK_DELAY_MS));
+  }
+  return chunks;
+}
+
+function groupByDriverNumber(rows) {
+  const byDriver = new Map();
+  for (const row of rows) {
+    const driverNumber = row.driver_number;
+    if (driverNumber == null) {
+      continue;
+    }
+    const series = byDriver.get(driverNumber);
+    if (series) {
+      series.push(row);
+    } else {
+      byDriver.set(driverNumber, [row]);
     }
   }
-
-  return chunks;
+  return byDriver;
 }
 
 function toTimestamp(isoTime) {
@@ -202,18 +421,36 @@ function buildSnapshotAtTime(positions, timestamp) {
 
 function pickReplayDrivers(snapshot, eventDrivers) {
   const sorted = snapshot.slice().sort((a, b) => a.position - b.position);
-  if (!eventDrivers) {
+  if (sorted.length <= SEGMENT_DRIVER_COUNT) {
+    return sorted.map((item) => item.driver_number);
+  }
+  if (!eventDrivers || eventDrivers.length === 0) {
     return sorted.slice(0, SEGMENT_DRIVER_COUNT).map((item) => item.driver_number);
   }
-  const eventSet = new Set(eventDrivers);
-  const eventPositions = sorted.filter((item) => eventSet.has(item.driver_number)).map((item) => item.position);
-  const min = Math.max(1, Math.min(...eventPositions) - 1);
-  const max = Math.max(...eventPositions) + 1;
 
-  return sorted
-    .filter((item) => item.position >= min && item.position <= max)
-    .map((item) => item.driver_number)
-    .slice(0, SEGMENT_DRIVER_COUNT);
+  const eventSet = new Set(eventDrivers);
+  const eventPositions = sorted
+    .filter((item) => eventSet.has(item.driver_number))
+    .map((item) => item.position);
+  if (eventPositions.length === 0) {
+    return sorted.slice(0, SEGMENT_DRIVER_COUNT).map((item) => item.driver_number);
+  }
+
+  let min = Math.min(...eventPositions);
+  let max = Math.max(...eventPositions);
+  let selected = sorted.filter((item) => item.position >= min && item.position <= max);
+
+  while (selected.length < SEGMENT_DRIVER_COUNT && (min > 1 || max < sorted[sorted.length - 1].position)) {
+    if (min > 1) {
+      min -= 1;
+    }
+    if (max < sorted[sorted.length - 1].position) {
+      max += 1;
+    }
+    selected = sorted.filter((item) => item.position >= min && item.position <= max);
+  }
+
+  return selected.slice(0, SEGMENT_DRIVER_COUNT).map((item) => item.driver_number);
 }
 
 function binarySearchTimeline(points, t) {
@@ -398,12 +635,391 @@ async function resolveSessionContext(options) {
   return { meeting, session };
 }
 
+function isTrackWideScope(scope) {
+  return scope == null || scope === "Track";
+}
+
+function normalizeRaceControlEvents(rawEvents, rangeStart, rangeEnd) {
+  const minAbs = rangeStart - RACE_CONTROL_LOOKBACK_MS;
+  return rawEvents
+    .map((event) => {
+      const absT = toTimestamp(event.date);
+      return {
+        t: absT - rangeStart,
+        isoTime: event.date,
+        category: event.category ?? "Other",
+        flag: event.flag ?? null,
+        message: event.message ?? "",
+        scope: event.scope ?? null,
+        lapNumber: event.lap_number ?? null,
+        driverNumber: event.driver_number ?? null,
+        absT,
+      };
+    })
+    .filter((event) => event.absT >= minAbs && event.absT <= rangeEnd)
+    .sort((a, b) => a.t - b.t || a.message.localeCompare(b.message));
+}
+
+function toPublicRaceControlEvents(events) {
+  return events.map(({ t, isoTime, category, flag, message, scope, lapNumber, driverNumber }) => ({
+    t,
+    isoTime,
+    category,
+    flag,
+    message,
+    scope,
+    lapNumber,
+    driverNumber,
+  }));
+}
+
+function normalizeStartingGrid(rawGrid) {
+  return rawGrid
+    .map((slot) => ({
+      driverNumber: slot.driver_number,
+      position: slot.position,
+    }))
+    .filter((slot) => Number.isFinite(slot.driverNumber) && Number.isFinite(slot.position))
+    .sort((a, b) => a.position - b.position);
+}
+
+function sampleDriverSpeedAt(samples, driverNumber, t) {
+  const series = samples[driverNumber];
+  if (!series || series.length === 0) {
+    return null;
+  }
+  if (t <= series[0].t) {
+    return series[0].speed;
+  }
+  if (t >= series[series.length - 1].t) {
+    return series[series.length - 1].speed;
+  }
+  const index = binarySearchTimeline(series, t);
+  const next = series[index];
+  const previous = series[index - 1];
+  if (!previous || !next || next.t === previous.t) {
+    return (next ?? previous).speed;
+  }
+  const ratio = (t - previous.t) / (next.t - previous.t);
+  return previous.speed + (next.speed - previous.speed) * ratio;
+}
+
+function packMedianSpeed(samples, driverNumbers, t) {
+  const speeds = driverNumbers
+    .map((driverNumber) => sampleDriverSpeedAt(samples, driverNumber, t))
+    .filter((speed) => speed != null && Number.isFinite(speed))
+    .sort((a, b) => a - b);
+  if (speeds.length === 0) {
+    return null;
+  }
+  const mid = Math.floor(speeds.length / 2);
+  return speeds.length % 2 === 0 ? (speeds[mid - 1] + speeds[mid]) / 2 : speeds[mid];
+}
+
+function isSafetyCarDeploy(message) {
+  const text = message.toUpperCase();
+  if (/ENDING|IN THE PIT|END OF|CANCEL/.test(text)) {
+    return false;
+  }
+  return /DEPLOY|IN THIS AREA|SAFETY CAR/.test(text);
+}
+
+function isSafetyCarEnding(message) {
+  const text = message.toUpperCase();
+  return /ENDING|IN THE PIT|END OF/.test(text);
+}
+
+function phaseFromRaceControlEvent(event, state) {
+  const message = event.message.toUpperCase();
+  const flag = (event.flag ?? "").toUpperCase();
+
+  if (event.category === "SessionStatus") {
+    if (/SESSION\s+STARTED/.test(message)) {
+      return {
+        phase: "formation",
+        flag: state.flag,
+        procedureWindow: true,
+        raceUnderway: false,
+      };
+    }
+    if (/SESSION\s+FINISHED/.test(message)) {
+      return {
+        phase: "finished",
+        flag: state.flag,
+        procedureWindow: false,
+        raceUnderway: state.raceUnderway,
+      };
+    }
+  }
+
+  if (event.category === "Drs" && /DRS\s+ENABLED/.test(message)) {
+    return {
+      phase: "racing",
+      flag: state.flag,
+      procedureWindow: false,
+      raceUnderway: true,
+    };
+  }
+
+  if (event.category === "SafetyCar") {
+    if (isSafetyCarEnding(event.message)) {
+      return {
+        phase: state.raceUnderway ? "racing" : "formation",
+        flag: state.flag,
+        procedureWindow: state.procedureWindow,
+        raceUnderway: state.raceUnderway,
+      };
+    }
+    if (isSafetyCarDeploy(event.message)) {
+      return {
+        phase: "safety_car",
+        flag: state.flag,
+        procedureWindow: state.procedureWindow,
+        raceUnderway: state.raceUnderway,
+      };
+    }
+  }
+
+  if (event.category === "Flag" && isTrackWideScope(event.scope)) {
+    if (flag === "CHEQUERED") {
+      return {
+        phase: "finished",
+        flag: event.flag,
+        procedureWindow: false,
+        raceUnderway: state.raceUnderway,
+      };
+    }
+    if (flag === "RED") {
+      return {
+        phase: "red",
+        flag: event.flag,
+        procedureWindow: true,
+        raceUnderway: false,
+      };
+    }
+    if (flag === "YELLOW" || flag === "DOUBLE YELLOW") {
+      return {
+        phase: "yellow",
+        flag: event.flag,
+        procedureWindow: state.procedureWindow,
+        raceUnderway: state.raceUnderway,
+      };
+    }
+    if (flag === "GREEN" || flag === "CLEAR") {
+      if (state.phase === "yellow" || state.phase === "safety_car" || state.phase === "red") {
+        if (state.procedureWindow && !state.raceUnderway) {
+          return {
+            phase: "formation",
+            flag: event.flag,
+            procedureWindow: true,
+            raceUnderway: false,
+          };
+        }
+        return {
+          phase: "racing",
+          flag: event.flag,
+          procedureWindow: false,
+          raceUnderway: true,
+        };
+      }
+      if (state.procedureWindow && !state.raceUnderway) {
+        return {
+          phase: "formation",
+          flag: event.flag,
+          procedureWindow: true,
+          raceUnderway: false,
+        };
+      }
+      if (state.raceUnderway) {
+        return {
+          phase: "racing",
+          flag: event.flag,
+          procedureWindow: false,
+          raceUnderway: true,
+        };
+      }
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function pushPhaseMarker(markers, t, phase, flag) {
+  const last = markers[markers.length - 1];
+  if (last && last.phase === phase && last.flag === flag) {
+    return;
+  }
+  markers.push({ t, phase, flag });
+}
+
+function refineProcedureWithSpeed(markers, samples, driverNumbers, durationMs) {
+  if (markers.length === 0) {
+    return markers;
+  }
+
+  const refined = [];
+  for (let index = 0; index < markers.length; index += 1) {
+    const current = markers[index];
+    const nextT = index + 1 < markers.length ? markers[index + 1].t : durationMs;
+    pushPhaseMarker(refined, current.t, current.phase, current.flag);
+
+    if (current.phase !== "formation" && current.phase !== "standing_start") {
+      continue;
+    }
+    if (nextT <= 0) {
+      continue;
+    }
+
+    const probeStart = Math.max(current.t, 0);
+    const probeEnd = Math.min(nextT, durationMs);
+    let localPhase = current.phase;
+
+    for (let probe = probeStart; probe < probeEnd; probe += SPEED_PROBE_STEP_MS) {
+      const median = packMedianSpeed(samples, driverNumbers, probe);
+      if (median == null) {
+        continue;
+      }
+
+      let nextPhase = localPhase;
+      if (median <= STANDING_SPEED_KMH) {
+        nextPhase = "standing_start";
+      } else if (localPhase === "standing_start" && median >= LAUNCH_SPEED_KMH) {
+        nextPhase = "racing";
+      }
+
+      if (nextPhase !== localPhase) {
+        pushPhaseMarker(refined, probe, nextPhase, current.flag);
+        localPhase = nextPhase;
+        if (nextPhase === "racing") {
+          break;
+        }
+      }
+    }
+  }
+
+  return refined.sort((a, b) => a.t - b.t);
+}
+
+function markersToIntervals(markers, durationMs) {
+  const sorted = markers.slice().sort((a, b) => a.t - b.t);
+  let phaseAtStart = { phase: "pre_session", flag: null };
+  for (const marker of sorted) {
+    if (marker.t <= 0) {
+      phaseAtStart = { phase: marker.phase, flag: marker.flag };
+    }
+  }
+
+  const merged = [{ t: 0, phase: phaseAtStart.phase, flag: phaseAtStart.flag }];
+  for (const marker of sorted) {
+    if (marker.t <= 0 || marker.t >= durationMs) {
+      continue;
+    }
+    pushPhaseMarker(merged, marker.t, marker.phase, marker.flag);
+  }
+
+  const intervals = [];
+  for (let index = 0; index < merged.length; index += 1) {
+    const start = merged[index].t;
+    const end = index + 1 < merged.length ? merged[index + 1].t : durationMs;
+    if (end <= start) {
+      continue;
+    }
+    intervals.push({
+      start,
+      end,
+      phase: merged[index].phase,
+      flag: merged[index].flag,
+    });
+  }
+
+  if (intervals.length === 0) {
+    return [{ start: 0, end: durationMs, phase: "pre_session", flag: null }];
+  }
+
+  return intervals;
+}
+
+function sanitizePhasesAfterLaunch(markers) {
+  let raceUnderway = false;
+  const result = [];
+  for (const marker of markers) {
+    let phase = marker.phase;
+    if (phase === "red") {
+      raceUnderway = false;
+    } else if (phase === "racing") {
+      raceUnderway = true;
+    } else if (phase === "finished") {
+      raceUnderway = false;
+    } else if (raceUnderway && (phase === "formation" || phase === "standing_start")) {
+      phase = "racing";
+    }
+    pushPhaseMarker(result, marker.t, phase, marker.flag);
+  }
+  return result;
+}
+
+function deriveTrackStatus(raceControlEvents, samples, driverNumbers, durationMs) {
+  let state = {
+    phase: "pre_session",
+    flag: null,
+    procedureWindow: false,
+    raceUnderway: false,
+  };
+  const markers = [{ t: -RACE_CONTROL_LOOKBACK_MS, phase: "pre_session", flag: null }];
+
+  for (const event of raceControlEvents) {
+    const transition = phaseFromRaceControlEvent(event, state);
+    if (!transition) {
+      continue;
+    }
+    state = {
+      phase: transition.phase,
+      flag: transition.flag,
+      procedureWindow: transition.procedureWindow,
+      raceUnderway: transition.raceUnderway,
+    };
+    pushPhaseMarker(markers, event.t, state.phase, state.flag);
+  }
+
+  const refined = refineProcedureWithSpeed(markers, samples, driverNumbers, durationMs);
+  return markersToIntervals(sanitizePhasesAfterLaunch(refined), durationMs);
+}
+
+async function syncExistingRadios(dataRoot) {
+  const catalog = JSON.parse(await readFile(join(dataRoot, "races-catalog.json"), "utf8"));
+  const sessionArg = process.argv.find(arg => arg.startsWith("--session-key="));
+  const sessionKey = sessionArg ? parseCliOptions().sessionKey : null;
+  const races = catalog.races.filter(race => sessionKey === null || race.sessionKey === sessionKey);
+  if (!races.length) throw new Error("No hay replays guardadas para actualizar.");
+  for (const race of races) {
+    const file = join(dataRoot, race.path.replace(/^\/data\//, ""));
+    const segment = decodeReplaySegmentBinary(await readFile(file));
+    segment.teamRadio = await cacheTeamRadio(segment, file, race.path, fetchJson, buildUrl);
+    await writeAtomically(file, encodeReplaySegmentBinary(segment));
+    console.log(`${race.race}: ${segment.teamRadio.length} radios guardadas.`);
+  }
+}
+
 async function main() {
+  const publicRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "public");
+  const dataRoot = join(publicRoot, "data");
+  if (process.argv.includes("--radios-only")) {
+    await syncExistingRadios(dataRoot);
+    return;
+  }
+  if (process.argv.includes("--enrich-existing")) {
+    await enrichExistingSnapshots(dataRoot, fetchJson, buildUrl);
+    return;
+  }
   const options = parseCliOptions();
   const { meeting, session } = await resolveSessionContext(options);
-  const [rawDrivers, positions] = await Promise.all([
+  const totalLaps = await fetchRaceTotalLaps(meeting);
+  console.log(`Total previsto del Gran Premio: ${totalLaps} vueltas (ficha oficial de F1).`);
+  const [rawDrivers, positions, rawRaceControl] = await Promise.all([
     fetchJson(buildUrl("drivers", { session_key: session.session_key })),
     fetchJson(buildUrl("position", { session_key: session.session_key })),
+    fetchJson(buildUrl("race_control", { session_key: session.session_key }), { emptyOnNotFound: true }),
   ]);
 
   const drivers = rawDrivers.map((driver) => ({
@@ -417,38 +1033,40 @@ async function main() {
   })).sort((a, b) => a.driverNumber - b.driverNumber);
 
   const candidate = detectCandidateEvent(positions, drivers);
-  const { rangeStart, rangeEnd } = computeReplayWindow(candidate, session, options.durationMs);
-  const snapshot = buildSnapshotAtTime(positions, candidate?.at ?? rangeStart);
+  const formationStartMs = findFormationStartMs(rawRaceControl);
+  const { rangeStart, rangeEnd } = computeReplayWindow({
+    formationStartMs,
+    candidate,
+    session,
+    durationMs: options.durationMs,
+  });
+  const snapshot = buildSnapshotAtTime(positions, rangeStart);
   const selectedDriverNumbers = pickReplayDrivers(snapshot, candidate?.drivers ?? null);
   const selectedDrivers = selectedDriverNumbers.map((driverNumber) => drivers.find((driver) => driver.driverNumber === driverNumber)).filter(Boolean);
 
-  const [intervals, stints, laps, circuitInfo] = await Promise.all([
+  const [intervals, stints, allLaps, circuitInfo, rawStartingGrid, rawPit, results] = await Promise.all([
     fetchJsonTimeRange("intervals", { session_key: session.session_key }, rangeStart, rangeEnd),
     fetchJson(buildUrl("stints", { session_key: session.session_key })),
-    fetchJson(buildUrl("laps", { session_key: session.session_key, driver_number: DEFAULT_DRIVER_FOR_TRACK })),
+    fetchJson(buildUrl("laps", { session_key: session.session_key })),
     meeting.circuit_info_url ? fetch(meeting.circuit_info_url).then((response) => response.json()) : null,
+    fetchJson(buildUrl("starting_grid", { meeting_key: meeting.meeting_key }), { emptyOnNotFound: true }),
+    fetchJson(buildUrl("pit", { session_key: session.session_key }), { emptyOnNotFound: true }),
+    fetchJson(buildUrl("session_result", { session_key: session.session_key }), { emptyOnNotFound: true }),
   ]);
 
-  const locationStreams = [];
-  const telemetryStreams = [];
-  for (const driver of selectedDrivers) {
-    locationStreams.push(
-      await fetchJsonTimeRange(
-        "location",
-        { session_key: session.session_key, driver_number: driver.driverNumber },
-        rangeStart,
-        rangeEnd,
-      ),
-    );
-    telemetryStreams.push(
-      await fetchJsonTimeRange(
-        "car_data",
-        { session_key: session.session_key, driver_number: driver.driverNumber },
-        rangeStart,
-        rangeEnd,
-      ),
-    );
-  }
+  const denseChunkCount = Math.max(1, Math.ceil((rangeEnd - rangeStart) / FETCH_CHUNK_MS));
+  console.log(
+    `Descargando location/car_data de todos los pilotos (${denseChunkCount} chunks × 2 endpoints ≈ ${denseChunkCount * 2} peticiones; máx ${OPENF1_MAX_CONCURRENT} concurrentes, ${OPENF1_MAX_PER_SECOND}/s, ${OPENF1_MAX_PER_MINUTE}/min)`,
+  );
+  const [allLocations, allCarData] = await Promise.all([
+    fetchJsonTimeRange("location", { session_key: session.session_key }, rangeStart, rangeEnd),
+    fetchJsonTimeRange("car_data", { session_key: session.session_key }, rangeStart, rangeEnd),
+  ]);
+  const locationsByDriver = groupByDriverNumber(allLocations);
+  const carDataByDriver = groupByDriverNumber(allCarData);
+  console.log(
+    `Recibidos location=${allLocations.length} · car_data=${allCarData.length} · pilotos con location=${locationsByDriver.size} · con car_data=${carDataByDriver.size}`,
+  );
 
   const corners = (circuitInfo?.corners ?? []).map((corner) => ({
     number: corner.number,
@@ -457,6 +1075,7 @@ async function main() {
     y: corner.trackPosition.y,
   }));
 
+  const laps = allLaps.filter((lap) => lap.driver_number === DEFAULT_DRIVER_FOR_TRACK);
   const candidateLap =
     laps.find((lap) => lap.lap_number === 2 && lap.lap_duration && !lap.is_pit_out_lap) ??
     laps.find((lap) => lap.lap_duration && !lap.is_pit_out_lap);
@@ -465,18 +1084,43 @@ async function main() {
   if (candidateLap?.lap_duration && candidateLap?.date_start) {
     const lapStart = toTimestamp(candidateLap.date_start);
     const lapEnd = lapStart + candidateLap.lap_duration * 1_000;
-    const lapLocations = await fetchJson(
-      `${buildUrl("location", { session_key: session.session_key, driver_number: DEFAULT_DRIVER_FOR_TRACK })}&date>${encodeURIComponent(toIsoTime(lapStart))}&date<${encodeURIComponent(toIsoTime(lapEnd))}`,
-    );
+    const lapLocations =
+      locationsByDriver.get(DEFAULT_DRIVER_FOR_TRACK)?.filter((point) => {
+        const t = toTimestamp(point.date);
+        return t >= lapStart && t <= lapEnd;
+      }) ??
+      (await fetchJson(
+        `${buildUrl("location", { session_key: session.session_key, driver_number: DEFAULT_DRIVER_FOR_TRACK })}&date>${encodeURIComponent(toIsoTime(lapStart))}&date<${encodeURIComponent(toIsoTime(lapEnd))}`,
+      ));
     centerline = deriveLapTrack(lapLocations, corners);
   }
 
   const samples = Object.fromEntries(
-    selectedDrivers.map((driver, index) => [
+    selectedDrivers.map((driver) => [
       driver.driverNumber,
-      buildSampleSeries(driver, rangeStart, rangeEnd, locationStreams[index], telemetryStreams[index], positions, intervals, stints),
+      buildSampleSeries(
+        driver,
+        rangeStart,
+        rangeEnd,
+        locationsByDriver.get(driver.driverNumber) ?? [],
+        carDataByDriver.get(driver.driverNumber) ?? [],
+        positions,
+        intervals,
+        stints,
+      ),
     ]),
   );
+
+  const raceControlNormalized = normalizeRaceControlEvents(rawRaceControl, rangeStart, rangeEnd);
+  const raceControl = toPublicRaceControlEvents(raceControlNormalized);
+  const startingGrid = normalizeStartingGrid(rawStartingGrid);
+  const trackStatus = deriveTrackStatus(
+    raceControlNormalized,
+    samples,
+    selectedDrivers.map((driver) => driver.driverNumber),
+    rangeEnd - rangeStart,
+  );
+  const storedSamples = downsampleSamplesMap(samples, options.sampleHz);
 
   const payload = {
     sessionRef: {
@@ -496,40 +1140,91 @@ async function main() {
       startIso: toIsoTime(rangeStart),
       endIso: toIsoTime(rangeEnd),
     },
-    samples,
-    events: candidate
-      ? [{
-          type: "overtake",
-          startTime: Math.max(0, candidate.at - rangeStart - 4_000),
-          endTime: candidate.at - rangeStart + 6_000,
-          drivers: candidate.drivers,
-          label: candidate.label,
-          metadata: {
-            confidence: "position-swap",
-            source: "snapshot",
-          },
-        }]
-      : [],
+    samples: storedSamples,
+    events:
+      candidate && candidate.at >= rangeStart && candidate.at <= rangeEnd
+        ? [{
+            type: "overtake",
+            startTime: Math.max(0, candidate.at - rangeStart - 4_000),
+            endTime: candidate.at - rangeStart + 6_000,
+            drivers: candidate.drivers,
+            label: candidate.label,
+            metadata: {
+              confidence: "position-swap",
+              source: "snapshot",
+            },
+          }]
+        : [],
+    raceControl,
+    startingGrid,
+    trackStatus,
     circuit: {
       centerline,
       corners,
       rotation: circuitInfo?.rotation ?? 0,
     },
-    notes: [
-    ],
+    notes: options.sampleHz > 0 ? [`sampleHz=${options.sampleHz}`] : [],
   };
 
-  const __dirname = dirname(fileURLToPath(import.meta.url));
-  const outputDir = join(__dirname, "..", "public", "data");
+  const operations = await buildRaceOperations(payload, rawPit, results, allLaps, stints, fetchJson, buildUrl);
+  payload.pitStops = operations.pitStops;
+  payload.tyreStints = operations.tyreStints;
+  payload.retirements = operations.retirements;
+  payload.circuit.pitLane = operations.pitLane;
+
+  const artifact = buildRaceArtifactNames(meeting, session);
+  const outputDir = join(dataRoot, String(artifact.year), artifact.raceSlug);
   await mkdir(outputDir, { recursive: true });
-  const outputFile = join(outputDir, "replay-segment.json");
-  await writeFile(outputFile, JSON.stringify(payload, null, 2), "utf8");
+  const outputFile = join(outputDir, artifact.fileName);
+  payload.teamRadio = await cacheTeamRadio(payload, outputFile, artifact.path, fetchJson, buildUrl);
+  const binBuffer = encodeReplaySegmentBinary(payload);
+  await writeAtomically(outputFile, binBuffer);
+  console.log(`${payload.teamRadio.length} radios guardadas para el tramo.`);
+  const circuitPreviewFile = await writeCircuitPreview(
+    publicRoot,
+    artifact.raceSlug,
+    payload.circuit.centerline,
+  );
 
   const durationSec = Math.round((rangeEnd - rangeStart) / 1000);
-  const sampleCounts = selectedDrivers.map((driver) => samples[driver.driverNumber]?.length ?? 0);
-  console.log(`Snapshot escrito en ${outputFile}`);
+  await upsertRacesCatalog(dataRoot, {
+    id: artifact.id,
+    year: artifact.year,
+    race: artifact.raceSlug,
+    circuitShortName: meeting.circuit_short_name,
+    meetingName: meeting.meeting_name,
+    sessionKey: artifact.sessionKey,
+    totalLaps,
+    fileName: artifact.fileName,
+    path: artifact.path,
+    durationSec,
+    updatedAt: new Date().toISOString(),
+  });
+
+  const sampleCounts = selectedDrivers.map((driver) => storedSamples[driver.driverNumber]?.length ?? 0);
+  const binMb = (binBuffer.length / (1024 * 1024)).toFixed(2);
+  console.log(
+    `Snapshot binario escrito en ${outputFile} (${binMb} MB${
+      options.sampleHz > 0 ? `, max ${options.sampleHz} Hz` : ""
+    })`,
+  );
+  console.log(`Catálogo: /data/races-catalog.json · activa ${artifact.id}`);
+  if (circuitPreviewFile) {
+    console.log(`Silueta SVG escrita en ${circuitPreviewFile}`);
+  } else {
+    console.warn("No se pudo generar la silueta SVG: faltan puntos válidos del circuito.");
+  }
   console.log(`${meeting.circuit_short_name} · session_key ${session.session_key} · ${durationSec}s · pilotos ${selectedDrivers.map((driver) => driver.acronym).join(", ")}`);
+  console.log(
+    `Ventana: ${toIsoTime(rangeStart)} -> ${toIsoTime(rangeEnd)}${
+      formationStartMs != null
+        ? ` (formación ${toIsoTime(formationStartMs)}, lead ${FORMATION_LEAD_MS / 1000}s)`
+        : ""
+    }`,
+  );
   console.log(`Muestras por piloto: ${sampleCounts.join(", ")}`);
+  console.log(`raceControl ${raceControl.length} · startingGrid ${startingGrid.length} · trackStatus ${trackStatus.length}`);
+  console.log(`Fases: ${trackStatus.map((interval) => `${interval.phase}@${Math.round(interval.start / 1000)}s`).join(" → ")}`);
 }
 
 main().catch((error) => {

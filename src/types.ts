@@ -108,6 +108,27 @@ export interface TrackStatusInterval {
   flag: string | null;
 }
 
+export interface TeamRadioClip {
+  driverNumber: number;
+  time: number;
+  audioPath: string;
+}
+
+export interface RadioBroadcastState {
+  clip: TeamRadioClip;
+  driver: DriverInfo | undefined;
+  levels: Uint8Array;
+  pending: number;
+}
+
+export interface TeamRadioControls {
+  getClips(driverNumber: number): readonly TeamRadioClip[];
+  getAction(clip: TeamRadioClip): string;
+  toggle(clip: TeamRadioClip): void;
+  stop(driverNumber?: number): void;
+  unlock(): void;
+}
+
 export interface ReplaySegment {
   sessionRef: SessionRef;
   drivers: DriverInfo[];
@@ -117,6 +138,7 @@ export interface ReplaySegment {
   raceControl: RaceControlEvent[];
   startingGrid: StartingGridSlot[];
   trackStatus: TrackStatusInterval[];
+  teamRadio?: TeamRadioClip[];
   circuit: CircuitModel;
   notes: string[];
 }

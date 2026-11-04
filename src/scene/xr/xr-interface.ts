@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { DriverInfo, ReplayFrame } from "../../types";
+import type { DriverInfo, ReplayFrame, TeamRadioControls } from "../../types";
 import type { XrControllers } from "./xr-controllers";
 import { XrControlsPanel, type XrControlsState, type XrUiAction } from "./xr-controls-panel";
 import { XrWristTiming } from "./xr-wrist-timing";
@@ -34,10 +34,10 @@ export class XrInterface {
   constructor(private readonly reference: THREE.Group, wristVisible: boolean,
     private readonly getState: () => Omit<XrControlsState, "wristVisible" | "driverLabel"> & { followDriver: number | null },
     private readonly action: (action: XrUiAction | { type: "follow"; driver: number }) => void,
-    private readonly onWrist: (enabled: boolean) => void) {
+    private readonly onWrist: (enabled: boolean) => void, radio: TeamRadioControls) {
     this.wristEnabled = wristVisible;
     this.wallWindow = new XrFloatingWindow(this.worldPanels, 384, 640, .38, "xr-wall-timing", this.wall.surface);
-    this.driverWindows = new XrDriverWindows(this.worldPanels, driver => this.action({ type: "follow", driver }));
+    this.driverWindows = new XrDriverWindows(this.worldPanels, driver => this.action({ type: "follow", driver }), radio);
     reference.add(this.controls.surface.mesh, this.worldPanels);
     this.pointer = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]),
       new THREE.LineBasicMaterial({ color: 0xe50914, transparent: true, opacity: .85, depthTest: false, depthWrite: false, toneMapped: false }));
@@ -129,7 +129,7 @@ export class XrInterface {
         const x = hit.uv.x * 720;
         if (x >= 8 && x <= 88) {
           if (floating === this.wallWindow) this.attachWrist();
-          else if (floating) floating.close();
+          else if (floating) this.driverWindows.closeWindow(floating);
           else this.controls.surface.mesh.visible = false;
           this.drag = null;
         } else if (x >= 112 && x <= 708) this.startDrag(hit, "select", floating?.surface.mesh ?? this.controls.surface.mesh);
@@ -153,6 +153,12 @@ export class XrInterface {
     } else this.driverWindows.select(hit, this.worldHeadCamera);
     this.controls.invalidate();
     return true;
+  }
+
+  selectRadio() {
+    if (this.drag) return;
+    const hit = this.intersect();
+    if (hit) this.driverWindows.selectRadio(hit);
   }
 
   squeeze() {

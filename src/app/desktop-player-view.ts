@@ -1,8 +1,8 @@
 import type { CameraMode } from "../scene/cameras/types";
-import type { DriverInfo, ReplayFrame, ReplaySegment } from "../types";
+import type { DriverInfo, ReplayFrame, ReplaySegment, TeamRadioClip, TeamRadioControls } from "../types";
 import { projectCircuit } from "./circuit-map";
 import { mustQuery } from "./dom";
-import { formatDelta } from "./format";
+import { formatDelta, formatReplayTime } from "./format";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const COMPOUNDS: Record<string, string> = {
@@ -46,6 +46,8 @@ export class DesktopPlayerView {
   private readonly code = mustQuery<HTMLElement>("#driver-code");
   private readonly onboard = mustQuery<HTMLButtonElement>("#driver-onboard");
   private readonly onboardLabel = mustQuery<HTMLElement>("#driver-onboard span");
+  private readonly radioList = mustQuery<HTMLElement>("#driver-radios");
+  private readonly radioButtons = new Map<TeamRadioClip, HTMLElement>();
   private readonly auto = mustQuery<HTMLButtonElement>("#camera-auto");
   private readonly free = mustQuery<HTMLButtonElement>("#camera-free");
   private readonly timingTower = mustQuery<HTMLElement>("#timing-tower");
@@ -77,6 +79,7 @@ export class DesktopPlayerView {
   constructor(
     private readonly onCamera: (mode: CameraMode, driver?: number) => void,
     private readonly showInspector: () => void,
+    private readonly radio: TeamRadioControls,
   ) {
     const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-tab]"));
     const activateTab = (tab: HTMLButtonElement, focus = false) => {
@@ -127,6 +130,8 @@ export class DesktopPlayerView {
     this.drivers.clear();
     this.driverCards.clear();
     this.mapDots.clear();
+    this.radioButtons.clear();
+    this.radioList.replaceChildren();
     this.grid.replaceChildren();
     this.mapDrivers.replaceChildren();
     this.driversTab.click();
@@ -190,7 +195,10 @@ export class DesktopPlayerView {
       row.setAttribute("aria-pressed", String(selected));
     }
 
-    if (this.selectedTab === "drivers" && !this.detail.hidden) this.updateTelemetry(frame);
+    if (this.selectedTab === "drivers" && !this.detail.hidden) {
+      this.updateTelemetry(frame);
+      this.updateRadioButtons();
+    }
     if (this.selectedTab === "map" && this.projection) {
       for (const car of frame.cars) {
         const dot = this.mapDots.get(car.driver.driverNumber);
@@ -217,12 +225,14 @@ export class DesktopPlayerView {
     if (!this.gallery.hidden && !this.panel.hidden) this.galleryScroll = this.panel.scrollTop;
     const resetScroll = !this.gallery.hidden || this.selectedDriver !== driver.driverNumber;
     if (this.selectedDriver !== driver.driverNumber) {
+      if (this.selectedDriver !== null) this.radio.stop(this.selectedDriver);
       this.selectedDriver = driver.driverNumber;
       this.detail.style.setProperty("--team-color", driver.teamColor);
       this.portrait.replaceChildren(driverPortrait(driver));
       this.code.textContent = `#${driver.driverNumber} · ${driver.acronym}`;
       this.telemetry.driver.textContent = driverName(driver.fullName);
       this.telemetry.team.textContent = driver.teamName;
+      this.showRadios(driver.driverNumber);
     }
     this.gallery.hidden = true;
     this.detail.hidden = false;
@@ -231,9 +241,38 @@ export class DesktopPlayerView {
   }
 
   private showGallery() {
+    if (this.selectedDriver !== null) this.radio.stop(this.selectedDriver);
     this.gallery.hidden = false;
     this.detail.hidden = true;
     this.panel.scrollTop = this.galleryScroll;
+  }
+
+  private showRadios(driverNumber: number) {
+    this.radioButtons.clear();
+    this.radioList.replaceChildren();
+    const clips = this.radio.getClips(driverNumber);
+    if (!clips.length) this.radioList.append(label("p", "data-note", "Sin radios disponibles en este tramo."));
+    for (const clip of clips) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "driver-onboard";
+      const action = label("span", "", "");
+      button.append(label("span", "", formatReplayTime(clip.time)), action);
+      button.addEventListener("click", () => {
+        this.radio.toggle(clip);
+        this.updateRadioButtons();
+      });
+      this.radioButtons.set(clip, action);
+      this.radioList.append(button);
+    }
+    this.updateRadioButtons();
+  }
+
+  private updateRadioButtons() {
+    for (const [clip, action] of this.radioButtons) {
+      const text = this.radio.getAction(clip);
+      if (action.textContent !== text) action.textContent = text;
+    }
   }
 
   private updateTelemetry(frame: ReplayFrame) {

@@ -10,6 +10,7 @@ import type { ReplayFrame } from "../types";
 import type { DesktopPlayerView } from "./desktop-player-view";
 import { mustQuery } from "./dom";
 import type { LoadingView } from "./loading-view";
+import type { RadioPlayer } from "./radio-player";
 import type { RacePickerView } from "./race-picker-view";
 import type { ReplayElements } from "./replay-elements";
 import type { ReplayApp } from "./replay-app";
@@ -26,6 +27,7 @@ interface RaceLoaderOptions {
   timingTower: TimingTowerView;
   desktopPlayer: DesktopPlayerView;
   loadingView: LoadingView;
+  radioPlayer: RadioPlayer;
   render: (frame: ReplayFrame) => void;
   syncPlayButton: (playing: boolean) => void;
   resetClock: () => void;
@@ -34,7 +36,7 @@ interface RaceLoaderOptions {
 export function createRaceLoader(options: RaceLoaderOptions) {
   const {
     appShell, changeRaceButton, racePicker, ui, scene, replay,
-    timingTower, desktopPlayer, loadingView, render, syncPlayButton, resetClock,
+    timingTower, desktopPlayer, loadingView, radioPlayer, render, syncPlayButton, resetClock,
   } = options;
   let loadingRace = false;
 
@@ -90,6 +92,7 @@ export function createRaceLoader(options: RaceLoaderOptions) {
       replay.playing = false;
       await loadingView.checkpoint(60, "Construyendo el circuito…");
       scene.loadSegment(segment);
+      radioPlayer.setSegment(segment);
       if (scene.getCameraMode() === "onboard") scene.setCameraMode("broadcast");
       paintSessionMetadata(segment, ui);
       timingTower.setSegment(segment);
@@ -119,6 +122,7 @@ export function createRaceLoader(options: RaceLoaderOptions) {
   }
 
   async function chooseAndLoadRace(options: { allowQueryShortcut?: boolean } = {}) {
+    radioPlayer.stop();
     const wasPlaying = replay.playing;
     replay.playing = false;
     syncPlayButton(false);

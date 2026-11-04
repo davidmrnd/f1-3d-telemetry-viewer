@@ -48,8 +48,8 @@ export function paintDriverPanel(surface: ReturnType<typeof createXrPanel>, driv
     metric(ctx, 24, 546, 212, "ACELERADOR", value(sample?.throttle, " %"));
     metric(ctx, 254, 546, 212, "FRENO", value(sample?.brake, " %"));
     metric(ctx, 484, 546, 212, "EDAD NEUMÁTICO", value(sample?.tyreAge, " vueltas"));
-    panelText(ctx, "RADIOS DEL PILOTO", 24, 674, 17, "#a7b4c6", 700);
-    panelText(ctx, "Historial de radios · próximamente", 24, 706, 21, "#7e8b9f");
+    panelRoundedBox(ctx, 24, 668, 672, 56, true);
+    panelText(ctx, "Historial de radios", 251, 696, 24, "#fff", 700);
   } else {
     ctx.fillStyle = "rgba(255, 255, 255, .12)";
     ctx.beginPath(); ctx.roundRect(24, 330, 672, 60, 18); ctx.fill();

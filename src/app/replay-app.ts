@@ -7,6 +7,8 @@ export class ReplayApp {
   speed = 1;
   currentTime = 0;
 
+  constructor(private readonly radio: { advance(time: number): void; seek(time: number): void }) {}
+
   setController(controller: ReplayController) {
     this.controller = controller;
     this.currentTime = 0;
@@ -23,11 +25,13 @@ export class ReplayApp {
     }
 
     if (this.playing) {
-      this.currentTime += deltaMs * this.speed;
+      const previous = this.currentTime;
+      this.currentTime += Math.max(0, deltaMs) * this.speed;
       if (this.currentTime >= this.controller.getDuration()) {
         this.currentTime = this.controller.getDuration();
         this.playing = false;
       }
+      if (this.currentTime > previous) this.radio.advance(this.currentTime);
     }
 
     return this.controller.getFrame(this.currentTime);
@@ -47,11 +51,13 @@ export class ReplayApp {
   }
 
   setTimeRatio(ratio: number): void {
-    if (this.controller) this.currentTime = this.controller.getDuration() * Math.max(0, Math.min(1, ratio));
+    if (!this.controller) return;
+    this.currentTime = this.controller.getDuration() * Math.max(0, Math.min(1, ratio));
+    this.radio.seek(this.currentTime);
   }
 
   reset(): ReplayFrame | null {
-    this.currentTime = 0;
+    this.setTimeRatio(0);
     this.playing = false;
     if (!this.controller) {
       return null;
