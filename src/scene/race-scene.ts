@@ -167,9 +167,10 @@ export class RaceScene {
       onSqueeze: () => this.xrInterface?.squeeze(),
       onTogglePlay: () => this.xrHooks.onTogglePlay?.(),
       onCameraMode: () => {
-        const modes: CameraMode[] = ["broadcast", "onboard", "orbit"];
-        const next = modes[(modes.indexOf(this.getCameraMode()) + 1) % modes.length];
-        this.setCameraMode(next);
+        const modes: CameraMode[] = ["onboard", "orbit"];
+        const current = this.getCameraMode();
+        const index = modes.indexOf(current);
+        this.setCameraMode(modes[index < 0 ? 0 : (index + 1) % modes.length]);
       },
       onNextDriver: () => {
         if (this.xrDrivers.length === 0) return;
@@ -439,9 +440,13 @@ export class RaceScene {
   }
 
   setCameraMode(mode: CameraMode) {
-    this.cameraController.setMode(mode, this.controls);
+    const resolved =
+      this.renderer.xr.isPresenting && !this.isArPresenting() && mode === "broadcast"
+        ? "orbit"
+        : mode;
+    this.cameraController.setMode(resolved, this.controls);
     if (this.presentationMode === "tabletop") this.controls.enabled = false;
-    this.xrHooks.onCameraModeChange?.(mode);
+    this.xrHooks.onCameraModeChange?.(resolved);
   }
 
   setFollowDriver(driverNumber: number) {
@@ -582,6 +587,7 @@ export class RaceScene {
     this.xrRig.setActive(true);
     this.xrControllers.setActive(true);
     this.controls.enabled = false;
+    if (this.getCameraMode() === "broadcast") this.setCameraMode("orbit");
     this.ensureXrInterface();
     this.xrHooks.onSessionStart?.();
   }
