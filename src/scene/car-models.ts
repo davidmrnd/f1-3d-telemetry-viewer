@@ -9,11 +9,9 @@ import {
 } from "./car-livery";
 import type { DriverInfo } from "../types";
 
-/** Longitud del mesh GLTF normalizado en preload (escala final = metros reales en escena). */
 export const CAR_TEMPLATE_LENGTH = 0.32;
-
-/** Yaw del mesh Blender respecto al eje de avance de la telemetría. */
 export const CAR_MODEL_YAW_OFFSET = Math.PI / 2;
+export const DETAILED_CAR_MAX_TEXTURE_SIZE = 1024;
 
 export const LOWPOLY_CAR_MESH_URL = "/models/cars/f1lowpoly/lowpolyf1.glb";
 export const LOWPOLY_CAR_SCALE = 0.90;
@@ -30,7 +28,6 @@ let loadPromise: Promise<void> | null = null;
 const liveryBodyTextures = new Map<string, THREE.Texture>();
 
 export interface CarVisualParts {
-  /** Anclaje en el mundo (telemetría); los meshes van en `detailed` / `lowpoly`. */
   group: THREE.Group;
   model: THREE.Group;
   detailed: THREE.Group;
@@ -200,6 +197,55 @@ function alignCarToGround(group: THREE.Group) {
   return bounds.max.y - bounds.min.y;
 }
 
+function downscaleTexture(texture: THREE.Texture, maxSize: number) {
+  const image = texture.image as
+    | HTMLImageElement
+    | HTMLCanvasElement
+    | ImageBitmap
+    | OffscreenCanvas
+    | undefined;
+  if (!image || !("width" in image) || !image.width || !image.height) {
+    return;
+  }
+  const maxDim = Math.max(image.width, image.height);
+  if (maxDim <= maxSize) {
+    return;
+  }
+  const scale = maxSize / maxDim;
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return;
+  }
+  context.drawImage(image as CanvasImageSource, 0, 0, width, height);
+  texture.image = canvas;
+  texture.needsUpdate = true;
+}
+
+function limitObjectTextures(root: THREE.Object3D, maxSize: number) {
+  const seen = new Set<THREE.Texture>();
+  root.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) {
+      return;
+    }
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    for (const material of materials) {
+      if (!(material instanceof THREE.MeshStandardMaterial) || !material.map) {
+        continue;
+      }
+      if (seen.has(material.map)) {
+        continue;
+      }
+      seen.add(material.map);
+      downscaleTexture(material.map, maxSize);
+    }
+  });
+}
+
 function loadLiveryBodyTexture(url: string): Promise<THREE.Texture> {
   const cached = liveryBodyTextures.get(url);
   if (cached) {
@@ -213,6 +259,7 @@ function loadLiveryBodyTexture(url: string): Promise<THREE.Texture> {
       (texture) => {
         texture.colorSpace = THREE.SRGBColorSpace;
         texture.name = LIVERY_BODY_TEXTURE_NAME;
+        downscaleTexture(texture, DETAILED_CAR_MAX_TEXTURE_SIZE);
         liveryBodyTextures.set(url, texture);
         resolve(texture);
       },
@@ -236,6 +283,7 @@ export function preloadCarModels(): Promise<void> {
         loadGltfScene(getCarsManifest().mesh),
         loadGltfScene(LOWPOLY_CAR_MESH_URL),
       ]);
+      limitObjectTextures(detailedScene, DETAILED_CAR_MAX_TEXTURE_SIZE);
       await Promise.all(getLiveryTextureUrls().map(loadLiveryBodyTexture));
       preparedTemplate = finalizeTemplate(detailedScene);
       preparedLowPolyTemplate = finalizeTemplate(lowPolyScene);

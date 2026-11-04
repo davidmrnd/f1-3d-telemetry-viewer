@@ -3,19 +3,19 @@
   "defaultLiveryKey": "aston-martin",
   "liveries": {
     "aston-martin": {
-      "body": "/models/cars/f1model/liveries/aston-martin/body.png"
+      "body": "/models/cars/f1model/liveries/aston-martin/body.jpg"
     },
     "ferrari": {
-      "body": "/models/cars/f1model/liveries/ferrari/body.png"
+      "body": "/models/cars/f1model/liveries/ferrari/body.jpg"
     },
     "mclaren": {
       "body": "/models/cars/f1model/liveries/mclaren/body.jpg"
     },
     "mercedes": {
-      "body": "/models/cars/f1model/liveries/mercedes/body.png"
+      "body": "/models/cars/f1model/liveries/mercedes/body.jpg"
     },
     "redbull": {
-      "body": "/models/cars/f1model/liveries/redbull/body.png"
+      "body": "/models/cars/f1model/liveries/redbull/body.jpg"
     },
     "williams": {
       "body": "/models/cars/f1model/liveries/williams/body.jpg"
