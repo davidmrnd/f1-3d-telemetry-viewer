@@ -534,7 +534,7 @@ export class RaceScene {
       this.camera.quaternion.copy(this.xrYaw);
       if (mode === "orbit") {
         this.xrHead.matrixWorld.multiplyMatrices(this.xrRig.viewerRoot.matrixWorld, this.xrHead.matrix);
-        const turn = this.xrFlight.update(this.camera, this.xrHead, this.xrControllers.getInputSources(), deltaSeconds, !this.xrHeadValid || (this.xrInterface?.isInteracting() ?? false));
+        const turn = this.xrFlight.update(this.camera, this.xrHead, this.xrControllers.getInputSources(), deltaSeconds, !this.xrHeadValid || (this.xrInterface?.isDragging() ?? false));
         if (turn) this.xrYaw.copy(this.camera.quaternion);
       } else {
         this.xrFlight.reset();

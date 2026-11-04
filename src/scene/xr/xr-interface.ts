@@ -50,6 +50,7 @@ export class XrInterface {
 
   isOpen() { return this.controls.surface.mesh.visible; }
   isInteracting() { return this.isOpen() || this.driverWindows.gallery.surface.mesh.visible || this.drag !== null; }
+  isDragging() { return this.drag !== null; }
   setDrivers(drivers: DriverInfo[]) {
     this.drivers = drivers; this.controls.invalidate(); this.wrist.invalidate();
     this.driverWindows.setDrivers(drivers); this.wall.invalidate();
