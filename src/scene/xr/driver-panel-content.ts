@@ -49,7 +49,8 @@ export function paintDriverPanel(surface: ReturnType<typeof createXrPanel>, driv
     metric(ctx, 254, 546, 212, "FRENO", value(sample?.brake, " %"));
     metric(ctx, 484, 546, 212, "EDAD NEUMÁTICO", value(sample?.tyreAge, " vueltas"));
     panelRoundedBox(ctx, 24, 668, 672, 56, true);
-    panelText(ctx, "Historial de radios", 251, 696, 24, "#fff", 700);
+    panelText(ctx, "Historial de radios", 48, 696, 24, "#fff", 700);
+    panelText(ctx, "›", 650, 696, 32, driver.teamColor, 800);
   } else {
     ctx.fillStyle = "rgba(255, 255, 255, .12)";
     ctx.beginPath(); ctx.roundRect(24, 330, 672, 60, 18); ctx.fill();

@@ -125,6 +125,7 @@ export interface TeamRadioControls {
   getClips(driverNumber: number): readonly TeamRadioClip[];
   getAction(clip: TeamRadioClip): string;
   toggle(clip: TeamRadioClip): void;
+  jumpTo(clip: TeamRadioClip): void;
   stop(driverNumber?: number): void;
   unlock(): void;
 }

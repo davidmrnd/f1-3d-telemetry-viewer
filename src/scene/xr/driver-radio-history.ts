@@ -5,6 +5,10 @@ const PAGE_SIZE = 5;
 const ROW_TOP = 120;
 const ROW_STEP = 82;
 const ROW_HEIGHT = 72;
+const ACTION_TOP = 12;
+const ACTION_HEIGHT = 48;
+const JUMP_LEFT = 488;
+const JUMP_WIDTH = 190;
 const PAGE_TOP = 544;
 const BACK_TOP = 610;
 const BUTTON_HEIGHT = 48;
@@ -31,7 +35,10 @@ export class DriverRadioHistory {
     const row = y - ROW_TOP;
     if (row >= 0 && row < PAGE_SIZE * ROW_STEP && row % ROW_STEP < ROW_HEIGHT) {
       const clip = clips[this.page * PAGE_SIZE + Math.floor(row / ROW_STEP)];
-      if (clip) this.controls.toggle(clip);
+      const rowY = row % ROW_STEP;
+      if (!clip || rowY < ACTION_TOP || rowY > ACTION_TOP + ACTION_HEIGHT) return;
+      if (x >= 38 && x <= 86) this.controls.toggle(clip);
+      else if (x >= JUMP_LEFT && x <= JUMP_LEFT + JUMP_WIDTH) this.controls.jumpTo(clip);
     } else if (y >= PAGE_TOP && y <= PAGE_TOP + BUTTON_HEIGHT) {
       if (x <= 144 && this.page > 0) this.page--;
       if (x >= 576 && (this.page + 1) * PAGE_SIZE < clips.length) this.page++;
@@ -55,8 +62,12 @@ export class DriverRadioHistory {
       const seconds = Math.floor(clip.time / 1000);
       const time = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
       panelRoundedBox(ctx, 24, y, 672, ROW_HEIGHT, action === "Pausar");
-      panelText(ctx, `Radio ${first + index + 1} · ${time}`, 48, y + ROW_HEIGHT / 2, 23, "#fff", 600);
-      panelText(ctx, action, 520, y + ROW_HEIGHT / 2, 21, action === "Reintentar" ? "#ff545e" : "#d0dbe9");
+      panelRoundedBox(ctx, 38, y + ACTION_TOP, 48, ACTION_HEIGHT, true);
+      panelText(ctx, action === "Pausar" ? "Ⅱ" : action === "Reintentar" ? "↻" : "▶", 51, y + 36, 23, this.driver.teamColor, 800);
+      panelText(ctx, `Radio ${String(first + index + 1).padStart(2, "0")}`, 104, y + 24, 22, "#fff", 700);
+      panelText(ctx, time, 104, y + 49, 17, "#b3bdcd");
+      panelRoundedBox(ctx, JUMP_LEFT, y + ACTION_TOP, JUMP_WIDTH, ACTION_HEIGHT, true);
+      panelText(ctx, "Ir al instante ›", JUMP_LEFT + 18, y + ROW_HEIGHT / 2, 21, "#edf2fa", 600);
     });
 
     const pages = Math.ceil(clips.length / PAGE_SIZE);

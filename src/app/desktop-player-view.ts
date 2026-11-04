@@ -47,7 +47,7 @@ export class DesktopPlayerView {
   private readonly onboard = mustQuery<HTMLButtonElement>("#driver-onboard");
   private readonly onboardLabel = mustQuery<HTMLElement>("#driver-onboard span");
   private readonly radioList = mustQuery<HTMLElement>("#driver-radios");
-  private readonly radioButtons = new Map<TeamRadioClip, HTMLElement>();
+  private readonly radioButtons = new Map<TeamRadioClip, { button: HTMLButtonElement; icon: SVGUseElement }>();
   private readonly auto = mustQuery<HTMLButtonElement>("#camera-auto");
   private readonly free = mustQuery<HTMLButtonElement>("#camera-free");
   private readonly timingTower = mustQuery<HTMLElement>("#timing-tower");
@@ -252,26 +252,44 @@ export class DesktopPlayerView {
     this.radioList.replaceChildren();
     const clips = this.radio.getClips(driverNumber);
     if (!clips.length) this.radioList.append(label("p", "data-note", "Sin radios disponibles en este tramo."));
-    for (const clip of clips) {
+    for (const [index, clip] of clips.entries()) {
+      const row = label("div", "driver-radio", "");
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "driver-onboard";
-      const action = label("span", "", "");
-      button.append(label("span", "", formatReplayTime(clip.time)), action);
+      button.className = "driver-radio__control";
+      const svg = document.createElementNS(SVG_NS, "svg");
+      const icon = document.createElementNS(SVG_NS, "use");
+      svg.setAttribute("viewBox", "0 0 24 24");
+      svg.setAttribute("aria-hidden", "true");
+      svg.append(icon);
+      button.append(svg);
+      const copy = label("span", "driver-radio__copy", "");
+      copy.append(label("strong", "", `Radio ${String(index + 1).padStart(2, "0")}`), label("span", "driver-radio__time", formatReplayTime(clip.time)));
+      const jump = document.createElement("button");
+      jump.type = "button";
+      jump.className = "driver-radio__jump";
+      jump.textContent = "Ir al instante";
+      jump.setAttribute("aria-label", `Ir al instante de la radio ${index + 1}`);
+      jump.addEventListener("click", () => this.radio.jumpTo(clip));
+      row.append(button, copy, jump);
       button.addEventListener("click", () => {
         this.radio.toggle(clip);
         this.updateRadioButtons();
       });
-      this.radioButtons.set(clip, action);
-      this.radioList.append(button);
+      this.radioButtons.set(clip, { button, icon });
+      this.radioList.append(row);
     }
     this.updateRadioButtons();
   }
 
   private updateRadioButtons() {
-    for (const [clip, action] of this.radioButtons) {
+    for (const [clip, { button, icon }] of this.radioButtons) {
       const text = this.radio.getAction(clip);
-      if (action.textContent !== text) action.textContent = text;
+      const accessibleLabel = `${text} radio del ${formatReplayTime(clip.time)}`;
+      if (button.getAttribute("aria-label") === accessibleLabel) continue;
+      button.setAttribute("aria-label", accessibleLabel);
+      button.dataset.state = text === "Pausar" ? "playing" : text === "Reintentar" ? "error" : "ready";
+      icon.setAttribute("href", text === "Pausar" ? "#i-pause" : text === "Reintentar" ? "#i-reset" : "#i-play");
     }
   }
 

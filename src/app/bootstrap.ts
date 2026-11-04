@@ -37,7 +37,12 @@ export function startReplayApplication() {
 
   const ui = queryReplayElements();
 
-  const radioPlayer = new RadioPlayer();
+  const radioPlayer = new RadioPlayer(clip => {
+    const duration = replay.getController()?.getDuration() ?? 0;
+    if (duration <= 0) return;
+    const frame = replay.seek(Math.max(0, clip.time - 1000) / duration);
+    if (frame && !scene.isXrPresenting()) render(frame);
+  });
   const radioBroadcast = new RadioBroadcastView();
   const scene = new RaceScene(canvas, radioPlayer);
   const graphicsPerformance = new GraphicsPerformanceView(mustQuery<HTMLOutputElement>("#graphics-stats"));

@@ -27,7 +27,7 @@ export class RadioPlayer implements TeamRadioControls {
   private paused: RadioJob | null = null;
   private readonly failed = new Set<TeamRadioClip>();
 
-  constructor() {
+  constructor(readonly jumpTo: (clip: TeamRadioClip) => void) {
     window.addEventListener("click", this.unlock, { capture: true });
     window.addEventListener("pagehide", () => this.stop());
   }
