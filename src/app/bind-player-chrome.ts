@@ -42,7 +42,7 @@ export function bindPlayerChrome(replay: ReplayApp, onFrame: (frame: ReplayFrame
     }
     syncPanelButtons();
   };
-  const togglePanel = (name: keyof typeof panels) => setPanel(name, theater || panels[name].hidden);
+  const togglePanel = (name: keyof typeof panels) => setPanel(name, theater || Boolean(panels[name].hidden));
   const applyResponsivePanels = () => {
     panels.classification.hidden = compact.matches;
     panels.inspector.hidden = medium.matches;
@@ -67,7 +67,7 @@ export function bindPlayerChrome(replay: ReplayApp, onFrame: (frame: ReplayFrame
     settingsButton.setAttribute("aria-expanded", String(open));
     if (restoreFocus) settingsButton.focus({ preventScroll: true });
   };
-  settingsButton.addEventListener("click", () => setSettings(settings.hidden));
+  settingsButton.addEventListener("click", () => setSettings(Boolean(settings.hidden)));
   mustQuery("#settings-close").addEventListener("click", () => setSettings(false, true));
   shell.addEventListener("pointerdown", (event) => {
     if (!settings.hidden && !settings.contains(event.target as Node) && !settingsButton.contains(event.target as Node)) setSettings(false);
