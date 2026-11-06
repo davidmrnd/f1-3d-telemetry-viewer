@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import type { DriverInfo, ReplayFrame, TeamRadioControls } from "../../types";
+import type { DriverInfo, RaceMilestoneControls, ReplayFrame, TeamRadioControls } from "../../types";
+import { RaceMilestoneHistory, isMilestoneHistoryButton } from "./race-milestone-history";
 import { DriverRadioHistory, isRadioHistoryButton } from "./driver-radio-history";
 import { paintDriverPanel, type DriverPhoto } from "./driver-panel-content";
 import { panelRoundedBox, panelText, panelWindowBackground } from "./xr-panel";
@@ -7,7 +8,7 @@ import { XrFloatingWindow } from "./xr-floating-window";
 
 export class XrDriverWindows {
   readonly gallery: XrFloatingWindow;
-  private readonly details = new Map<number, { window: XrFloatingWindow; radio: DriverRadioHistory }>();
+  private readonly details = new Map<number, { window: XrFloatingWindow; radio: DriverRadioHistory; milestones: RaceMilestoneHistory }>();
   private readonly photos = new Map<string, DriverPhoto>();
   private drivers: DriverInfo[] = [];
   private frame: ReplayFrame | null = null;
@@ -15,7 +16,7 @@ export class XrDriverWindows {
   private lastPaint = -Infinity;
 
   constructor(private readonly parent: THREE.Object3D, private readonly onboard: (driver: number) => void,
-    private readonly radioControls: TeamRadioControls) {
+    private readonly radioControls: TeamRadioControls, private readonly milestoneControls: RaceMilestoneControls) {
     this.gallery = new XrFloatingWindow(parent, 960, 880, .76, "xr-driver-gallery");
   }
 
@@ -40,8 +41,9 @@ export class XrDriverWindows {
     let details = this.details.get(driverNumber);
     if (!details) {
       details = {
-        window: new XrFloatingWindow(this.parent, 720, 824, .56, `xr-driver-details-${driverNumber}`),
+        window: new XrFloatingWindow(this.parent, 720, 888, .56, `xr-driver-details-${driverNumber}`),
         radio: new DriverRadioHistory(this.radioControls, driver),
+        milestones: new RaceMilestoneHistory(this.milestoneControls, driver),
       };
       this.details.set(driverNumber, details);
     }
@@ -67,10 +69,16 @@ export class XrDriverWindows {
         }
       }
     } else {
-      for (const [number, { window, radio }] of this.details) {
+      for (const [number, { window, radio, milestones }] of this.details) {
         if (hit.object !== window.surface.mesh || radio.open) continue;
-        const x = hit.uv.x * 720, y = (1 - hit.uv.y) * 824;
-        if (isRadioHistoryButton(x, y)) {
+        const x = hit.uv.x * 720, y = (1 - hit.uv.y) * 888;
+        if (milestones.open) {
+          if (milestones.select(x, y)) this.closeWindow(window);
+          this.lastPaint = -Infinity;
+        } else if (isMilestoneHistoryButton(x, y)) {
+          milestones.open = true;
+          this.lastPaint = -Infinity;
+        } else if (isRadioHistoryButton(x, y)) {
           radio.open = true;
           this.lastPaint = -Infinity;
         } else if (x >= 24 && x <= 696 && y >= 742 && y <= 802) this.onboard(number);
@@ -82,13 +90,13 @@ export class XrDriverWindows {
     if (!hit.uv) return;
     for (const { window, radio } of this.details.values()) {
       if (hit.object !== window.surface.mesh || !radio.open) continue;
-      radio.select(hit.uv.x * 720, (1 - hit.uv.y) * 824);
+      radio.select(hit.uv.x * 720, (1 - hit.uv.y) * 888);
       this.lastPaint = -Infinity;
     }
   }
 
   closeWindow(window: XrFloatingWindow) {
-    for (const detail of this.details.values()) if (detail.window === window) detail.radio.close();
+    for (const detail of this.details.values()) if (detail.window === window) { detail.radio.close(); detail.milestones.close(); }
     window.close();
   }
 
@@ -96,12 +104,13 @@ export class XrDriverWindows {
     for (const window of this.windows()) if (window.surface.mesh.visible) window.surface.mesh.lookAt(head.position);
     if (this.gallery.surface.mesh.visible && this.dirty) this.paintGallery();
     if (now - this.lastPaint < 200) return;
-    for (const [number, { window, radio }] of this.details) {
+    for (const [number, { window, radio, milestones }] of this.details) {
       if (!window.surface.mesh.visible) continue;
       const driver = this.drivers.find(driver => driver.driverNumber === number);
-      if (radio.open) radio.paint(window.surface);
+      if (milestones.open) milestones.paint(window.surface);
+      else if (radio.open) radio.paint(window.surface);
       else if (driver) paintDriverPanel(window.surface, driver, this.frame?.cars.find(car => car.driver.driverNumber === number) ?? null,
-        this.photos.get(driver.headshotUrl), true, true);
+        this.photos.get(driver.headshotUrl), true, true, milestones.summary());
     }
     this.lastPaint = now;
   }

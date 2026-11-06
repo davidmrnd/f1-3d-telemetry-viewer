@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import type { TeamRadioControls } from "../../types";
+import type { RaceMilestoneControls, TeamRadioControls } from "../../types";
+import { RaceMilestoneHistory } from "../xr/race-milestone-history";
 import type { XrPlaybackState } from "../xr/xr-controls-panel";
 import type { TabletopModel } from "./tabletop-model";
 import { TabletopControlsPanel, type TabletopAction } from "./tabletop-controls-panel";
@@ -12,6 +13,7 @@ export class TabletopXr {
   private readonly controls = new TabletopControlsPanel();
   private readonly panel = this.controls.surface;
   private readonly driverPanels: TabletopDriverPanels;
+  private readonly circuitHistory: RaceMilestoneHistory;
   private readonly inputs: { ray: THREE.Group; grip: THREE.Group; pointer: THREE.Line; source: XRInputSource | null }[] = [];
   private readonly raycaster = new THREE.Raycaster();
   private readonly plane = new THREE.Plane(new THREE.Vector3(0, 1, 0));
@@ -35,9 +37,10 @@ export class TabletopXr {
     private readonly playback: {
       getState: () => XrPlaybackState; togglePlay: () => void; seek: (ratio: number) => void;
       jump: (seconds: number) => void; speed: (speed: number) => void; exit: () => void;
-    }, radio: TeamRadioControls) {
+    }, radio: TeamRadioControls, milestones: RaceMilestoneControls) {
     scene.add(this.panel.mesh);
-    this.driverPanels = new TabletopDriverPanels(scene, model, radio);
+    this.driverPanels = new TabletopDriverPanels(scene, model, radio, milestones);
+    this.circuitHistory = new RaceMilestoneHistory(milestones);
     this.raycaster.camera = this.head;
     for (let index = 0; index < 2; index++) {
       const ray = renderer.xr.getController(index);
@@ -84,6 +87,7 @@ export class TabletopXr {
   }
 
   resetInteraction() {
+    this.circuitHistory.close();
     this.locked = false;
     this.clearGrabs();
     this.controls.release();
@@ -136,7 +140,8 @@ export class TabletopXr {
     }
     this.model.setHoveredDrivers(hovered);
     if (this.panel.mesh.visible && now - this.lastPaint > 150) {
-      this.controls.paint(this.playback.getState(), this.locked, this.model.getWidth());
+      if (this.circuitHistory.open) this.circuitHistory.paint(this.panel);
+      else this.controls.paint(this.playback.getState(), this.locked, this.model.getWidth());
       this.lastPaint = now;
     }
   }
@@ -250,8 +255,11 @@ export class TabletopXr {
         const action = this.controls.interact(index, hit, "select", this.locked);
         if (action) this.act(action);
       } else if (hit.object === this.panel.mesh) {
-        const action = this.controls.hit(hit.uv.x, hit.uv.y, this.locked);
-        if (action) this.act(action);
+        if (this.circuitHistory.open) this.circuitHistory.select(hit.uv.x * 720, (1 - hit.uv.y) * 800);
+        else {
+          const action = this.controls.hit(hit.uv.x, hit.uv.y, this.locked);
+          if (action) this.act(action);
+        }
       } else this.driverPanels.interact(index, hit, this.head, "select");
     } else if (this.locked) {
       const driver = this.model.pickDriver(this.raycaster);
@@ -297,6 +305,7 @@ export class TabletopXr {
     else if (action.type === "back" || action.type === "forward") this.playback.jump(action.type === "back" ? -10 : 10);
     else if (action.type === "seek") this.playback.seek(action.value);
     else if (action.type === "speed") this.playback.speed(action.value);
+    else if (action.type === "milestones") this.circuitHistory.open = true;
     else if (action.type === "lock") {
       this.controls.release();
       this.locked = !this.locked;

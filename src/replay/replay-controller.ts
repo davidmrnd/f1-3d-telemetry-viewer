@@ -3,6 +3,7 @@ import type { DriverTrajectory } from "./interpolation/driver-trajectory";
 import { TelemetryTimeline } from "./interpolation/telemetry-timeline";
 import { buildLaneOffsetTimelines, buildLaneOffsetTimelineSteps } from "./overtakes/detect-side-by-side";
 import type { LaneOffsetTimeline } from "./overtakes/lane-offset-timeline";
+import { buildRaceMilestones } from "./events/race-milestones";
 import type {
   DriverInfo,
   FrameCarState,
@@ -51,10 +52,12 @@ function getActiveTrackStatus(intervals: TrackStatusInterval[], t: number): Trac
 }
 
 export class ReplayController {
+  readonly milestones;
   private readonly duration: number;
   private readonly tracks: DriverTrack[];
 
   constructor(private readonly segment: ReplaySegment, prepared?: PreparedReplay) {
+    this.milestones = buildRaceMilestones(segment);
     this.duration = segment.timeRange.end;
     const driversByNumber = new Map(segment.drivers.map((driver) => [driver.driverNumber, driver]));
     const trajectories = prepared?.trajectories ?? buildDriverTrajectories(segment);

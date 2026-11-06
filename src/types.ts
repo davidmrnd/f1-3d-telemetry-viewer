@@ -68,6 +68,36 @@ export interface ReplayEvent {
   metadata?: Record<string, unknown>;
 }
 
+export type RaceMilestoneKind = "finish" | "overtake" | "off_track" | "pit_entry";
+
+export interface RaceMilestone {
+  id: string;
+  kind: RaceMilestoneKind;
+  time: number;
+  drivers: number[];
+  label: string;
+  detail: string;
+  approximate: boolean;
+}
+
+export interface RaceMilestoneControls {
+  getMilestones(): readonly RaceMilestone[];
+  jumpTo(milestone: RaceMilestone, driverNumber?: number): void;
+}
+
+export interface PitStop {
+  driverNumber: number;
+  lapNumber: number;
+  entryTime: number;
+  exitTime: number;
+}
+
+export interface TyreStint {
+  driverNumber: number;
+  startLap: number;
+  lapTimes: number[];
+}
+
 export interface ReplayTimeRange {
   start: number;
   end: number;
@@ -140,6 +170,8 @@ export interface ReplaySegment {
   startingGrid: StartingGridSlot[];
   trackStatus: TrackStatusInterval[];
   teamRadio?: TeamRadioClip[];
+  pitStops?: PitStop[];
+  tyreStints?: TyreStint[];
   circuit: CircuitModel;
   notes: string[];
 }

@@ -33,7 +33,7 @@ import {
   createStartFinishDecor,
   type StartFinishDecor,
 } from "./start-finish";
-import type { DriverInfo, RadioBroadcastState, ReplayFrame, ReplaySegment, StartingGridSlot, TeamRadioClip, TeamRadioControls } from "../types";
+import type { DriverInfo, RaceMilestoneControls, RadioBroadcastState, ReplayFrame, ReplaySegment, StartingGridSlot, TeamRadioClip, TeamRadioControls } from "../types";
 import { paintRadioBroadcast, RADIO_CARD_HEIGHT, RADIO_CARD_WIDTH } from "./radio-broadcast-graphic";
 import { createXrPanel } from "./xr/xr-panel";
 import { XrRig } from "./xr/xr-rig";
@@ -112,7 +112,7 @@ export class RaceScene {
   private xrDriverInfo: DriverInfo[] = [];
   private xrInterface: XrInterface | null = null;
 
-  constructor(private readonly canvas: HTMLCanvasElement, private readonly radio: TeamRadioControls) {
+  constructor(private readonly canvas: HTMLCanvasElement, private readonly radio: TeamRadioControls, private readonly milestones: RaceMilestoneControls) {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
@@ -199,7 +199,7 @@ export class RaceScene {
       jump: seconds => this.xrHooks.onJump?.(seconds),
       speed: value => this.xrHooks.onSetSpeed?.(value),
       exit: () => { void this.exitVr(); },
-    }, radio);
+    }, radio, milestones);
 
     this.cameraController.setMode("broadcast", this.controls);
   }
@@ -463,6 +463,7 @@ export class RaceScene {
 
   setFollowDriver(driverNumber: number) {
     this.cameraController.setFollowDriver(driverNumber);
+    if (this.isArPresenting()) this.tabletop.setSelectedDriver(driverNumber);
     this.xrHooks.onFollowDriverChange?.(driverNumber);
   }
 
@@ -661,7 +662,7 @@ export class RaceScene {
             : (index + action.step + this.xrDrivers.length) % this.xrDrivers.length];
         if (driver !== undefined) { this.setFollowDriver(driver); if (this.getCameraMode() !== "onboard") this.setCameraMode("onboard"); }
       }
-    }, visible => this.xrHooks.onWristVisible?.(visible), this.radio);
+    }, visible => this.xrHooks.onWristVisible?.(visible), this.radio, this.milestones);
     this.xrInterface.setDrivers(this.xrDriverInfo);
     return this.xrInterface;
   }

@@ -8,7 +8,7 @@ const COMPOUND_COLORS: Record<string, string> = { SOFT: "#ff545e", MEDIUM: "#f3d
 const value = (number: number | null | undefined, suffix = "", digits = 0) =>
   number != null && Number.isFinite(number) ? `${number.toFixed(digits)}${suffix}` : "—";
 
-export function paintDriverPanel(surface: ReturnType<typeof createXrPanel>, driver: DriverInfo, car: FrameCarState | null, photo: DriverPhoto | undefined, detailed: boolean, onboard = false) {
+export function paintDriverPanel(surface: ReturnType<typeof createXrPanel>, driver: DriverInfo, car: FrameCarState | null, photo: DriverPhoto | undefined, detailed: boolean, onboard = false, overtakes = "") {
   const { context: ctx, texture } = surface;
   const height = surface.canvas.height;
   const sample = car?.sample;
@@ -59,6 +59,11 @@ export function paintDriverPanel(surface: ReturnType<typeof createXrPanel>, driv
   if (onboard) {
     panelRoundedBox(ctx, 24, 742, 672, 60, true);
     panelText(ctx, "Ver cámara a bordo", 238, 772, 24, "#fff", 700);
+  }
+  if (detailed && overtakes) {
+    panelRoundedBox(ctx, 24, 810, 672, 56, true);
+    panelText(ctx, "Adelantamientos ›", 40, 830, 22, "#fff", 700);
+    panelText(ctx, overtakes, 40, 853, 18, "#84f4c8", 600, 640);
   }
   texture.needsUpdate = true;
 }

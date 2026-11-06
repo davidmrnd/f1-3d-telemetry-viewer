@@ -1,12 +1,13 @@
 import * as THREE from "three";
-import type { DriverInfo, FrameCarState, TeamRadioControls } from "../../types";
+import type { DriverInfo, FrameCarState, RaceMilestoneControls, TeamRadioControls } from "../../types";
+import { RaceMilestoneHistory, isMilestoneHistoryButton } from "../xr/race-milestone-history";
 import { createXrPanel, panelText } from "../xr/xr-panel";
 import type { TabletopModel } from "./tabletop-model";
 import { paintDriverPanel } from "../xr/driver-panel-content";
 import { DriverRadioHistory, isRadioHistoryButton } from "../xr/driver-radio-history";
 
 type Surface = ReturnType<typeof createXrPanel>;
-type DriverWindow = { surface: Surface; bar: Surface | null; connector: THREE.Line | null; driver: DriverInfo; radio: DriverRadioHistory | null; detailed: boolean; following: boolean; height: number; lastPaint: number };
+type DriverWindow = { surface: Surface; bar: Surface | null; connector: THREE.Line | null; driver: DriverInfo; radio: DriverRadioHistory | null; milestones: RaceMilestoneHistory | null; detailed: boolean; following: boolean; height: number; lastPaint: number };
 type GrabInput = "select" | "squeeze";
 type PanelGrab = { window: DriverWindow; distance: number; localPoint: THREE.Vector3; held: Set<GrabInput> };
 type Photo = { image: HTMLImageElement; ready: boolean };
@@ -22,7 +23,7 @@ export class TabletopDriverPanels {
   private readonly grabOffset = new THREE.Vector3();
 
   constructor(private readonly scene: THREE.Scene, private readonly model: TabletopModel,
-    private readonly radioControls: TeamRadioControls) {}
+    private readonly radioControls: TeamRadioControls, private readonly milestoneControls: RaceMilestoneControls) {}
 
   showDriver(driverNumber: number, head: THREE.Camera) {
     const car = this.model.getDriverState(driverNumber);
@@ -65,6 +66,12 @@ export class TabletopDriverPanels {
     } else if (input === "select" && (hit.object === window.bar?.mesh && x >= 8 && x <= 88 && hit.uv.y >= .1 && hit.uv.y <= .9
       || !window.detailed && x >= 640 && x <= 704 && y >= 12 && y <= 64)) {
       this.close(window);
+    } else if (input === "select" && hit.object === window.surface.mesh && window.milestones?.open) {
+      window.milestones.select(x, y);
+      window.lastPaint = -Infinity;
+    } else if (input === "select" && hit.object === window.surface.mesh && window.milestones && !window.radio?.open && isMilestoneHistoryButton(x, y)) {
+      window.milestones.open = true;
+      window.lastPaint = -Infinity;
     } else if (input === "select" && hit.object === window.surface.mesh && window.radio && !window.radio.open && isRadioHistoryButton(x, y)) {
       window.radio.open = true;
       window.lastPaint = -Infinity;
@@ -147,7 +154,7 @@ export class TabletopDriverPanels {
   }
 
   private create(driver: DriverInfo, detailed: boolean) {
-    const height = detailed ? 740 : 410;
+    const height = detailed ? 888 : 410;
     const surface = createXrPanel(720, height, detailed ? .56 : .30, `ar-driver-${detailed ? "details" : "summary"}-${driver.driverNumber}`);
     surface.mesh.renderOrder = detailed ? 1002 : 1003;
     const bar = detailed ? createXrPanel(720, 88, .36, `ar-driver-handle-${driver.driverNumber}`) : null;
@@ -171,7 +178,8 @@ export class TabletopDriverPanels {
       new THREE.LineBasicMaterial({ color: driver.teamColor, transparent: true, opacity: .7, depthWrite: false, toneMapped: false }));
     if (connector) { connector.visible = false; this.scene.add(connector); }
     const radio = detailed ? new DriverRadioHistory(this.radioControls, driver) : null;
-    const window = { surface, bar, connector, driver, radio, detailed, following: false, height, lastPaint: -Infinity };
+    const milestones = detailed ? new RaceMilestoneHistory(this.milestoneControls, driver) : null;
+    const window = { surface, bar, connector, driver, radio, milestones, detailed, following: false, height, lastPaint: -Infinity };
     this.windows.push(window);
     this.scene.add(surface.mesh);
     return window;
@@ -207,6 +215,7 @@ export class TabletopDriverPanels {
 
   private close(window: DriverWindow) {
     window.radio?.close();
+    window.milestones?.close();
     window.surface.mesh.visible = false;
     window.following = false;
     if (window.connector) window.connector.visible = false;
@@ -229,7 +238,8 @@ export class TabletopDriverPanels {
   }
 
   private paint(window: DriverWindow, car: FrameCarState | null) {
-    if (window.radio?.open) window.radio.paint(window.surface);
-    else paintDriverPanel(window.surface, window.driver, car, this.photos.get(window.driver.headshotUrl), window.detailed);
+    if (window.milestones?.open) window.milestones.paint(window.surface);
+    else if (window.radio?.open) window.radio.paint(window.surface);
+    else paintDriverPanel(window.surface, window.driver, car, this.photos.get(window.driver.headshotUrl), window.detailed, false, window.milestones?.summary());
   }
 }

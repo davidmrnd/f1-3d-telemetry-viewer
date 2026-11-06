@@ -27,5 +27,6 @@ export function bindTabletop(scene: RaceScene) {
   width.addEventListener("input", () => { scene.setTabletopWidth(Number(width.value)); sync(); });
   rotation.addEventListener("input", () => scene.setTabletopRotation(Number(rotation.value)));
   mustQuery("#app").addEventListener("xrsessionchange", sync);
+  mustQuery("#app").addEventListener("presentationchange", sync);
   sync();
 }

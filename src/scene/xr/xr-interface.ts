@@ -1,10 +1,11 @@
 import * as THREE from "three";
-import type { DriverInfo, ReplayFrame, TeamRadioControls } from "../../types";
+import type { DriverInfo, RaceMilestoneControls, ReplayFrame, TeamRadioControls } from "../../types";
 import type { XrControllers } from "./xr-controllers";
 import { XrControlsPanel, type XrControlsState, type XrUiAction } from "./xr-controls-panel";
 import { XrWristTiming } from "./xr-wrist-timing";
 import { XrDriverWindows } from "./xr-driver-windows";
 import { XrFloatingWindow } from "./xr-floating-window";
+import { RaceMilestoneHistory } from "./race-milestone-history";
 
 export class XrInterface {
   readonly controls = new XrControlsPanel();
@@ -13,6 +14,8 @@ export class XrInterface {
   readonly driverWindows: XrDriverWindows;
   private readonly worldPanels = new THREE.Group();
   private readonly wallWindow: XrFloatingWindow;
+  private readonly circuitWindow: XrFloatingWindow;
+  private readonly circuitHistory: RaceMilestoneHistory;
   private readonly worldHeadCamera = new THREE.PerspectiveCamera();
   private exported = false;
   private wristEnabled: boolean;
@@ -34,10 +37,12 @@ export class XrInterface {
   constructor(private readonly reference: THREE.Group, wristVisible: boolean,
     private readonly getState: () => Omit<XrControlsState, "wristVisible" | "driverLabel"> & { followDriver: number | null },
     private readonly action: (action: XrUiAction | { type: "follow"; driver: number }) => void,
-    private readonly onWrist: (enabled: boolean) => void, radio: TeamRadioControls) {
+    private readonly onWrist: (enabled: boolean) => void, radio: TeamRadioControls, milestones: RaceMilestoneControls) {
     this.wristEnabled = wristVisible;
     this.wallWindow = new XrFloatingWindow(this.worldPanels, 384, 640, .38, "xr-wall-timing", this.wall.surface);
-    this.driverWindows = new XrDriverWindows(this.worldPanels, driver => this.action({ type: "follow", driver }), radio);
+    this.driverWindows = new XrDriverWindows(this.worldPanels, driver => this.action({ type: "follow", driver }), radio, milestones);
+    this.circuitWindow = new XrFloatingWindow(this.worldPanels, 720, 824, .62, "xr-circuit-milestones");
+    this.circuitHistory = new RaceMilestoneHistory(milestones);
     reference.add(this.controls.surface.mesh, this.worldPanels);
     this.pointer = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]),
       new THREE.LineBasicMaterial({ color: 0xe50914, transparent: true, opacity: .85, depthTest: false, depthWrite: false, toneMapped: false }));
@@ -49,12 +54,13 @@ export class XrInterface {
   }
 
   isOpen() { return this.controls.surface.mesh.visible; }
-  isInteracting() { return this.isOpen() || this.driverWindows.gallery.surface.mesh.visible || this.drag !== null; }
+  isInteracting() { return this.isOpen() || this.circuitWindow.surface.mesh.visible || this.driverWindows.gallery.surface.mesh.visible || this.drag !== null; }
   isDragging() { return this.drag !== null; }
   setDrivers(drivers: DriverInfo[]) {
     this.drivers = drivers; this.controls.invalidate(); this.wrist.invalidate();
     this.driverWindows.setDrivers(drivers); this.wall.invalidate();
     this.wallWindow.close(); this.exported = false; this.drag = null;
+    this.circuitWindow.close(); this.circuitHistory.close();
   }
   setFrame(frame: ReplayFrame) { this.wrist.setFrame(frame); this.wall.setFrame(frame); this.driverWindows.setFrame(frame); }
 
@@ -72,6 +78,7 @@ export class XrInterface {
     this.controls.surface.mesh.visible = false;
     this.wrist.surface.mesh.visible = false;
     this.wallWindow.close();
+    this.circuitWindow.close(); this.circuitHistory.close();
     this.exported = false;
     this.driverWindows.reset();
     this.worldPanels.removeFromParent();
@@ -102,6 +109,9 @@ export class XrInterface {
   update(now: number) {
     this.updateDrag();
     this.driverWindows.update(now, this.worldHeadCamera);
+    if (this.circuitWindow.surface.mesh.visible) {
+      this.circuitWindow.surface.mesh.lookAt(this.worldHead);
+    }
     if (this.controls.needsUpdate(now)) {
       const state = this.getState();
       const driver = this.drivers.find(d => d.driverNumber === state.followDriver);
@@ -129,11 +139,16 @@ export class XrInterface {
         const x = hit.uv.x * 720;
         if (x >= 8 && x <= 88) {
           if (floating === this.wallWindow) this.attachWrist();
+          else if (floating === this.circuitWindow) { this.circuitWindow.close(); this.circuitHistory.close(); }
           else if (floating) this.driverWindows.closeWindow(floating);
           else this.controls.surface.mesh.visible = false;
           this.drag = null;
         } else if (x >= 112 && x <= 708) this.startDrag(hit, "select", floating?.surface.mesh ?? this.controls.surface.mesh);
       }
+    } else if (hit.object === this.circuitWindow.surface.mesh) {
+      if (this.circuitHistory.select(hit.uv.x * 720, (1 - hit.uv.y) * 824) || !this.circuitHistory.open) {
+        this.circuitWindow.close(); this.circuitHistory.close();
+      } else this.circuitHistory.paint(this.circuitWindow.surface);
     } else if (hit.object === this.wrist.surface.mesh || hit.object === this.wall.surface.mesh) {
       const timing = hit.object === this.wrist.surface.mesh ? this.wrist : this.wall;
       const action = timing.hit(hit.uv.x, hit.uv.y);
@@ -149,6 +164,12 @@ export class XrInterface {
         else this.wristEnabled = !this.wristEnabled;
         this.onWrist(this.wristEnabled);
       } else if (action?.type === "drivers") this.driverWindows.showGallery(this.worldHeadCamera);
+      else if (action?.type === "milestones") {
+        this.circuitHistory.open = true;
+        this.circuitWindow.place(this.worldHeadCamera, -.72);
+        this.circuitHistory.paint(this.circuitWindow.surface);
+        this.controls.surface.mesh.visible = false;
+      }
       else if (action) this.action(action);
     } else this.driverWindows.select(hit, this.worldHeadCamera);
     this.controls.invalidate();
@@ -169,7 +190,7 @@ export class XrInterface {
       && hit.uv.y >= .1 && hit.uv.y <= .9) this.startDrag(hit, "squeeze", floating?.surface.mesh ?? this.controls.surface.mesh);
   }
 
-  private floatingWindows() { return [this.wallWindow, ...this.driverWindows.windows()]; }
+  private floatingWindows() { return [this.wallWindow, this.circuitWindow, ...this.driverWindows.windows()]; }
 
   private exportWrist() {
     this.exported = true;

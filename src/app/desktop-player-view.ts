@@ -1,5 +1,6 @@
 import type { CameraMode } from "../scene/cameras/types";
-import type { DriverInfo, ReplayFrame, ReplaySegment, TeamRadioClip, TeamRadioControls } from "../types";
+import type { DriverInfo, RaceMilestoneControls, ReplayFrame, ReplaySegment, TeamRadioClip, TeamRadioControls } from "../types";
+import { MilestoneListView } from "./milestone-list-view";
 import { projectCircuit } from "./circuit-map";
 import { mustQuery } from "./dom";
 import { formatDelta, formatReplayTime } from "./format";
@@ -36,6 +37,8 @@ function driverPortrait(driver: DriverInfo) {
 }
 
 export class DesktopPlayerView {
+  private readonly circuitMilestones: MilestoneListView;
+  private readonly driverMilestones: MilestoneListView;
   private readonly drivers = new Map<number, DriverInfo>();
   private readonly panel = mustQuery<HTMLElement>("#panel-drivers");
   private readonly driversTab = mustQuery<HTMLButtonElement>("#tab-drivers");
@@ -80,10 +83,14 @@ export class DesktopPlayerView {
     private readonly onCamera: (mode: CameraMode, driver?: number) => void,
     private readonly showInspector: () => void,
     private readonly radio: TeamRadioControls,
+    private readonly milestones: RaceMilestoneControls,
   ) {
+    this.circuitMilestones = new MilestoneListView(mustQuery("#circuit-milestones"), milestones);
+    this.driverMilestones = new MilestoneListView(mustQuery("#driver-milestones"), milestones, true);
     const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-tab]"));
     const activateTab = (tab: HTMLButtonElement, focus = false) => {
       this.selectedTab = tab.dataset.tab!;
+      mustQuery<HTMLElement>("#inspector-panel").dataset.activeTab = this.selectedTab;
       this.lastUpdate = -Infinity;
       for (const item of tabs) {
         const active = item === tab;
@@ -123,6 +130,8 @@ export class DesktopPlayerView {
   }
 
   setSegment(segment: ReplaySegment) {
+    this.circuitMilestones.setItems(this.milestones.getMilestones());
+    this.driverMilestones.setItems([]);
     this.selectedDriver = null;
     this.galleryScroll = 0;
     this.cameraKey = "";
@@ -233,6 +242,7 @@ export class DesktopPlayerView {
       this.telemetry.driver.textContent = driverName(driver.fullName);
       this.telemetry.team.textContent = driver.teamName;
       this.showRadios(driver.driverNumber);
+      this.driverMilestones.setItems(this.milestones.getMilestones(), driver.driverNumber);
     }
     this.gallery.hidden = true;
     this.detail.hidden = false;

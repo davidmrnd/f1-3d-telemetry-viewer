@@ -24,6 +24,7 @@ import { GraphicsPerformanceView } from "./graphics-performance-view";
 
 import { queryReplayElements } from "./replay-elements";
 import { createRaceLoader } from "./race-loader";
+import type { RaceMilestoneControls } from "../types";
 
 export function startReplayApplication() {
   const canvas = mustQuery<HTMLCanvasElement>("#race-canvas");
@@ -44,7 +45,29 @@ export function startReplayApplication() {
     if (frame && !scene.isXrPresenting()) render(frame);
   });
   const radioBroadcast = new RadioBroadcastView();
-  const scene = new RaceScene(canvas, radioPlayer);
+  const milestones: RaceMilestoneControls = {
+    getMilestones: () => replay.getController()?.milestones ?? [],
+    jumpTo: (milestone, driverNumber) => {
+      const controller = replay.getController();
+      if (!controller || controller.getDuration() <= 0) return;
+      radioPlayer.stop();
+      if (!scene.isXrPresenting() && scene.getPresentationMode() === "tabletop") {
+        scene.setPresentationMode("realistic");
+        appShell.dispatchEvent(new Event("presentationchange"));
+      }
+      const driver = driverNumber ?? milestone.drivers[0];
+      if (driver != null) {
+        scene.setFollowDriver(driver);
+        scene.setCameraMode("onboard");
+      }
+      replay.playing = true;
+      const frame = replay.seek(Math.max(0, milestone.time - 4000) / controller.getDuration());
+      resetClock();
+      syncPlayButton(true);
+      if (frame && !scene.isXrPresenting()) render(frame);
+    },
+  };
+  const scene = new RaceScene(canvas, radioPlayer, milestones);
   const graphicsPerformance = new GraphicsPerformanceView(mustQuery<HTMLOutputElement>("#graphics-stats"));
   const replay = new ReplayApp(radioPlayer);
   const timingTower = new TimingTowerView(
@@ -88,7 +111,7 @@ export function startReplayApplication() {
     if (mode !== scene.getCameraMode()) scene.setCameraMode(mode);
     const controller = replay.getController();
     if (controller) render(controller.getFrame(replay.currentTime));
-  }, showInspector, radioPlayer);
+  }, showInspector, radioPlayer, milestones);
 
   const raceLoader = createRaceLoader({
     appShell, changeRaceButton, racePicker, ui, scene, replay,

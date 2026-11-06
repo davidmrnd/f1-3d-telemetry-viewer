@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { createXrPanel, panelText } from "../xr/xr-panel";
 import type { XrPlaybackState } from "../xr/xr-controls-panel";
 
-export type TabletopAction = { type: "play" | "back" | "forward" | "lower" | "higher" | "lock" | "recenter" | "hide" | "exit" }
+export type TabletopAction = { type: "play" | "back" | "forward" | "lower" | "higher" | "lock" | "recenter" | "hide" | "exit" | "milestones" }
   | { type: "seek" | "speed"; value: number };
 type Button = { x: number; y: number; w: number; h: number; label: string; type: Exclude<TabletopAction["type"], "seek" | "speed"> };
 
@@ -15,6 +15,7 @@ const BUTTONS: Button[] = [
   { x: 200, y: 524, w: 320, h: 56, label: "", type: "play" },
   { x: 536, y: 524, w: 160, h: 56, label: "+10 s", type: "forward" },
   { x: 24, y: 744, w: 672, h: 44, label: "Salir de AR", type: "exit" },
+  { x: 24, y: 674, w: 672, h: 48, label: "Hitos del circuito", type: "milestones" },
 ];
 
 export class TabletopControlsPanel {
@@ -141,8 +142,6 @@ export class TabletopControlsPanel {
       this.box(ctx, 24 + i * 168, 612, 160, 44, state.speed === speed);
       panelText(ctx, `${speed}×`, 84 + i * 168, 634, 21);
     }
-    panelText(ctx, locked ? "Menú / X del mando izquierdo: abrir o cerrar ajustes" : "Stick izq.: mover · Stick der.: giro / tamaño", 24, 692, 18, "#929eaf");
-    panelText(ctx, locked ? "Puedes abrir detalles de varios pilotos a la vez." : "Paso necesario: fija el circuito para seleccionar pilotos.", 24, 720, 17, "#b3c0ce");
     this.surface.texture.needsUpdate = true;
     const bar = this.bar.context;
     bar.clearRect(0, 0, 720, 88);

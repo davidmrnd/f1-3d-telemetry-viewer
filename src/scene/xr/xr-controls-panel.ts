@@ -4,7 +4,7 @@ import { createXrPanel, createXrWindowBar, panelRoundedBox, panelText, panelWind
 
 export type XrPlaybackState = { playing: boolean; normalizedTime: number; timeLabel: string; speed: number };
 export type XrControlsState = XrPlaybackState & { cameraMode: CameraMode; driverLabel: string; wristVisible: boolean };
-export type XrUiAction = { type: "play" | "close" | "wrist" | "exit" | "drivers" } | { type: "jump"; seconds: number }
+export type XrUiAction = { type: "play" | "close" | "wrist" | "exit" | "drivers" | "milestones" } | { type: "jump"; seconds: number }
   | { type: "seek"; ratio: number } | { type: "camera"; mode: CameraMode }
   | { type: "driver"; step: number } | { type: "speed"; value: number };
 type Button = { x: number; y: number; w: number; h: number; label: string; action: XrUiAction };
@@ -20,7 +20,8 @@ const BUTTONS: Button[] = [
   { x: 624, y: 154, w: 120, h: 56, label: "+30 s", action: { type: "jump", seconds: 30 } },
   ...(["onboard", "orbit"] as CameraMode[]).map((mode, i) => ({ x: 24 + i * 366, y: 258, w: 354, h: 52,
     label: ["A bordo", "Libre"][i], action: { type: "camera" as const, mode } })),
-  { x: 24, y: 326, w: 720, h: 52, label: "Elegir piloto · fotos y detalles", action: { type: "drivers" } },
+  { x: 24, y: 326, w: 354, h: 52, label: "Elegir piloto", action: { type: "drivers" } },
+  { x: 390, y: 326, w: 354, h: 52, label: "Hitos del circuito", action: { type: "milestones" } },
   ...[.5, 1, 1.5, 2].map((value, i) => ({ x: 24 + i * 104, y: 412, w: 92, h: 44,
     label: `${value}×`, action: { type: "speed" as const, value } })),
   { x: 464, y: 412, w: 280, h: 44, label: "", action: { type: "wrist" } },
