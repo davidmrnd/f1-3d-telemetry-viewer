@@ -1,9 +1,11 @@
 import * as THREE from "three";
-import type { CarSample, ReplayFrame, ReplaySegment } from "../types";
+import type { CarSample, ReplaySegment } from "../types";
+import type { BaseCarPlacement, DriverGridHolds } from "./car-placement";
 import { TrackPath } from "./cameras/automatic/track-path";
+import { StartingGridPlacement } from "./grid-placement";
+import { buildStartingGridPoses, createStartingGridMarkings, GRID_FIRST_CAR_BEHIND_LINE_METERS, type StartingGridReference } from "./starting-grid";
 import { metersToScene, type SceneTransform, vectorFromPoint } from "./track-geometry";
 
-const LINE_AHEAD_OF_FRONT_CAR_METERS = 10;
 const LINE_DEPTH_METERS = 1.1;
 const GANTRY_CLEARANCE_METERS = 1.8;
 const GANTRY_HEIGHT_METERS = 6.2;
@@ -17,30 +19,13 @@ const LIGHTS_ALL_RED_MS = 1100;
 const LIGHTS_OFF_STEP_MS = 700;
 const LIGHTS_GREEN_MS = 900;
 const LAUNCH_SPEED_KMH = 8;
-const LAUNCH_HOLD_LEAD_MS =
-  LIGHTS_ALL_RED_MS + LIGHT_COUNT * LIGHTS_OFF_STEP_MS + 2500;
 
 type LightMode = "off" | "red" | "green";
 
-export interface LaunchHoldPose {
-  x: number;
-  y: number;
-  z: number;
-  heading: number;
-  pitch: number;
-}
-
 export interface StartFinishDecor {
   group: THREE.Group;
-  greenAt: number | null;
-  launchHoldPoses: Map<number, LaunchHoldPose>;
+  placeCars(placements: BaseCarPlacement[], now: number): BaseCarPlacement[];
   update(now: number): void;
-}
-
-interface StartFinishPose {
-  origin: THREE.Vector3;
-  tangent: THREE.Vector3;
-  normal: THREE.Vector3;
 }
 
 export function createStartFinishDecor(
@@ -48,6 +33,7 @@ export function createStartFinishDecor(
   pathPoints: THREE.Vector3[],
   transform: SceneTransform,
   trackWidth: number,
+  gridHolds: DriverGridHolds,
 ): StartFinishDecor | null {
   if (pathPoints.length < 2) {
     return null;
@@ -100,54 +86,17 @@ export function createStartFinishDecor(
   group.add(lights.group);
 
   const greenAt = resolveRaceGoTime(segment);
-  const launchHoldPoses = buildLaunchHoldPoses(segment, greenAt);
+  const path = new TrackPath(pathPoints);
+  const gridPoses = buildStartingGridPoses(segment.startingGrid ?? [], pose, path, transform);
+  const gridPlacement = new StartingGridPlacement(segment, gridPoses, gridHolds, greenAt, path, transform);
+  group.add(createStartingGridMarkings(gridPoses, path, transform));
 
   return {
     group,
-    greenAt,
-    launchHoldPoses,
+    placeCars: (placements, now) => gridPlacement.apply(placements, now),
     update(now) {
       lights.setModes(resolveLightModes(now, greenAt));
     },
-  };
-}
-
-export function applyLaunchHoldToFrame(
-  frame: ReplayFrame,
-  greenAt: number | null,
-  poses: Map<number, LaunchHoldPose>,
-): ReplayFrame {
-  if (greenAt === null || frame.now >= greenAt || poses.size === 0) {
-    return frame;
-  }
-
-  const phase = frame.trackStatus?.phase;
-  const inStandingStart = phase === "standing_start";
-  const inLightsWindow = frame.now >= greenAt - LAUNCH_HOLD_LEAD_MS;
-  if (!inStandingStart && !inLightsWindow) {
-    return frame;
-  }
-
-  return {
-    ...frame,
-    cars: frame.cars.map((car) => {
-      const pose = poses.get(car.driver.driverNumber);
-      if (!pose) {
-        return car;
-      }
-      return {
-        ...car,
-        sample: {
-          ...car.sample,
-          x: pose.x,
-          y: pose.y,
-          z: pose.z,
-          speed: 0,
-        },
-        heading: pose.heading,
-        pitch: pose.pitch,
-      };
-    }),
   };
 }
 
@@ -176,68 +125,6 @@ function resolveRaceGoTime(segment: ReplaySegment): number | null {
   }
 
   return launchAt ?? standing.end;
-}
-
-function buildLaunchHoldPoses(
-  segment: ReplaySegment,
-  greenAt: number | null,
-): Map<number, LaunchHoldPose> {
-  const poses = new Map<number, LaunchHoldPose>();
-  if (greenAt === null) {
-    return poses;
-  }
-
-  const freezeAt = greenAt - 1;
-  for (const [driverKey, samples] of Object.entries(segment.samples)) {
-    if (samples.length === 0) {
-      continue;
-    }
-    const driverNumber = Number(driverKey);
-    const sample = nearestSample(samples, freezeAt);
-    if (!sample) {
-      continue;
-    }
-
-    let heading = 0;
-    let pitch = 0;
-    const index = samples.findIndex((entry) => entry.t === sample.t);
-    const prev = index > 0 ? samples[index - 1] : null;
-    const next = samples.find((entry) => entry.t > sample.t && entry.speed >= LAUNCH_SPEED_KMH);
-    if (next) {
-      heading = openf1Heading(sample, next);
-      pitch = openf1Pitch(sample, next);
-    } else if (prev) {
-      heading = openf1Heading(prev, sample);
-      pitch = openf1Pitch(prev, sample);
-    }
-
-    poses.set(driverNumber, {
-      x: sample.x,
-      y: sample.y,
-      z: sample.z,
-      heading,
-      pitch,
-    });
-  }
-
-  return poses;
-}
-
-function openf1Heading(from: CarSample, to: CarSample): number {
-  const dx = to.x - from.x;
-  const dz = from.z - to.z;
-  if (dx * dx + dz * dz < 1e-6) {
-    return 0;
-  }
-  return Math.atan2(dz, dx);
-}
-
-function openf1Pitch(from: CarSample, to: CarSample): number {
-  const horizontal = Math.hypot(to.x - from.x, to.z - from.z);
-  if (horizontal * horizontal < 1e-6) {
-    return 0;
-  }
-  return Math.atan2(to.y - from.y, horizontal);
 }
 
 function resolveLightModes(now: number, goTime: number | null): LightMode[] {
@@ -273,7 +160,7 @@ function resolveStartFinishPose(
   segment: ReplaySegment,
   pathPoints: THREE.Vector3[],
   transform: SceneTransform,
-): StartFinishPose | null {
+): StartingGridReference | null {
   const path = new TrackPath(pathPoints);
   if (path.totalLength < 1) {
     return null;
@@ -303,7 +190,7 @@ function resolveStartFinishPose(
   }
 
   const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-  const ahead = metersToScene(LINE_AHEAD_OF_FRONT_CAR_METERS, transform);
+  const ahead = metersToScene(GRID_FIRST_CAR_BEHIND_LINE_METERS, transform);
   const origin = projection.point.clone().addScaledVector(tangent, ahead);
   origin.y = projection.point.y;
 
@@ -373,7 +260,7 @@ function nearestSample(samples: CarSample[], t: number): CarSample | null {
   return best;
 }
 
-function placeOnTrack(mesh: THREE.Mesh, origin: THREE.Vector3, pose: StartFinishPose) {
+function placeOnTrack(mesh: THREE.Mesh, origin: THREE.Vector3, pose: StartingGridReference) {
   const up = new THREE.Vector3(0, 1, 0);
   mesh.position.copy(origin);
   mesh.quaternion.setFromRotationMatrix(
@@ -399,7 +286,7 @@ function applyLightMode(mat: THREE.MeshStandardMaterial, mode: LightMode) {
 }
 
 function buildGantry(
-  pose: StartFinishPose,
+  pose: StartingGridReference,
   transform: SceneTransform,
   trackWidth: number,
 ): { group: THREE.Group; setModes: (modes: LightMode[]) => void } {

@@ -89,7 +89,7 @@ function phaseAt(intervals: TrackStatusInterval[], t: number): TrackPhase | unde
   );
 }
 
-function sampleSpeedAt(samples: { t: number; speed: number }[], t: number): number | null {
+export function sampleSpeedAt(samples: { t: number; speed: number }[], t: number): number | null {
   if (samples.length === 0) {
     return null;
   }

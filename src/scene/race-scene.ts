@@ -30,7 +30,6 @@ import {
   type GraphicsSettings,
 } from "./graphics-settings";
 import {
-  applyLaunchHoldToFrame,
   createStartFinishDecor,
   type StartFinishDecor,
 } from "./start-finish";
@@ -399,7 +398,8 @@ export class RaceScene {
     const transform = buildTransform(segment);
     this.transform = transform;
     this.startingGrid = segment.startingGrid ?? [];
-    this.gridLateralBlender.reset(buildDriverGridHolds(segment));
+    const gridHolds = buildDriverGridHolds(segment);
+    this.gridLateralBlender.reset(gridHolds);
 
     this.xrDrivers = segment.drivers.map(driver => driver.driverNumber);
 
@@ -436,7 +436,7 @@ export class RaceScene {
       this.root.add(this.trackDecor.group);
     }
 
-    this.startFinish = createStartFinishDecor(segment, pathPoints, transform, trackWidth);
+    this.startFinish = createStartFinishDecor(segment, pathPoints, transform, trackWidth, gridHolds);
     if (this.startFinish) {
       this.root.add(this.startFinish.group);
     }
@@ -491,22 +491,15 @@ export class RaceScene {
       return;
     }
 
-    const heldFrame = this.startFinish
-      ? applyLaunchHoldToFrame(
-          frame,
-          this.startFinish.greenAt,
-          this.startFinish.launchHoldPoses,
-        )
-      : frame;
-
     const { offsets: lateralOffsets, rates: lateralRates } = this.gridLateralBlender.resolve(
-      heldFrame,
+      frame,
       this.startingGrid,
     );
-    const visualPlacements = buildVisualPlacements(heldFrame, transform, {
+    const basePlacements = buildVisualPlacements(frame, transform, {
       lateralOffsets,
       lateralRates,
     });
+    const visualPlacements = this.startFinish?.placeCars(basePlacements, frame.now) ?? basePlacements;
     if (this.presentationMode === "tabletop") {
       this.tabletop.update(visualPlacements, frame.now);
       if (!xrPresenting) this.tabletopControls.update();
