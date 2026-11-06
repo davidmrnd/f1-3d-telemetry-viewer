@@ -3,3 +3,6 @@ dist
 docs/
 public/data/
 .DS_Store
+.env
+.env.*
+!.env.example
