@@ -11,12 +11,14 @@ type ActiveRadio = {
   job: RadioJob;
   abort: AbortController;
   source: AudioBufferSourceNode | null;
+  openingSource: AudioBufferSourceNode | null;
   startedAt: number;
 };
 
 export class RadioPlayer implements TeamRadioControls {
   private context: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
+  private openingBuffer: Promise<AudioBuffer | null> | null = null;
   private readonly levels = new Uint8Array(1024);
   private readonly clipsByDriver = new Map<number, TeamRadioClip[]>();
   private readonly drivers = new Map<number, DriverInfo>();
@@ -137,7 +139,7 @@ export class RadioPlayer implements TeamRadioControls {
   }
 
   private start(job: RadioJob, context: AudioContext) {
-    const active: ActiveRadio = { job, abort: new AbortController(), source: null, startedAt: 0 };
+    const active: ActiveRadio = { job, abort: new AbortController(), source: null, openingSource: null, startedAt: 0 };
     this.active = active;
     this.failed.delete(job.clip);
     void this.play(active, context);
@@ -146,11 +148,13 @@ export class RadioPlayer implements TeamRadioControls {
   private async play(active: ActiveRadio, context: AudioContext) {
     const { job, abort } = active;
     try {
+      const openingPromise = this.loadOpening(context);
       if (!job.buffer) {
         const response = await fetch(job.clip.audioPath, { signal: abort.signal });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         job.buffer = await context.decodeAudioData(await response.arrayBuffer());
       }
+      const openingBuffer = await openingPromise;
       if (this.active !== active) return;
 
       const source = context.createBufferSource();
@@ -158,12 +162,22 @@ export class RadioPlayer implements TeamRadioControls {
       source.connect(this.analyser!);
       source.onended = () => {
         source.disconnect();
+        active.openingSource?.stop();
+        active.openingSource?.disconnect();
         if (this.active !== active) return;
         this.active = null;
         this.playNext();
       };
       active.startedAt = context.currentTime;
-      source.start(0, Math.min(job.offset, job.buffer.duration));
+      if (openingBuffer && job.offset < openingBuffer.duration) {
+        const openingSource = context.createBufferSource();
+        openingSource.buffer = openingBuffer;
+        openingSource.connect(this.analyser!);
+        openingSource.onended = () => openingSource.disconnect();
+        openingSource.start(active.startedAt, job.offset);
+        active.openingSource = openingSource;
+      }
+      source.start(active.startedAt, Math.min(job.offset, job.buffer.duration));
       active.source = source;
     } catch (error) {
       if (this.active !== active) return;
@@ -174,11 +188,27 @@ export class RadioPlayer implements TeamRadioControls {
     }
   }
 
+  private loadOpening(context: AudioContext) {
+    this.openingBuffer ??= fetch(`${import.meta.env.BASE_URL}audio/radio-opening.mp3`)
+      .then(async response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return context.decodeAudioData(await response.arrayBuffer());
+      })
+      .catch(error => {
+        this.openingBuffer = null;
+        console.warn("No se pudo cargar el sonido de apertura de la radio.", error);
+        return null;
+      });
+    return this.openingBuffer;
+  }
+
   private detach() {
     const active = this.active;
     if (!active) return null;
     this.active = null;
     active.abort.abort();
+    active.openingSource?.stop();
+    active.openingSource?.disconnect();
     if (active.source) {
       active.job.offset += this.context!.currentTime - active.startedAt;
       active.source.onended = null;
