@@ -436,7 +436,7 @@ export class RaceScene {
       this.root.add(this.trackDecor.group);
     }
 
-    this.startFinish = createStartFinishDecor(segment, pathPoints, transform, trackWidth, gridHolds);
+    this.startFinish = createStartFinishDecor(segment, pathPoints, closed, crossSections, transform, trackWidth, gridHolds);
     if (this.startFinish) {
       this.root.add(this.startFinish.group);
     }

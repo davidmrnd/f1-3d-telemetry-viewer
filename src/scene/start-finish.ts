@@ -3,7 +3,8 @@ import type { CarSample, ReplaySegment } from "../types";
 import type { BaseCarPlacement, DriverGridHolds } from "./car-placement";
 import { TrackPath } from "./cameras/automatic/track-path";
 import { StartingGridPlacement } from "./grid-placement";
-import { buildStartingGridPoses, createStartingGridMarkings, GRID_FIRST_CAR_BEHIND_LINE_METERS, type StartingGridReference } from "./starting-grid";
+import { buildStartingGridPoses, createStartingGridMarkings, GRID_FIRST_CAR_BEHIND_LINE_METERS, StartingGridTrack } from "./starting-grid";
+import type { TrackCrossSection } from "./track/ribbon";
 import { metersToScene, type SceneTransform, vectorFromPoint } from "./track-geometry";
 
 const LINE_DEPTH_METERS = 1.1;
@@ -22,6 +23,14 @@ const LAUNCH_SPEED_KMH = 8;
 
 type LightMode = "off" | "red" | "green";
 
+interface StartFinishPose {
+  origin: THREE.Vector3;
+  tangent: THREE.Vector3;
+  normal: THREE.Vector3;
+  distance: number;
+  direction: number;
+}
+
 export interface StartFinishDecor {
   group: THREE.Group;
   placeCars(placements: BaseCarPlacement[], now: number): BaseCarPlacement[];
@@ -31,6 +40,8 @@ export interface StartFinishDecor {
 export function createStartFinishDecor(
   segment: ReplaySegment,
   pathPoints: THREE.Vector3[],
+  closed: boolean,
+  crossSections: TrackCrossSection[],
   transform: SceneTransform,
   trackWidth: number,
   gridHolds: DriverGridHolds,
@@ -39,7 +50,8 @@ export function createStartFinishDecor(
     return null;
   }
 
-  const pose = resolveStartFinishPose(segment, pathPoints, transform);
+  const path = new TrackPath(pathPoints, closed);
+  const pose = resolveStartFinishPose(segment, path, transform);
   if (!pose) {
     return null;
   }
@@ -86,10 +98,10 @@ export function createStartFinishDecor(
   group.add(lights.group);
 
   const greenAt = resolveRaceGoTime(segment);
-  const path = new TrackPath(pathPoints);
-  const gridPoses = buildStartingGridPoses(segment.startingGrid ?? [], pose, path, transform);
-  const gridPlacement = new StartingGridPlacement(segment, gridPoses, gridHolds, greenAt, path, transform);
-  group.add(createStartingGridMarkings(gridPoses, path, transform));
+  const gridTrack = new StartingGridTrack(path, crossSections, pose.direction);
+  const gridPoses = buildStartingGridPoses(segment.startingGrid ?? [], pose.distance, gridTrack, transform);
+  const gridPlacement = new StartingGridPlacement(segment, gridPoses, gridHolds, greenAt, gridTrack, transform);
+  group.add(createStartingGridMarkings(gridPoses, gridTrack, transform));
 
   return {
     group,
@@ -158,43 +170,44 @@ function resolveLightModes(now: number, goTime: number | null): LightMode[] {
 
 function resolveStartFinishPose(
   segment: ReplaySegment,
-  pathPoints: THREE.Vector3[],
+  path: TrackPath,
   transform: SceneTransform,
-): StartingGridReference | null {
-  const path = new TrackPath(pathPoints);
+): StartFinishPose | null {
   if (path.totalLength < 1) {
     return null;
   }
 
   const reference = pickGridReferenceSample(segment);
-  let projection =
+  const projection =
     reference !== null
       ? path.projectPointPlanar(vectorFromPoint(reference, transform))
-      : path.projectPointPlanar(pathPoints[0]);
+      : path.projectPointPlanar(path.points[0]);
 
   if (!projection) {
     return null;
   }
 
-  const tangent = path.tangentAt(projection);
+  let direction = 1;
   if (reference !== null) {
     const launch = pickLaunchSample(segment, reference.driverNumber, reference.t);
     if (launch) {
       const launchPoint = vectorFromPoint(launch, transform);
       const travel = launchPoint.clone().sub(projection.point);
       travel.y = 0;
-      if (travel.dot(tangent) < 0) {
-        tangent.negate();
+      if (travel.dot(path.tangentAt(projection)) < 0) {
+        direction = -1;
       }
     }
   }
 
-  const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
   const ahead = metersToScene(GRID_FIRST_CAR_BEHIND_LINE_METERS, transform);
-  const origin = projection.point.clone().addScaledVector(tangent, ahead);
-  origin.y = projection.point.y;
+  const lineDistance = projection.distance + ahead * direction;
+  const distance = path.closed ? lineDistance : THREE.MathUtils.clamp(lineDistance, 0, path.totalLength);
+  const origin = path.pointAt(distance);
+  const tangent = path.pointAt(distance + direction).sub(path.pointAt(distance - direction)).setY(0).normalize();
+  const normal = new THREE.Vector3(-tangent.z, 0, tangent.x);
 
-  return { origin, tangent, normal };
+  return { origin, tangent, normal, distance, direction };
 }
 
 function pickGridReferenceSample(
@@ -260,7 +273,7 @@ function nearestSample(samples: CarSample[], t: number): CarSample | null {
   return best;
 }
 
-function placeOnTrack(mesh: THREE.Mesh, origin: THREE.Vector3, pose: StartingGridReference) {
+function placeOnTrack(mesh: THREE.Mesh, origin: THREE.Vector3, pose: StartFinishPose) {
   const up = new THREE.Vector3(0, 1, 0);
   mesh.position.copy(origin);
   mesh.quaternion.setFromRotationMatrix(
@@ -286,7 +299,7 @@ function applyLightMode(mat: THREE.MeshStandardMaterial, mode: LightMode) {
 }
 
 function buildGantry(
-  pose: StartingGridReference,
+  pose: StartFinishPose,
   transform: SceneTransform,
   trackWidth: number,
 ): { group: THREE.Group; setModes: (modes: LightMode[]) => void } {

@@ -2,8 +2,7 @@ import * as THREE from "three";
 import type { CarSample, ReplaySegment } from "../types";
 import type { BaseCarPlacement, DriverGridHolds } from "./car-placement";
 import { sampleSpeedAt } from "./car-placement";
-import { TrackPath } from "./cameras/automatic/track-path";
-import type { StartingGridPose } from "./starting-grid";
+import type { StartingGridPose, StartingGridTrack } from "./starting-grid";
 import { metersToScene, type SceneTransform, vectorFromPoint } from "./track-geometry";
 
 const APPROACH_MS = 11000;
@@ -58,7 +57,7 @@ export class StartingGridPlacement {
     private readonly poses: Map<number, StartingGridPose>,
     holds: DriverGridHolds,
     greenAt: number | null,
-    private readonly path: TrackPath,
+    private readonly track: StartingGridTrack,
     private readonly transform: SceneTransform,
   ) {
     if (greenAt === null) return;
@@ -93,30 +92,26 @@ export class StartingGridPlacement {
         && (index === stops.length - 1 || now < stops[index + 1].arrival - APPROACH_MS));
       if (!stop) return placement;
 
-      const position = pose.position.clone();
-      position.y += CAR_CLEARANCE_METERS;
+      let guidedPose = pose;
       let weight = 1;
       if (now < stop.arrival) {
         const remaining = metersToScene(stop.approach.at(-1)!.distance - travelAt(stop.approach, now), this.transform);
-        position.x -= Math.cos(pose.heading) * remaining;
-        position.z -= Math.sin(pose.heading) * remaining;
-        position.y = (this.path.projectPointPlanar(position)?.point.y ?? pose.position.y) + CAR_CLEARANCE_METERS;
+        guidedPose = this.track.poseAt(pose.distance - remaining * this.track.direction, pose.offset);
         weight = smoothWeight((now - stop.arrival + APPROACH_MS) / (APPROACH_MS / 2));
-        position.lerp(placement.position, 1 - weight);
       } else if (now >= stop.departure) {
         const distance = metersToScene(travelAt(stop.travel, now), this.transform);
-        position.x += Math.cos(pose.heading) * distance;
-        position.z += Math.sin(pose.heading) * distance;
-        position.y = (this.path.projectPointPlanar(position)?.point.y ?? pose.position.y) + CAR_CLEARANCE_METERS;
+        guidedPose = this.track.poseAt(pose.distance + distance * this.track.direction, pose.offset);
         weight = 1 - smoothWeight((now - stop.departure) / RELEASE_MS);
-        position.lerp(placement.position, 1 - weight);
       }
       if (weight <= 0) return placement;
+      const position = guidedPose.position.clone();
+      position.y += CAR_CLEARANCE_METERS;
+      position.lerp(placement.position, 1 - weight);
       return {
         ...placement,
         position,
-        heading: blendAngle(placement.heading, pose.heading, weight),
-        car: { ...placement.car, pitch: blendAngle(placement.car.pitch, pose.pitch, weight) },
+        heading: blendAngle(placement.heading, guidedPose.heading, weight),
+        car: { ...placement.car, pitch: blendAngle(placement.car.pitch, guidedPose.pitch, weight) },
       };
     });
   }

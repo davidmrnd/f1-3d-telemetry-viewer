@@ -96,6 +96,11 @@ export class TrackPath {
 
   pointAt(distance: number): THREE.Vector3 {
     if (this.totalLength <= 0) return this.points[0]?.clone() ?? new THREE.Vector3();
+    const { index, fraction } = this.segmentAt(distance);
+    return this.points[index].clone().lerp(this.points[index + 1], fraction);
+  }
+
+  segmentAt(distance: number): { index: number; fraction: number } {
     const arc = this.closed
       ? THREE.MathUtils.euclideanModulo(distance, this.totalLength)
       : THREE.MathUtils.clamp(distance, 0, this.totalLength);
@@ -107,7 +112,7 @@ export class TrackPath {
       else hi = mid;
     }
     const length = this.cumulative[hi] - this.cumulative[lo];
-    return this.points[lo].clone().lerp(this.points[hi], length > 0 ? (arc - this.cumulative[lo]) / length : 0);
+    return { index: lo, fraction: length > 0 ? (arc - this.cumulative[lo]) / length : 0 };
   }
 
   tangentAt(projection: TrackProjection): THREE.Vector3 {
