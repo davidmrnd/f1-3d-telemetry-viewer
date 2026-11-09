@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { SpatialIndex, type BoundsXZ } from "./spatial";
 
 const MIN_POINT_DISTANCE = 0.05;
+const DENSE_CONTROL_SPACING_METERS = 10;
+const CONTROL_POINT_TOLERANCE_METERS = 0.1;
 export const TRACK_PATH_DENSIFY_SPACING_METERS = 4;
 export const TRACK_PATH_SMOOTH_SPACING_METERS = 2;
 
@@ -151,15 +153,49 @@ export function findPathIntersectionsXZ(points: THREE.Vector3[], closed: boolean
   return intersections;
 }
 
+function simplifyDenseControls(points: THREE.Vector3[], closed: boolean) {
+  const source = closed ? [...points, points[0]] : points;
+  let length = 0;
+  for (let i = 1; i < source.length; i++) length += source[i].distanceTo(source[i - 1]);
+  if (length >= (source.length - 1) * DENSE_CONTROL_SPACING_METERS) return points;
+
+  const keep = new Set([0, source.length - 1]);
+  const ranges: [number, number][] = [[0, source.length - 1]];
+  const chord = new THREE.Vector3();
+  const delta = new THREE.Vector3();
+  while (ranges.length) {
+    const [first, last] = ranges.pop()!;
+    chord.subVectors(source[last], source[first]);
+    const chordLengthSq = chord.lengthSq();
+    let farthest = -1;
+    let maxError = CONTROL_POINT_TOLERANCE_METERS ** 2;
+    for (let i = first + 1; i < last; i++) {
+      delta.subVectors(source[i], source[first]);
+      const fraction = chordLengthSq > 0 ? THREE.MathUtils.clamp(delta.dot(chord) / chordLengthSq, 0, 1) : 0;
+      const error = delta.addScaledVector(chord, -fraction).lengthSq();
+      if (error > maxError) {
+        maxError = error;
+        farthest = i;
+      }
+    }
+    if (farthest >= 0) {
+      keep.add(farthest);
+      ranges.push([first, farthest], [farthest, last]);
+    }
+  }
+  const simplified = points.filter((_, index) => keep.has(index));
+  if (simplified.length < (closed ? 4 : 2) || findPathIntersectionsXZ(simplified, closed).length) return points;
+  return simplified;
+}
+
 export function buildVisualCircuitPath(points: THREE.Vector3[], spacingMeters = TRACK_PATH_SMOOTH_SPACING_METERS) {
   const { path, closed } = normalizeCircuitPath(points);
-  const sampled = smoothPolylineCatmullRom(path, closed, spacingMeters);
-  const intersections = findPathIntersectionsXZ(sampled, closed);
-  const sourceIntersections = findPathIntersectionsXZ(path, closed);
-  if (sourceIntersections.length) {
+  if (findPathIntersectionsXZ(path, closed).length) {
     throw new Error("La vuelta contiene cruces a la misma altura. No se puede generar una pista válida con estas muestras.");
   }
-  if (intersections.length) {
+  const controls = simplifyDenseControls(path, closed);
+  const sampled = smoothPolylineCatmullRom(controls, closed, spacingMeters);
+  if (findPathIntersectionsXZ(sampled, closed).length) {
     const linear = densifyPolylineLinear(closed ? [...path, path[0]] : path, spacingMeters);
     if (closed) linear.pop();
     return { path: linear, closed };
