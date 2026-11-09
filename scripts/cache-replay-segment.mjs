@@ -1049,7 +1049,7 @@ async function main() {
     fetchJson(buildUrl("stints", { session_key: session.session_key })),
     fetchJson(buildUrl("laps", { session_key: session.session_key })),
     meeting.circuit_info_url ? fetch(meeting.circuit_info_url).then((response) => response.json()) : null,
-    fetchJson(buildUrl("starting_grid", { meeting_key: meeting.meeting_key }), { emptyOnNotFound: true }),
+    fetchJson(buildUrl("starting_grid", { session_key: session.session_key }), { emptyOnNotFound: true }),
     fetchJson(buildUrl("pit", { session_key: session.session_key }), { emptyOnNotFound: true }),
     fetchJson(buildUrl("session_result", { session_key: session.session_key }), { emptyOnNotFound: true }),
   ]);

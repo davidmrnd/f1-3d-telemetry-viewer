@@ -1,6 +1,7 @@
 import type { ReplaySegment } from "../types";
 import type { RaceCatalogEntry } from "./races-catalog";
 import { decodeReplaySegmentBinary } from "./replay-segment-binary";
+import { resolveStartingGrid } from "./starting-grid";
 
 export type ReplayLoadProgress = (loadedBytes: number, totalBytes: number | null) => void;
 
@@ -8,7 +9,7 @@ function normalizeSegment(segment: ReplaySegment): ReplaySegment {
   return {
     ...segment,
     raceControl: segment.raceControl ?? [],
-    startingGrid: segment.startingGrid ?? [],
+    startingGrid: resolveStartingGrid(segment),
     trackStatus: segment.trackStatus ?? [],
   };
 }
