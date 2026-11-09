@@ -11,13 +11,14 @@ import { createTerrainHeightSampler } from "./terrain-height";
 const ASPHALT_CLEARANCE = 0.06;
 const TRACE_MATCH_RADIUS = 6;
 const TRACE_EXTENSION_MS = 10000;
-const JOIN_BLEND_METERS = 24;
+const JOIN_BLEND_METERS = 46;
 const JOIN_TAPER_METERS = 15;
 
 export interface PitLane {
   path: TrackPath;
   mesh: THREE.Mesh;
   width: number;
+  sections: TrackCrossSection[];
   heightAt: ReturnType<typeof createTerrainHeightSampler>;
 }
 
@@ -132,13 +133,13 @@ function smoothJunction(points: THREE.Vector3[], main: TrackPath, trackWidth: nu
   const anchor = branch.pointAt(anchorDistance);
   const branchDirection = branch.pointAt(anchorDistance + 3).sub(branch.pointAt(anchorDistance - 3)).normalize();
   const direction = atExit ? -1 : 1;
-  const distance = terminal.distance - direction * 16;
+  const distance = terminal.distance - direction * 32;
   const center = main.pointAt(distance).setY(0);
   const tangent = main.pointAt(distance + direction * 2).sub(main.pointAt(distance - direction * 2)).setY(0).normalize();
   const lateral = new THREE.Vector3(-tangent.z, 0, tangent.x);
   const side = Math.sign(anchor.clone().sub(center).dot(lateral));
   const start = center.addScaledVector(lateral, side * trackWidth * 0.22);
-  const controlLength = Math.min(start.distanceTo(anchor) / 3, 15);
+  const controlLength = start.distanceTo(anchor) / 3;
   const curve = new THREE.CubicBezierCurve3(
     start,
     start.clone().addScaledVector(tangent, controlLength),
@@ -149,6 +150,19 @@ function smoothJunction(points: THREE.Vector3[], main: TrackPath, trackWidth: nu
   const { index, fraction } = branch.segmentAt(anchorDistance);
   const combined = [...join, ...ordered.slice(index + (fraction >= 1 ? 2 : 1))];
   return atExit ? combined.reverse() : combined;
+}
+
+function roundPitPath(points: THREE.Vector3[]) {
+  const path = new TrackPath(points);
+  let distance = 0;
+  return points.map((point, index) => {
+    if (index) distance += point.distanceTo(points[index - 1]);
+    const radius = Math.min(11, distance, path.totalLength - distance);
+    if (radius < 0.001) return point;
+    return path.pointAt(distance - radius).addScaledVector(path.pointAt(distance - radius / 2), 2)
+      .addScaledVector(point, 3).addScaledVector(path.pointAt(distance + radius / 2), 2)
+      .add(path.pointAt(distance + radius)).multiplyScalar(1 / 9);
+  });
 }
 
 function separateParallelLanes(points: THREE.Vector3[], main: TrackPath, trackWidth: number, pitWidth: number) {
@@ -190,7 +204,7 @@ export function createPitLane(
   const entryJoined = smoothJunction(original, main, trackWidth, false);
   const width = Number.isFinite(data.width) ? THREE.MathUtils.clamp(data.width, 5, 10) : 9;
   const joined = smoothJunction(entryJoined, main, trackWidth, true);
-  const points = separateParallelLanes(joined, main, trackWidth, width);
+  const points = roundPitPath(separateParallelLanes(joined, main, trackWidth, width));
   const crossSections = buildTrackCrossSections(points, false, width / 2);
   const distances = [0];
   for (let i = 1; i < points.length; i++) distances.push(distances[i - 1] + points[i].distanceTo(points[i - 1]));
@@ -222,5 +236,5 @@ export function createPitLane(
   mesh.name = "pit-lane";
   mesh.receiveShadow = true;
   mesh.renderOrder = 3;
-  return { path: new TrackPath(points), mesh, width, heightAt: createTerrainHeightSampler(geometry) };
+  return { path: new TrackPath(points), mesh, width, sections: crossSections, heightAt: createTerrainHeightSampler(geometry) };
 }

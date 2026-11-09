@@ -19,6 +19,7 @@ import { ReplayApp } from "./replay-app";
 import { TimingTowerView } from "./timing-tower-view";
 import { preloadCarModels } from "../scene/car-models";
 import { preloadTrackEnvironment } from "../scene/track-environment";
+import { preloadTrackModels } from "../scene/track/track-models";
 import { RaceScene } from "../scene/race-scene";
 import { GraphicsPerformanceView } from "./graphics-performance-view";
 
@@ -148,7 +149,7 @@ export function startReplayApplication() {
 
     try {
       ui.statusPill.textContent = "Cargando modelos 3D...";
-      await Promise.all([preloadCarModels(), preloadTrackEnvironment()]);
+      await Promise.all([preloadCarModels(), preloadTrackEnvironment(), preloadTrackModels()]);
       scene.initTrackEnvironment();
 
       const graphics = bindGraphicsSettings(scene, queryGraphicsControlElements());

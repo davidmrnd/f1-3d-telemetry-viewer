@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { CarSample, PitStop, ReplaySegment } from "../types";
-import type { BaseCarPlacement } from "./car-placement";
+import { sampleSpeedAt, type BaseCarPlacement } from "./car-placement";
 import type { TrackPath } from "./cameras/automatic/track-path";
 import { pathSegments, segmentProjection } from "./track/path";
 import { SpatialIndex } from "./track/spatial";
@@ -9,9 +9,9 @@ import { vectorFromPoint, type SceneTransform } from "./track-geometry";
 
 const CAR_CLEARANCE = 0.02;
 const PIT_MATCH_GAP_MS = 2500;
-const ENTRY_BLEND_MS = 1500;
-const EXIT_BLEND_MS = 850;
-const EXIT_HEIGHT_BLEND_MS = 3000;
+const TRACK_BLEND_MS = 1200;
+const JOIN_LOOKBACK_MS = 3500;
+const JOIN_LOOKAHEAD_MS = 3000;
 
 type HeightSampler = ReturnType<typeof createCircuitHeightSampler>;
 
@@ -22,11 +22,16 @@ interface ProgressSample {
 
 interface PitVisit {
   start: number;
-  entry: number;
-  exit: number;
   end: number;
   progress: ProgressSample[];
+  blendIn: boolean;
+  blendOut: boolean;
   stop?: { start: number; end: number; offset: number };
+}
+
+interface RoadJoin {
+  arc: number;
+  offset: THREE.Vector3;
 }
 
 interface ParkedCar {
@@ -50,6 +55,31 @@ function progressAt(samples: ProgressSample[], now: number): number {
   return THREE.MathUtils.lerp(before.distance, after.distance, fraction);
 }
 
+function simulateProgress(samples: CarSample[], anchors: ProgressSample[]): ProgressSample[] {
+  const progress = [anchors[0]];
+  for (let i = 1; i < anchors.length; i++) {
+    const from = anchors[i - 1];
+    const to = anchors[i];
+    const times = samples.filter((sample) => sample.t > from.t && sample.t < to.t).map((sample) => sample.t);
+    times.push(to.t);
+    let distance = 0;
+    let previousTime = from.t;
+    let previousSpeed = Math.max(0, sampleSpeedAt(samples, from.t) ?? 0);
+    const travel = times.map((t) => {
+      const speed = Math.max(0, sampleSpeedAt(samples, t) ?? 0);
+      distance += (speed + previousSpeed) * (t - previousTime) / 7200;
+      previousTime = t;
+      previousSpeed = speed;
+      return { t, distance };
+    });
+    for (const point of travel) {
+      const ratio = distance > 0.01 ? point.distance / distance : (point.t - from.t) / (to.t - from.t);
+      progress.push({ t: point.t, distance: THREE.MathUtils.lerp(from.distance, to.distance, ratio) });
+    }
+  }
+  return progress;
+}
+
 function blendAngle(from: number, to: number, weight: number): number {
   return from + Math.atan2(Math.sin(to - from), Math.cos(to - from)) * weight;
 }
@@ -68,16 +98,18 @@ export class PitLanePlacement {
   private readonly parked = new Map<number, ParkedCar>();
   private readonly absent = new Set<number>();
   private readonly road: SpatialIndex<ReturnType<typeof pathSegments>[number]>;
+  private readonly joins: [RoadJoin, RoadJoin] | null;
 
   constructor(
     segment: ReplaySegment,
     private readonly lane: PitLane | null,
-    main: TrackPath,
+    private readonly main: TrackPath,
     private readonly trackWidth: number,
     private readonly transform: SceneTransform,
     private readonly circuitHeight: HeightSampler,
   ) {
     this.road = new SpatialIndex(pathSegments([...main.points], false));
+    this.joins = lane ? [this.roadJoin(lane.path.points[0]), this.roadJoin(lane.path.points.at(-1)!)] : null;
     if (lane) {
       const bounds = new THREE.Box3().setFromPoints([...lane.path.points]).expandByScalar(10);
       const raceStart = segment.trackStatus.find((status) => status.phase === "racing")?.start ?? 0;
@@ -156,6 +188,27 @@ export class PitLanePlacement {
     return roadDistance > this.trackWidth / 2 - 1 && pitDistance + 2 < roadDistance ? projection.distance : null;
   }
 
+  private roadJoin(point: THREE.Vector3): RoadJoin {
+    const projection = this.main.projectPointPlanar(point)!;
+    return { arc: projection.distance, offset: point.clone().sub(projection.point).setY(0) };
+  }
+
+  private findRoadAnchor(samples: CarSample[], time: number, join: RoadJoin, side: -1 | 1): ProgressSample | null {
+    const next = samples.findIndex((sample) => sample.t >= time);
+    let i = side < 0 && samples[next]?.t !== time ? (next < 0 ? samples.length : next) - 1 : next;
+    for (; samples[i] && Math.abs(samples[i].t - time) <= 3500; i += side) {
+      const sample = samples[i];
+      const position = vectorFromPoint(sample, this.transform);
+      const projection = this.main.projectPointPlanar(position)!;
+      const distance = this.main.signedDistance(join.arc, projection.distance);
+      const lateral = Math.hypot(position.x - projection.point.x, position.z - projection.point.z);
+      if (side * distance >= 10 && side * distance <= 450 && lateral <= this.trackWidth / 2 + 0.5) {
+        return { t: sample.t, distance };
+      }
+    }
+    return null;
+  }
+
   private findVisits(
     lane: PitLane, samples: CarSample[], stops: PitStop[], bounds: THREE.Box3,
     raceStart: number, end: number, retirementTime?: number,
@@ -180,28 +233,28 @@ export class PitLanePlacement {
       const nearRetirement = retirementTime !== undefined && Math.abs(last.t - retirementTime) <= 10000;
       const minimumTravel = first.t < raceStart ? 15 : Math.max(100, lane.path.totalLength * 0.35);
       if (group.length < 3 || (!recorded && !startsInLane && !nearRetirement && last.distance - first.distance < minimumTravel)) continue;
-      const start = Math.max(0, first.t - ENTRY_BLEND_MS, visits.at(-1)?.end ?? 0);
-      const finish = Math.min(end, last.t + EXIT_HEIGHT_BLEND_MS);
+      const [entryJoin, exitJoin] = this.joins!;
+      const approach = startsInLane ? null : this.findRoadAnchor(samples, first.t - JOIN_LOOKBACK_MS, entryJoin, -1);
+      const rejoin = this.findRoadAnchor(samples, last.t + JOIN_LOOKAHEAD_MS, exitJoin, 1);
+      const previousEnd = visits.at(-1)?.end ?? 0;
+      const start = Math.max(0, previousEnd, approach?.t ?? first.t - TRACK_BLEND_MS);
+      const finish = Math.min(end, rejoin?.t ?? last.t + TRACK_BLEND_MS);
       if (start >= finish) continue;
-      const progress: ProgressSample[] = [];
-      for (const sample of samples) {
-        if (sample.t < start || sample.t > finish) continue;
-        const point = vectorFromPoint(sample, this.transform);
-        const projection = lane.path.projectPointPlanar(point);
-        if (!projection) continue;
-        progress.push({ t: sample.t, distance: Math.max(progress.at(-1)?.distance ?? 0, projection.distance) });
-      }
-      if (progress.length < 2) continue;
-      const visit: PitVisit = { start, entry: startsInLane ? start : Math.max(start, first.t), exit: last.t, end: finish, progress };
+      const anchors: ProgressSample[] = [{ t: start, distance: approach?.distance ?? first.distance }];
+      const finishDistance = rejoin ? lane.path.totalLength + rejoin.distance : Math.max(first.distance, last.distance);
+      const visit: PitVisit = {
+        start, end: finish, progress: [],
+        blendIn: !startsInLane, blendOut: finish < end && !nearRetirement,
+      };
       const stopStart = recorded?.stopStart;
       const stopEnd = recorded?.stopEnd;
-      if (stopStart != null && stopEnd != null && stopStart >= first.t && stopEnd <= last.t && stopEnd > stopStart) {
-        const distance = progressAt(progress, (stopStart + stopEnd) / 2);
+      if (stopStart != null && stopEnd != null && stopStart > start && stopEnd < finish && stopEnd > stopStart) {
+        const distance = THREE.MathUtils.clamp(progressAt(group, (stopStart + stopEnd) / 2), anchors[0].distance, finishDistance);
         visit.stop = { start: stopStart, end: stopEnd, offset: this.parkingOffset(lane, distance) };
-        visit.progress = [...progress.filter((point) => point.t < stopStart).map((point) => ({ ...point, distance: Math.min(point.distance, distance) })),
-          { t: stopStart, distance }, { t: stopEnd, distance },
-          ...progress.filter((point) => point.t > stopEnd).map((point) => ({ ...point, distance: Math.max(point.distance, distance) }))];
+        anchors.push({ t: stopStart, distance }, { t: stopEnd, distance });
       }
+      anchors.push({ t: finish, distance: finishDistance });
+      visit.progress = simulateProgress(samples, anchors);
       visits.push(visit);
     }
     return visits;
@@ -213,39 +266,56 @@ export class PitLanePlacement {
       this.roadDistance(this.lanePose(lane, distance, -offset).position) ? offset : -offset;
   }
 
-  private lanePose(lane: PitLane, distance: number, offset: number): Omit<ParkedCar, "time"> {
+  private lanePoint(lane: PitLane, distance: number, offset: number): THREE.Vector3 {
     const position = lane.path.pointAt(distance);
-    const front = lane.path.pointAt(distance + 3);
-    const rear = lane.path.pointAt(distance - 3);
-    const direction = front.clone().sub(rear).normalize();
-    const x = position.x - direction.z * offset;
-    const z = position.z + direction.x * offset;
-    const height = lane.heightAt(x, z, NaN);
-    if (Number.isFinite(height)) position.set(x, height, z);
-    else position.y = lane.heightAt(position.x, position.z, this.circuitHeight(position.x, position.z, 0));
-    const frontY = lane.heightAt(front.x, front.z, position.y);
-    const rearY = lane.heightAt(rear.x, rear.z, position.y);
+    if (offset !== 0) {
+      const direction = lane.path.pointAt(distance + 3).sub(lane.path.pointAt(distance - 3)).normalize();
+      const x = position.x - direction.z * offset;
+      const z = position.z + direction.x * offset;
+      if (Number.isFinite(lane.heightAt(x, z, NaN))) position.set(x, 0, z);
+    }
+    position.y = lane.heightAt(position.x, position.z, this.circuitHeight(position.x, position.z, 0));
     position.y += CAR_CLEARANCE;
-    return { position, heading: Math.atan2(direction.z, direction.x), pitch: Math.atan2(frontY - rearY, front.distanceTo(rear)) };
+    return position;
+  }
+
+  private lanePose(lane: PitLane, distance: number, offset: number): Omit<ParkedCar, "time"> {
+    const direction = this.lanePoint(lane, distance + 3, offset).sub(this.lanePoint(lane, distance - 3, offset));
+    return {
+      position: this.lanePoint(lane, distance, offset),
+      heading: Math.atan2(direction.z, direction.x),
+      pitch: Math.atan2(direction.y, Math.hypot(direction.x, direction.z)),
+    };
+  }
+
+  private routePoint(lane: PitLane, distance: number, offset: number): THREE.Vector3 {
+    const length = lane.path.totalLength;
+    if (distance >= 0 && distance <= length) return this.lanePoint(lane, distance, offset);
+    const [entry, exit] = this.joins!;
+    const join = distance < 0 ? entry : exit;
+    const along = distance < 0 ? distance : distance - length;
+    const position = this.main.pointAt(join.arc + along);
+    position.addScaledVector(join.offset, 1 - THREE.MathUtils.smoothstep(Math.abs(along), 0, 45));
+    const height = this.circuitHeight(position.x, position.z, position.y);
+    position.y = lane.heightAt(position.x, position.z, height) + CAR_CLEARANCE;
+    return position;
   }
 
   private placeInLane(placement: BaseCarPlacement, lane: PitLane, visit: PitVisit, now: number): BaseCarPlacement {
-    const entry = visit.entry === visit.start ? 1 : THREE.MathUtils.smootherstep(now, visit.start, visit.entry);
-    const heightExit = visit.exit === visit.end ? 1 : 1 - THREE.MathUtils.smootherstep(now, visit.exit, visit.end);
-    const heightWeight = 1 - (1 - Math.min(entry, heightExit)) ** 4;
-    if (heightWeight <= 0) return placement;
-    const exit = 1 - THREE.MathUtils.smootherstep(now, visit.exit, visit.exit + EXIT_BLEND_MS);
+    const entry = visit.blendIn ? THREE.MathUtils.smootherstep(now, visit.start, visit.start + TRACK_BLEND_MS) : 1;
+    const exit = visit.blendOut ? 1 - THREE.MathUtils.smootherstep(now, visit.end - TRACK_BLEND_MS, visit.end) : 1;
     const weight = Math.min(entry, exit);
+    if (weight <= 0) return placement;
     const stop = visit.stop;
     const offset = stop ? stop.offset * Math.min(
       THREE.MathUtils.smootherstep(now, stop.start - 2200, stop.start),
       1 - THREE.MathUtils.smootherstep(now, stop.end, stop.end + 2200),
     ) : 0;
-    const pose = this.lanePose(lane, progressAt(visit.progress, now), offset);
-    const result = blendPose(placement, pose, weight);
-    const { x, z } = result.position;
-    const height = lane.heightAt(x, z, this.circuitHeight(x, z, pose.position.y - CAR_CLEARANCE));
-    result.position.y = THREE.MathUtils.lerp(placement.position.y, height + CAR_CLEARANCE, heightWeight);
-    return result;
+    const distance = progressAt(visit.progress, now);
+    const position = this.routePoint(lane, distance, offset);
+    const direction = this.routePoint(lane, distance + 5, offset).sub(this.routePoint(lane, distance - 5, offset));
+    const heading = Math.atan2(direction.z, direction.x);
+    const pitch = Math.atan2(direction.y, Math.hypot(direction.x, direction.z));
+    return blendPose(placement, { position, heading, pitch }, weight);
   }
 }

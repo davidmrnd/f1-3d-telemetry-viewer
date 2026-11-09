@@ -1,6 +1,9 @@
 import * as THREE from "three";
 import type { GraphicsSettings } from "../graphics-settings";
 import { getTrackSurfaceMaterials } from "../track-environment";
+import { TrackPath } from "../cameras/automatic/track-path";
+import { createCircuitProps } from "./circuit-props";
+import type { PitLane } from "./pit-lane";
 import { pathSegments, segmentProjection } from "./path";
 import { crossSectionPoint, type TrackCrossSection } from "./ribbon";
 import { SpatialIndex } from "./spatial";
@@ -16,6 +19,7 @@ export function createTrackDecor(
   points: THREE.Vector3[], sections: TrackCrossSection[], closed: boolean,
   width: number, kerbWidth: number, terrain: THREE.BufferGeometry, urban: boolean,
   pitOpening?: (side: number, index: number) => boolean,
+  pitLane: PitLane | null = null,
 ): TrackDecor {
   const group = new THREE.Group();
   group.name = "circuit-equipment";
@@ -178,6 +182,8 @@ export function createTrackDecor(
     batch(trackside, plane, material, matrices);
   }
   batch(trackside, box, materials.steel, signPosts);
+  const props = createCircuitProps(new TrackPath(points, closed), width, pitLane, heightAt, urban, materials.concrete);
+  trackside.add(props);
   return {
     group,
     applySettings: (settings) => {
@@ -186,6 +192,11 @@ export function createTrackDecor(
       tyreMarks.visible = settings.tyreMarks;
     },
     dispose: () => {
+      props.removeFromParent();
+      for (const object of props.children) {
+        if (object instanceof THREE.InstancedMesh) object.dispose();
+        else if (object instanceof THREE.Mesh) object.geometry.dispose();
+      }
       signMaps.forEach((texture) => texture.dispose());
       signMaterials.forEach((material) => material.dispose());
       const geometries = new Set<THREE.BufferGeometry>();

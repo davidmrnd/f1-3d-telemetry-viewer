@@ -22,6 +22,7 @@ import {
   applyTrackEnvironment,
   applySkyQuality,
   applySurfaceQuality,
+  getTrackSurfaceMaterials,
 } from "./track-environment";
 import { RaceCameraController } from "./cameras/race-camera-controller";
 import type { CameraMode } from "./cameras/types";
@@ -44,7 +45,8 @@ import { XrInterface } from "./xr/xr-interface";
 import type { XrPlaybackState } from "./xr/xr-controls-panel";
 import { RaceLighting } from "./lighting";
 import { RaceTerrain, addTrackRoad, addTrackKerbs } from "./track/track-surfaces";
-import { createCircuitHeightSampler, createPitLane, findPitOpenings } from "./track/pit-lane";
+import { createCircuitHeightSampler, createPitLane, findPitOpenings, type PitLane } from "./track/pit-lane";
+import { createPitMarkings } from "./track/pit-markings";
 import { PitLanePlacement } from "./pit-placement";
 import { TrackPath } from "./cameras/automatic/track-path";
 import { createTrackDecor, type TrackDecor } from "./track/track-decor";
@@ -436,20 +438,22 @@ export class RaceScene {
 
     if (pathPoints.length > 4) {
       const road = addTrackRoad(this.root, pathPoints, closed, trackWidth, crossSections);
+      let pitLane: PitLane | null = null;
       let pitOpening: ReturnType<typeof findPitOpenings> | undefined;
       if (segment.circuit.pitLane || segment.retirements?.length) {
         const main = new TrackPath(pathPoints, closed);
         const circuitHeight = createCircuitHeightSampler(road.geometry, this.terrain.geometry);
-        const pitLane = createPitLane(segment, transform, main, trackWidth, circuitHeight, road.material);
+        pitLane = createPitLane(segment, transform, main, trackWidth, circuitHeight, road.material);
         if (pitLane) {
           this.root.add(pitLane.mesh);
+          this.root.add(createPitMarkings(pitLane, main, getTrackSurfaceMaterials().white));
           pitOpening = findPitOpenings(pitLane, crossSections, closed, trackWidth);
         }
         this.pitPlacement = new PitLanePlacement(segment, pitLane, main, trackWidth, transform, circuitHeight);
       }
       addTrackKerbs(this.root, pathPoints, closed, trackWidth, kerbWidth, crossSections, pitOpening);
       this.trackDecor = createTrackDecor(pathPoints, crossSections, closed, trackWidth, kerbWidth,
-        this.terrain.geometry, /monte|monaco|baku/i.test(segment.sessionRef.circuitShortName), pitOpening);
+        this.terrain.geometry, /monte|monaco|baku/i.test(segment.sessionRef.circuitShortName), pitOpening, pitLane);
       this.root.add(this.trackDecor.group);
     }
 
