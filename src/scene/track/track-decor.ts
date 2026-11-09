@@ -15,6 +15,7 @@ export interface TrackDecor {
 export function createTrackDecor(
   points: THREE.Vector3[], sections: TrackCrossSection[], closed: boolean,
   width: number, kerbWidth: number, terrain: THREE.BufferGeometry, urban: boolean,
+  pitOpening?: (side: number, index: number) => boolean,
 ): TrackDecor {
   const group = new THREE.Group();
   group.name = "circuit-equipment";
@@ -71,7 +72,7 @@ export function createTrackDecor(
 
   const makeStrip = (
     parent: THREE.Group, side: number, inner: (i: number) => number, outer: (i: number) => number,
-    material: THREE.Material, onRoad = false, tile = 3,
+    material: THREE.Material, onRoad = false, tile = 3, atEdge = false,
   ) => {
     const columns = onRoad ? 1 : 6;
     const positions: number[] = [], uvs: number[] = [], indices: number[] = [];
@@ -86,7 +87,7 @@ export function createTrackDecor(
         positions.push(p.x, p.y, p.z);
         uvs.push(offset / tile, distance / tile);
       }
-      if (!row) continue;
+      if (!row || (atEdge && pitOpening?.(side, row - 1))) continue;
       for (let column = 0; column < columns; column++) {
         const a = (row - 1) * (columns + 1) + column, b = a + columns + 1;
         if (side > 0) indices.push(a, a + 1, b, a + 1, b + 1, b);
@@ -109,7 +110,7 @@ export function createTrackDecor(
     const shoulder = (i: number) => Math.min(profile[i], urban ? 1.3 : 1.2);
     makeStrip(runoffs, side, () => edge, (i) => edge + shoulder(i), urban ? materials.concrete : materials.apron);
     if (!urban) makeStrip(runoffs, side, (i) => edge + shoulder(i), (i) => edge + profile[i], materials.gravel, false, 2);
-    makeStrip(group, side, () => width / 2 - 0.23, () => width / 2 - 0.08, materials.white, true);
+    makeStrip(group, side, () => width / 2 - 0.23, () => width / 2 - 0.08, materials.white, true, 3, true);
     for (const offset of [0.85, 1.65]) {
       makeStrip(tyreMarks, side, (i) => offset + Math.sin(distances[i] * 0.004) * 0.45,
         (i) => offset + 0.32 + Math.sin(distances[i] * 0.004) * 0.45, materials.rubber, true);

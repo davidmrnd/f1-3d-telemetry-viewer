@@ -43,7 +43,10 @@ import { XrFlight } from "./xr/xr-flight";
 import { XrInterface } from "./xr/xr-interface";
 import type { XrPlaybackState } from "./xr/xr-controls-panel";
 import { RaceLighting } from "./lighting";
-import { RaceTerrain, addTrackSurfaces } from "./track/track-surfaces";
+import { RaceTerrain, addTrackRoad, addTrackKerbs } from "./track/track-surfaces";
+import { createCircuitHeightSampler, createPitLane, findPitOpenings } from "./track/pit-lane";
+import { PitLanePlacement } from "./pit-placement";
+import { TrackPath } from "./cameras/automatic/track-path";
 import { createTrackDecor, type TrackDecor } from "./track/track-decor";
 import { TabletopModel } from "./tabletop/tabletop-model";
 import { TabletopXr } from "./tabletop/tabletop-xr";
@@ -89,6 +92,7 @@ export class RaceScene {
   private readonly gridLateralBlender = new GridLateralOffsetBlender();
   private readonly cameraController = new RaceCameraController();
   private startFinish: StartFinishDecor | null = null;
+  private pitPlacement: PitLanePlacement | null = null;
   private lastUpdateMs = performance.now();
   private environmentMap: THREE.Texture | null = null;
   private graphicsSettings: GraphicsSettings = { ...DEFAULT_GRAPHICS_SETTINGS };
@@ -339,6 +343,7 @@ export class RaceScene {
       material.dispose();
     });
     this.startFinish = null;
+    this.pitPlacement = null;
     this.cars.dispose();
     if (this.trackDecor) {
       this.root.remove(this.trackDecor.group);
@@ -430,9 +435,21 @@ export class RaceScene {
     }
 
     if (pathPoints.length > 4) {
-      addTrackSurfaces(this.root, pathPoints, closed, trackWidth, kerbWidth, crossSections);
+      const road = addTrackRoad(this.root, pathPoints, closed, trackWidth, crossSections);
+      let pitOpening: ReturnType<typeof findPitOpenings> | undefined;
+      if (segment.circuit.pitLane || segment.retirements?.length) {
+        const main = new TrackPath(pathPoints, closed);
+        const circuitHeight = createCircuitHeightSampler(road.geometry, this.terrain.geometry);
+        const pitLane = createPitLane(segment, transform, main, trackWidth, circuitHeight, road.material);
+        if (pitLane) {
+          this.root.add(pitLane.mesh);
+          pitOpening = findPitOpenings(pitLane, crossSections, closed, trackWidth);
+        }
+        this.pitPlacement = new PitLanePlacement(segment, pitLane, main, trackWidth, transform, circuitHeight);
+      }
+      addTrackKerbs(this.root, pathPoints, closed, trackWidth, kerbWidth, crossSections, pitOpening);
       this.trackDecor = createTrackDecor(pathPoints, crossSections, closed, trackWidth, kerbWidth,
-        this.terrain.geometry, /monte|monaco|baku/i.test(segment.sessionRef.circuitShortName));
+        this.terrain.geometry, /monte|monaco|baku/i.test(segment.sessionRef.circuitShortName), pitOpening);
       this.root.add(this.trackDecor.group);
     }
 
@@ -500,7 +517,8 @@ export class RaceScene {
       lateralOffsets,
       lateralRates,
     });
-    const visualPlacements = this.startFinish?.placeCars(basePlacements, frame.now) ?? basePlacements;
+    const gridPlacements = this.startFinish?.placeCars(basePlacements, frame.now) ?? basePlacements;
+    const visualPlacements = this.pitPlacement?.apply(gridPlacements, frame.now) ?? gridPlacements;
     if (this.presentationMode === "tabletop") {
       this.tabletop.update(visualPlacements, frame.now);
       if (!xrPresenting) this.tabletopControls.update();

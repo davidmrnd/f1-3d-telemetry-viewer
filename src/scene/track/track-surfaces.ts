@@ -85,12 +85,11 @@ export class RaceTerrain {
   }
 }
 
-export function addTrackSurfaces(
+export function addTrackRoad(
   root: THREE.Group,
   pathPoints: THREE.Vector3[],
   closed: boolean,
   trackWidth: number,
-  kerbWidth: number,
   crossSections: TrackCrossSection[],
 ) {
   const materials = getTrackSurfaceMaterials();
@@ -106,12 +105,21 @@ export function addTrackSurfaces(
   roadMesh.receiveShadow = true;
   roadMesh.renderOrder = 2;
   root.add(roadMesh);
+  return roadMesh;
+}
 
+export function addTrackKerbs(
+  root: THREE.Group, pathPoints: THREE.Vector3[], closed: boolean, trackWidth: number,
+  kerbWidth: number, crossSections: TrackCrossSection[], pitOpening?: (side: number, index: number) => boolean,
+) {
+  const materials = getTrackSurfaceMaterials();
   const kerbOffset = trackWidth / 2 + kerbWidth / 2;
   for (const offset of [kerbOffset, -kerbOffset]) {
     const kerbMesh = new THREE.Mesh(
       createTrackRibbon(pathPoints, kerbWidth, {
-        ...ribbonOptions,
+        closed,
+        crossSections,
+        skipSegment: (index) => pitOpening?.(Math.sign(offset), index) ?? false,
         offsetMeters: offset,
         tileSizeMeters: TRACK_TILE_METERS.kerb,
       }),

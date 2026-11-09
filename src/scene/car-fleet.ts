@@ -42,18 +42,23 @@ export class CarFleet {
   }
 
   update(visualPlacements: BaseCarPlacement[]) {
+    const activeDrivers = new Set<number>();
     visualPlacements.forEach(({ car, position, heading }, index) => {
       const visual = this.carVisuals.get(car.driver.driverNumber);
       if (!visual) {
         return;
       }
 
+      activeDrivers.add(car.driver.driverNumber);
       visual.group.position.copy(position);
       visual.group.rotation.y = carHeadingToRotationY(heading);
       visual.group.rotation.x = -car.pitch;
       visual.label.visible = false;
       this.contactShadows?.setCar(index, position, heading, car.pitch);
     });
+    for (const [driverNumber, visual] of this.carVisuals) {
+      visual.group.visible = activeDrivers.has(driverNumber);
+    }
     this.contactShadows?.finish(visualPlacements.length);
   }
 
@@ -68,7 +73,7 @@ export class CarFleet {
     const forceLowPoly = carDistance === "lowpoly";
     const distance = (forceLowPoly ? 0 : carDistance) * zoomDetailScale;
     for (const visual of this.carVisuals.values()) {
-      visual.group.visible = true;
+      if (!visual.group.visible) continue;
       const useDetailed = !forceLowPoly && visual.group.position.distanceToSquared(camera.position)
         < distance * distance * (visual.detailed.visible ? 1.21 : 0.81);
       visual.detailed.visible = useDetailed;

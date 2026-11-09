@@ -37,6 +37,7 @@ export interface CircuitModel {
   centerline: TrackPoint3D[];
   corners: CircuitCorner[];
   rotation: number;
+  pitLane?: { centerline: TrackPoint3D[]; width: number } | null;
 }
 
 export interface CarSample {
@@ -90,6 +91,14 @@ export interface PitStop {
   lapNumber: number;
   entryTime: number;
   exitTime: number;
+  stopStart?: number | null;
+  stopEnd?: number | null;
+}
+
+export interface Retirement {
+  driverNumber: number;
+  t: number;
+  status: "dnf" | "dns";
 }
 
 export interface TyreStint {
@@ -171,6 +180,7 @@ export interface ReplaySegment {
   trackStatus: TrackStatusInterval[];
   teamRadio?: TeamRadioClip[];
   pitStops?: PitStop[];
+  retirements?: Retirement[];
   tyreStints?: TyreStint[];
   circuit: CircuitModel;
   notes: string[];

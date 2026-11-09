@@ -12,6 +12,7 @@ export interface TrackRibbonOptions {
   closed?: boolean;
   offsetMeters?: number;
   crossSections?: TrackCrossSection[];
+  skipSegment?: (index: number) => boolean;
 }
 
 function smoothWidthLimits(sections: TrackCrossSection[], limits: number[], closed: boolean) {
@@ -137,6 +138,7 @@ export function createTrackRibbon(points: THREE.Vector3[], width: number, option
     indices.push(a, area > 0 ? b : c, area > 0 ? c : b);
   };
   for (let i = 0; i < count - 1; i++) {
+    if (options.skipSegment?.(i)) continue;
     add(i * 2, i * 2 + 2, i * 2 + 1);
     add(i * 2 + 2, i * 2 + 3, i * 2 + 1);
   }
