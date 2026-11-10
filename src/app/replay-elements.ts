@@ -4,7 +4,6 @@ export function queryReplayElements() {
   return {
     statusPill: mustQuery<HTMLDivElement>("#status-pill"),
     eventPill: mustQuery<HTMLDivElement>("#event-pill"),
-    cameraPill: mustQuery<HTMLDivElement>("#camera-pill"),
     playToggle: mustQuery<HTMLButtonElement>("#play-toggle"),
     resetButton: mustQuery<HTMLButtonElement>("#reset-button"),
     enterVrButton: mustQuery<HTMLButtonElement>("#enter-vr"),

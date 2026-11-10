@@ -21,7 +21,6 @@ export function bindTabletop(scene: RaceScene) {
     driverOnboard.disabled = tabletop;
     driverOnboard.title = tabletop ? "Disponible en la experiencia realista" : "";
     mustQuery<HTMLElement>("#app").classList.toggle("is-tabletop", tabletop);
-    mustQuery<HTMLElement>(".view-caption-detail").textContent = tabletop ? "MAQUETA · AR" : "ESCALA REAL · 3D";
   };
   mode.addEventListener("change", () => { scene.setPresentationMode(mode.value as PresentationMode); sync(); });
   width.addEventListener("input", () => { scene.setTabletopWidth(Number(width.value)); sync(); });

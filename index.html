@@ -38,7 +38,7 @@
         <div class="picker-heading"><div><p class="section-label">FÓRMULA 1 · REPLAY 3D</p><h1>La carrera, desde dentro.</h1><p class="race-picker-hint">Elige un Gran Premio. Tú decides cómo vivirlo.</p></div><button id="close-race-picker" class="icon-button" type="button" aria-label="Volver al replay" hidden><svg class="icon"><use href="#i-close" /></svg></button></div>
         <div id="race-picker-grid" class="race-picker-grid"></div>
         <p id="race-picker-empty" class="race-picker-empty" hidden>No hay carreras disponibles todavía.</p>
-        <div class="picker-footer"><span class="source-dot"></span> DATOS DE OPENF1<span>Experiencia 3D · Proyecto académico independiente</span></div>
+        <div class="picker-footer"><span class="source-dot"></span> DATOS DE OPENF1</div>
       </div>
     </div>
     <section id="race-loading" class="race-loading" aria-label="Cargando circuito" aria-busy="true" hidden>
@@ -50,7 +50,6 @@
         <img id="loading-track" class="loading-track" alt="" />
         <div class="loading-readout"><span id="loading-stage" role="status">Cargando datos del replay…</span><span id="loading-percentage" aria-hidden="true">0 %</span></div>
         <div id="loading-progress" class="loading-progress" role="progressbar" aria-label="Preparación del replay" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-describedby="loading-stage"><span></span></div>
-        <p class="loading-note">Datos de OpenF1 · Reconstrucción 3D</p>
       </div>
     </section>
     <div id="app" class="shell scene-shell" hidden>
@@ -60,11 +59,11 @@
         <header class="topbar player-chrome">
           <a class="wordmark" href="./" aria-label="APEX, elegir carrera">APEX<span class="brand-slash"></span></a>
           <nav class="main-nav" aria-label="Navegación principal"><span class="nav-active">REPLAY 3D</span><button id="change-race-button" type="button">CARRERAS</button></nav>
-          <div class="topbar-right"><button id="enter-vr" class="control-button vr-button" type="button" hidden>Entrar en VR</button><button id="enter-ar" class="control-button vr-button ar-button" type="button" hidden disabled>Entrar en AR</button><output id="vr-status" class="vr-status" role="status" hidden></output><span class="data-source"><span class="source-dot"></span> DATOS OPENF1</span><span class="topbar-divider"></span><button id="help-button" class="icon-button" aria-label="Ayuda y atajos de teclado" title="Ayuda y atajos (?)" type="button"><svg class="icon"><use href="#i-info" /></svg></button><span class="edition-tag">BETA</span></div>
+          <div class="topbar-right"><button id="enter-vr" class="control-button vr-button" type="button" hidden>Entrar en VR</button><button id="enter-ar" class="control-button vr-button ar-button" type="button" hidden disabled>Entrar en AR</button><output id="vr-status" class="vr-status" role="status" hidden></output><span class="data-source"><span class="source-dot"></span> DATOS OPENF1</span><span class="topbar-divider"></span><button id="help-button" class="icon-button" aria-label="Ayuda y atajos de teclado" title="Ayuda y atajos (?)" type="button"><svg class="icon"><use href="#i-info" /></svg></button></div>
         </header>
         <section class="race-heading player-chrome" aria-label="Información de la carrera">
           <div class="race-badges"><span class="replay-badge"><span></span> REPLAY</span><span id="timing-lap-tag" class="lap-badge" hidden></span><div id="event-pill" class="event-pill" hidden></div></div>
-          <div class="race-title"><p id="session-season" class="section-label">FÓRMULA 1</p><h1 id="session-title">Cargando carrera…</h1><div class="race-subtitle"><span id="session-circuit">—</span><span class="subtitle-separator">/</span><span>RECONSTRUCCIÓN 3D</span></div></div>
+          <div class="race-title"><p id="session-season" class="section-label">FÓRMULA 1</p><h1 id="session-title">Cargando carrera…</h1><div class="race-subtitle"><span id="session-circuit">—</span></div></div>
         </section>
         <aside id="classification-panel" class="classification-panel floating-panel player-chrome" aria-label="Clasificación de la carrera">
           <div class="panel-heading"><h2>CLASIFICACIÓN</h2><button class="icon-button small" data-toggle-panel="classification" aria-label="Ocultar clasificación" type="button"><svg class="icon"><use href="#i-close" /></svg></button></div>
@@ -105,13 +104,11 @@
           </section>
           <section id="panel-map" class="tab-content map-content" role="tabpanel" aria-labelledby="tab-map" hidden><p class="section-label">POSICIONES EN PISTA</p><svg id="circuit-map" viewBox="0 0 280 260" role="img" aria-label="Mapa del circuito y posición de los pilotos"><path id="map-track-outline"></path><path id="map-track"></path><g id="map-drivers"></g></svg><div class="map-caption"><span class="source-dot"></span><span id="map-circuit-name">Circuito</span></div><p class="data-note">Trazado y posiciones aproximadas a partir de los datos de la sesión.</p></section>
           <section id="panel-milestones" class="tab-content milestones-content" role="tabpanel" aria-labelledby="tab-milestones" hidden>
-            <div class="milestones-intro"><p class="section-label">MOMENTOS DE CARRERA</p><h2>Vuelve a vivirlo.</h2></div>
+            <div class="milestones-intro"><h2>Hitos de carrera</h2></div>
             <div id="circuit-milestones" class="milestones"></div>
             <p class="milestones-note"><svg class="icon" aria-hidden="true"><use href="#i-info" /></svg><span>Cada salto empieza cuatro segundos antes. «Aprox.» indica un instante estimado a partir de los datos de la sesión.</span></p>
           </section>
-          <div class="inspector-footer"><span class="recording-dot"></span> SINCRONIZADO CON EL REPLAY</div>
         </aside>
-        <div class="view-caption player-chrome"><span class="caption-rule"></span><div id="camera-pill" class="camera-pill" hidden></div><span class="view-caption-detail">ESCALA REAL · 3D</span></div>
         <div id="radio-broadcast" class="radio-broadcast" hidden><canvas aria-hidden="true"></canvas></div>
         <span id="radio-announcement" class="sr-only" role="status"></span>
         <div id="status-pill" class="status-pill" role="status">Preparando experiencia…</div>
@@ -236,7 +233,7 @@
             <button id="graphics-reset" class="graphics-reset" type="button"><svg class="icon" aria-hidden="true"><use href="#i-reset" /></svg>Restablecer gráficos</button>
           </footer>
         </dialog>
-        <dialog id="help-dialog" class="help-dialog"><div class="panel-heading"><h2>LA CARRERA, A TU MANERA.</h2><button id="help-close" class="icon-button" type="button" aria-label="Cerrar ayuda"><svg class="icon"><use href="#i-close" /></svg></button></div><p>Explora una reconstrucción 3D con datos históricos de OpenF1. Cambia de cámara, sigue a un piloto o consulta su telemetría.</p><dl class="shortcut-list"><div><dt>Reproducir / pausar</dt><dd><kbd>Espacio</kbd></dd></div><div><dt>Retroceder / avanzar 10 s</dt><dd><kbd>←</kbd> <kbd>→</kbd></dd></div><div><dt>Clasificación / panel de carrera</dt><dd><kbd>C</kbd> <kbd>P</kbd></dd></div><div><dt>Modo cine / pantalla completa</dt><dd><kbd>T</kbd> <kbd>F</kbd></dd></div><div><dt>Reiniciar</dt><dd><kbd>R</kbd></dd></div></dl><p class="data-note">La geometría y las posiciones son aproximadas. Proyecto académico independiente, no afiliado a Formula 1. La sesión no incluye audio.</p></dialog>
+        <dialog id="help-dialog" class="help-dialog"><div class="panel-heading"><h2>AYUDA Y ATAJOS</h2><button id="help-close" class="icon-button" type="button" aria-label="Cerrar ayuda"><svg class="icon"><use href="#i-close" /></svg></button></div><p>Explora una reconstrucción 3D con datos históricos de OpenF1. Cambia de cámara, sigue a un piloto o consulta su telemetría.</p><dl class="shortcut-list"><div><dt>Reproducir / pausar</dt><dd><kbd>Espacio</kbd></dd></div><div><dt>Retroceder / avanzar 10 s</dt><dd><kbd>←</kbd> <kbd>→</kbd></dd></div><div><dt>Clasificación / panel de carrera</dt><dd><kbd>C</kbd> <kbd>P</kbd></dd></div><div><dt>Modo cine / pantalla completa</dt><dd><kbd>T</kbd> <kbd>F</kbd></dd></div><div><dt>Reiniciar</dt><dd><kbd>R</kbd></dd></div></dl><p class="data-note">La geometría y las posiciones son aproximadas. Proyecto académico independiente, no afiliado a Formula 1. La sesión no incluye audio.</p></dialog>
       </main>
     </div>
     <script type="module" src="/src/main.ts"></script>

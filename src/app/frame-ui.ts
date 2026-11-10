@@ -6,7 +6,6 @@ export type FrameUiElements = {
   timeline: HTMLInputElement;
   timeReadout: HTMLSpanElement;
   eventPill: HTMLDivElement;
-  cameraPill: HTMLDivElement;
 };
 
 function trackPhaseLabel(frame: ReplayFrame) {
@@ -40,8 +39,6 @@ export function paintFrame(
   scene: {
     update(frame: ReplayFrame): void;
     render(): void;
-    getActiveCameraLabel(): string;
-    getCameraMode(): string;
   },
   timingTower: TimingTowerView,
   elements: FrameUiElements,
@@ -53,16 +50,6 @@ export function paintFrame(
   elements.timeline.style.setProperty("--progress", `${frame.normalized * 100}%`);
   elements.timeReadout.textContent = `${formatReplayTime(frame.now)} / ${formatReplayTime(duration)}`;
   elements.timeline.setAttribute("aria-valuetext", elements.timeReadout.textContent);
-
-  const cameraLabel = scene.getActiveCameraLabel();
-  const mode = scene.getCameraMode();
-  if ((mode === "broadcast" || mode === "onboard" || mode === "orbit") && cameraLabel) {
-    elements.cameraPill.hidden = false;
-    elements.cameraPill.textContent = cameraLabel.replace(/^On-board /, "A bordo · ");
-  } else {
-    elements.cameraPill.hidden = true;
-    elements.cameraPill.textContent = "";
-  }
 
   const phaseLabel = trackPhaseLabel(frame);
   elements.eventPill.hidden = !phaseLabel;
