@@ -4,6 +4,7 @@ import {
   buildDriverGridHolds,
   buildVisualPlacements,
   GridLateralOffsetBlender,
+  type BaseCarPlacement,
 } from "./car-placement";
 import { CarFleet } from "./car-fleet";
 import {
@@ -34,7 +35,7 @@ import {
   createStartFinishDecor,
   type StartFinishDecor,
 } from "./start-finish";
-import type { DriverInfo, RaceMilestoneControls, RadioBroadcastState, ReplayFrame, ReplaySegment, StartingGridSlot, TeamRadioClip, TeamRadioControls } from "../types";
+import type { DriverInfo, EngineAudioView, RaceMilestoneControls, RadioBroadcastState, ReplayFrame, ReplaySegment, StartingGridSlot, TeamRadioClip, TeamRadioControls } from "../types";
 import { paintRadioBroadcast, RADIO_CARD_HEIGHT, RADIO_CARD_WIDTH } from "./radio-broadcast-graphic";
 import { createXrPanel } from "./xr/xr-panel";
 import { XrRig } from "./xr/xr-rig";
@@ -52,6 +53,9 @@ import { TrackPath } from "./cameras/automatic/track-path";
 import { createTrackDecor, type TrackDecor } from "./track/track-decor";
 import { TabletopModel } from "./tabletop/tabletop-model";
 import { TabletopXr } from "./tabletop/tabletop-xr";
+
+const ENGINE_HEIGHT_METERS = .65;
+const ENGINE_REAR_OFFSET_METERS = 1.6;
 
 export type PresentationMode = "realistic" | "tabletop";
 
@@ -93,6 +97,8 @@ export class RaceScene {
   private startingGrid: StartingGridSlot[] = [];
   private readonly gridLateralBlender = new GridLateralOffsetBlender();
   private readonly cameraController = new RaceCameraController();
+  private visualPlacements: BaseCarPlacement[] = [];
+  private readonly listenerSpace = new THREE.Matrix4();
   private startFinish: StartFinishDecor | null = null;
   private pitPlacement: PitLanePlacement | null = null;
   private lastUpdateMs = performance.now();
@@ -496,8 +502,37 @@ export class RaceScene {
     return this.cameraController.getMode();
   }
 
-  getCameraSubject() {
-    return this.presentationMode === "tabletop" ? null : this.cameraController.getSubjectNumber();
+  getEngineAudioView(): EngineAudioView | null {
+    const tabletop = this.presentationMode === "tabletop";
+    if (this.isXrPresenting()) {
+      if (!this.xrHeadValid) return null;
+      this.listenerSpace.copy(this.xrHead.matrix);
+      if (!tabletop) this.listenerSpace.premultiply(this.xrRig.viewerRoot.matrixWorld);
+    } else {
+      const camera = tabletop ? this.tabletopCamera : this.camera;
+      camera.updateWorldMatrix(true, false);
+      this.listenerSpace.copy(camera.matrixWorld);
+    }
+    this.listenerSpace.invert();
+    if (!tabletop) this.listenerSpace.multiply(this.root.matrixWorld);
+
+    const sources: EngineAudioView["sources"][number][] = [];
+    for (const { car, position, heading } of this.visualPlacements) {
+      const source = new THREE.Vector3();
+      if (tabletop) {
+        if (!this.tabletop.getDriverWorldPosition(car.driver.driverNumber, source)) continue;
+      } else {
+        source.set(
+          position.x - ENGINE_REAR_OFFSET_METERS * Math.cos(heading),
+          position.y + ENGINE_HEIGHT_METERS,
+          position.z - ENGINE_REAR_OFFSET_METERS * Math.sin(heading),
+        );
+      }
+      sources.push({ sample: car.sample, position: source.applyMatrix4(this.listenerSpace) });
+    }
+    const perspective = tabletop ? "tabletop" : this.cameraController.isOnboardShot() ? "cockpit"
+      : this.getCameraMode() === "broadcast" ? "trackside" : "free";
+    return { perspective, sources, subject: tabletop ? null : this.cameraController.getSubjectNumber() };
   }
 
   getActiveCameraLabel(): string {
@@ -527,6 +562,7 @@ export class RaceScene {
     });
     const gridPlacements = this.startFinish?.placeCars(basePlacements, frame.now) ?? basePlacements;
     const visualPlacements = this.pitPlacement?.apply(gridPlacements, frame.now) ?? gridPlacements;
+    this.visualPlacements = visualPlacements;
     if (this.presentationMode === "tabletop") {
       this.tabletop.update(visualPlacements, frame.now);
       if (!xrPresenting) this.tabletopControls.update();

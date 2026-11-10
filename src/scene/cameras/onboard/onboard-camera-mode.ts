@@ -16,6 +16,7 @@ const _lookDir = new THREE.Vector3();
 
 export class OnboardCameraMode implements CameraModeHandler {
   private followDriverNumber: number | null = null;
+  private subjectNumber: number | null = null;
 
   setDrivers(drivers: DriverInfo[]) {
     if (this.followDriverNumber !== null) {
@@ -32,6 +33,10 @@ export class OnboardCameraMode implements CameraModeHandler {
     return this.followDriverNumber;
   }
 
+  getSubjectNumber(): number | null {
+    return this.subjectNumber;
+  }
+
   onActivate(controls: OrbitControls) {
     controls.enabled = false;
   }
@@ -44,6 +49,7 @@ export class OnboardCameraMode implements CameraModeHandler {
     context.controls.enabled = false;
 
     const target = this.resolveTargetPlacement(context.placements);
+    this.subjectNumber = target?.car.driver.driverNumber ?? null;
     if (!target) {
       return "";
     }

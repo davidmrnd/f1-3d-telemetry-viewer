@@ -109,10 +109,7 @@ export function startReplayApplication() {
       desktopPlayer.update(frame, mode, scene.getFollowDriver());
     }
     if (replay.playing) {
-      const subject = scene.getCameraSubject();
-      const focused = mode === "onboard" ? subject : desktopPlayer.getSelectedDriver() ?? subject;
-      const car = frame.cars.find(({ driver }) => driver.driverNumber === focused) ?? frame.cars[0];
-      engine.update(car?.sample, Boolean(broadcast));
+      engine.update(() => scene.getEngineAudioView(), Boolean(broadcast));
     }
   };
   const { showInspector } = bindPlayerChrome(replay, render);

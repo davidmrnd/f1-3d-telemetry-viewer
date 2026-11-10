@@ -50,6 +50,7 @@ export class BroadcastCameraMode implements CameraModeHandler {
 
   reset() {
     this.shotRevision += 1;
+    this.onboardShot = false;
     this.director.reset();
     this.activeShotId = null;
     this.subjectNumber = null;

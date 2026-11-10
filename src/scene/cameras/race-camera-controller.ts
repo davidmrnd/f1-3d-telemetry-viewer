@@ -58,8 +58,12 @@ export class RaceCameraController {
   }
 
   getSubjectNumber() {
-    if (this.mode === "onboard") return this.getFollowDriver();
+    if (this.mode === "onboard") return this.onboardMode.getSubjectNumber();
     return this.mode === "broadcast" ? this.broadcastMode.getSubjectNumber() : null;
+  }
+
+  isOnboardShot() {
+    return this.mode === "onboard" || (this.mode === "broadcast" && this.broadcastMode.getXrShot().onboard);
   }
 
   update(

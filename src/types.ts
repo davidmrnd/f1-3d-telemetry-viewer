@@ -194,6 +194,12 @@ export interface FrameCarState {
   lateralOffset: number;
 }
 
+export interface EngineAudioView {
+  perspective: "trackside" | "free" | "cockpit" | "tabletop";
+  subject: number | null;
+  sources: readonly { sample: CarSample; position: TrackPoint3D }[];
+}
+
 export interface ReplayFrame {
   now: number;
   normalized: number;
