@@ -496,6 +496,10 @@ export class RaceScene {
     return this.cameraController.getMode();
   }
 
+  getCameraSubject() {
+    return this.presentationMode === "tabletop" ? null : this.cameraController.getSubjectNumber();
+  }
+
   getActiveCameraLabel(): string {
     if (this.presentationMode === "tabletop") return "AR de sobremesa · vista libre";
     return this.cameraController.getActiveLabel();

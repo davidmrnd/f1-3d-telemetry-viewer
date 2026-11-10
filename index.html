@@ -127,6 +127,9 @@
         <section id="settings-panel" class="settings-panel floating-panel" aria-label="Ajustes de reproducción" hidden>
           <div class="panel-heading"><h2>AJUSTES</h2><button id="settings-close" class="icon-button small" type="button" aria-label="Cerrar ajustes"><svg class="icon"><use href="#i-close" /></svg></button></div>
           <div class="settings-content">
+            <label class="settings-field"><span>Sonido del motor</span><input id="engine-enabled" type="checkbox" /></label>
+            <label class="settings-field"><span>Volumen del motor</span><input id="engine-volume" type="range" min="0" max="100" value="50" /></label>
+            <p id="engine-status" class="graphics-hint" role="status" hidden>No se pudo activar el sonido del motor. Comprueba que el navegador admite AudioWorklet.</p>
             <label class="settings-field"><span>Experiencia</span><select id="presentation-mode"><option value="realistic">Realista · escala real</option><option value="tabletop">Sobremesa AR · ligera</option></select></label>
             <div id="tabletop-settings" hidden>
               <p class="graphics-hint">Previsualiza la maqueta con el ratón. En AR verás tu habitación y podrás colocarla manualmente sobre la mesa.</p>

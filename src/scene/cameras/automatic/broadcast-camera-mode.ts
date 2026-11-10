@@ -24,6 +24,11 @@ export class BroadcastCameraMode implements CameraModeHandler {
   private lastReplayTime: number | null = null;
   private activeShotId: number | null = null;
   private activeCamera: THREE.PerspectiveCamera | null = null;
+  private subjectNumber: number | null = null;
+
+  getSubjectNumber() {
+    return this.subjectNumber;
+  }
 
   loadSegment(segment: ReplaySegment, transform: SceneTransform) {
     this.rig = buildCornerCameraRig(segment, transform);
@@ -47,6 +52,7 @@ export class BroadcastCameraMode implements CameraModeHandler {
     this.shotRevision += 1;
     this.director.reset();
     this.activeShotId = null;
+    this.subjectNumber = null;
     this.lastReplayTime = null;
     this.previousPositions.clear();
   }
@@ -78,6 +84,7 @@ export class BroadcastCameraMode implements CameraModeHandler {
     const selection = this.director.select(
       rig.cameras, cars, rig.path, replayDelta === 0 ? 0 : context.deltaSeconds, context.eventDrivers,
     );
+    this.subjectNumber = selection?.subjectNumber ?? null;
     if (!selection) return "";
     const cut = this.activeShotId !== selection.id;
     if (cut) this.shotRevision += 1;

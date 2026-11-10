@@ -181,6 +181,10 @@ export class DesktopPlayerView {
     mustQuery("#circuit-map").setAttribute("aria-label", `Mapa de ${segment.sessionRef.circuitShortName} con posiciones de pilotos`);
   }
 
+  getSelectedDriver() {
+    return this.detail.hidden ? null : this.selectedDriver;
+  }
+
   update(frame: ReplayFrame, mode: CameraMode, followDriver: number | null) {
     const cameraKey = `${mode}:${followDriver}`;
     if (cameraKey !== this.cameraKey) {

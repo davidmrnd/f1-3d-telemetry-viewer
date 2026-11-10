@@ -53,6 +53,10 @@ export class RadioPlayer implements TeamRadioControls {
     }
   };
 
+  getAudioContext() {
+    return this.context;
+  }
+
   setSegment(segment: ReplaySegment) {
     this.stop();
     this.cursor = 0;

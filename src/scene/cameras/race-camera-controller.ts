@@ -57,6 +57,11 @@ export class RaceCameraController {
     return this.onboardMode.getFollowDriver();
   }
 
+  getSubjectNumber() {
+    if (this.mode === "onboard") return this.getFollowDriver();
+    return this.mode === "broadcast" ? this.broadcastMode.getSubjectNumber() : null;
+  }
+
   update(
     placements: BaseCarPlacement[],
     camera: Parameters<CameraModeHandler["update"]>[0]["camera"],

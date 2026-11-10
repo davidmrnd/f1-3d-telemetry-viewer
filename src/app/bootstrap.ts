@@ -1,4 +1,5 @@
 import { bindControls } from "./bind-controls";
+import { bindEngineAudio } from "./bind-engine-audio";
 import { bindPlayerChrome } from "./bind-player-chrome";
 import {
   bindGraphicsSettings,
@@ -45,6 +46,7 @@ export function startReplayApplication() {
     const frame = replay.seek(Math.max(0, clip.time - 1000) / duration);
     if (frame && !scene.isXrPresenting()) render(frame);
   });
+  const engine = bindEngineAudio(radioPlayer);
   const radioBroadcast = new RadioBroadcastView();
   const milestones: RaceMilestoneControls = {
     getMilestones: () => replay.getController()?.milestones ?? [],
@@ -70,7 +72,7 @@ export function startReplayApplication() {
   };
   const scene = new RaceScene(canvas, radioPlayer, milestones);
   const graphicsPerformance = new GraphicsPerformanceView(mustQuery<HTMLOutputElement>("#graphics-stats"));
-  const replay = new ReplayApp(radioPlayer);
+  const replay = new ReplayApp(radioPlayer, () => engine.silence());
   const timingTower = new TimingTowerView(
     mustQuery<HTMLDivElement>("#timing-tower"),
     mustQuery<HTMLElement>("#timing-lap-tag"),
@@ -81,6 +83,7 @@ export function startReplayApplication() {
   const loadingFrames = new AnimationFrames();
   const loadingView = new LoadingView(undefined, loadingFrames);
   const syncPlayButton = (playing: boolean) => {
+    if (!playing) engine.silence();
     const label = playing ? "Pausar" : "Reproducir";
     if (ui.playToggle.getAttribute("aria-label") === label) return;
     ui.playToggle.setAttribute("aria-label", label);
@@ -94,16 +97,23 @@ export function startReplayApplication() {
     const controller = replay.getController();
     if (!controller) return;
     const broadcast = radioPlayer.getBroadcast();
+    const mode = scene.getCameraMode();
     if (scene.isXrPresenting()) {
       radioBroadcast.update(null);
       scene.update(frame);
       scene.updateRadioBroadcast(broadcast);
       scene.render();
-      return;
+    } else {
+      radioBroadcast.update(broadcast);
+      paintFrame(frame, controller.getDuration(), scene, timingTower, ui);
+      desktopPlayer.update(frame, mode, scene.getFollowDriver());
     }
-    radioBroadcast.update(broadcast);
-    paintFrame(frame, controller.getDuration(), scene, timingTower, ui);
-    desktopPlayer.update(frame, scene.getCameraMode(), scene.getFollowDriver());
+    if (replay.playing) {
+      const subject = scene.getCameraSubject();
+      const focused = mode === "onboard" ? subject : desktopPlayer.getSelectedDriver() ?? subject;
+      const car = frame.cars.find(({ driver }) => driver.driverNumber === focused) ?? frame.cars[0];
+      engine.update(car?.sample, Boolean(broadcast));
+    }
   };
   const { showInspector } = bindPlayerChrome(replay, render);
   const desktopPlayer = new DesktopPlayerView((mode, driver) => {

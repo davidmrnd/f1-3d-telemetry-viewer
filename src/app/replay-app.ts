@@ -7,9 +7,13 @@ export class ReplayApp {
   speed = 1;
   currentTime = 0;
 
-  constructor(private readonly radio: { advance(time: number): void; seek(time: number): void }) {}
+  constructor(
+    private readonly radio: { advance(time: number): void; seek(time: number): void },
+    private readonly onDiscontinuity: () => void,
+  ) {}
 
   setController(controller: ReplayController) {
+    this.onDiscontinuity();
     this.controller = controller;
     this.currentTime = 0;
     this.playing = true;
@@ -52,6 +56,7 @@ export class ReplayApp {
 
   setTimeRatio(ratio: number): void {
     if (!this.controller) return;
+    this.onDiscontinuity();
     this.currentTime = this.controller.getDuration() * Math.max(0, Math.min(1, ratio));
     this.radio.seek(this.currentTime);
   }
