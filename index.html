@@ -128,73 +128,114 @@
                 <button id="engine-mute" class="icon-button" type="button" aria-label="Silenciar motor" title="Silenciar motor"><svg class="icon" aria-hidden="true"><use href="#i-volume" /></svg></button>
                 <input id="engine-volume" type="range" min="0" max="100" value="50" aria-label="Volumen del motor" />
               </div>
-              <label class="speed-wrap"><span class="sr-only">Velocidad de reproducción</span><select id="speed-select"><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="1.5">1,5×</option><option value="2">2×</option></select></label>
+              <label class="speed-wrap"><span class="sr-only">Velocidad de reproducción</span><select id="speed-select" class="menu-select"><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="1.5">1,5×</option><option value="2">2×</option></select></label>
               <div id="camera-modes" class="camera-modes" role="group" aria-label="Cámara de pista"><button id="camera-auto" type="button" aria-pressed="true" title="Realización automática">Auto</button><button id="camera-free" type="button" aria-pressed="false" title="Cámara libre · WASD y ratón">Libre</button></div>
             </div>
-            <div class="view-controls"><button class="icon-button panel-toggle" data-toggle-panel="classification" type="button" aria-label="Mostrar u ocultar clasificación" aria-controls="classification-panel" aria-expanded="true" title="Clasificación (C)"><svg class="icon"><use href="#i-flag" /></svg></button><button class="icon-button panel-toggle" data-toggle-panel="inspector" type="button" aria-label="Mostrar u ocultar panel de carrera" aria-controls="inspector-panel" aria-expanded="true" title="Panel de carrera (P)"><svg class="icon"><use href="#i-driver" /></svg></button><button id="theater-button" class="icon-button" type="button" aria-label="Modo cine" aria-pressed="false" title="Modo cine (T)"><svg class="icon"><use href="#i-theater" /></svg></button><button id="settings-button" class="icon-button" type="button" aria-label="Ajustes de reproducción" aria-controls="settings-panel" aria-expanded="false" title="Ajustes"><svg class="icon"><use href="#i-settings" /></svg></button><button id="fullscreen-button" class="icon-button" type="button" aria-label="Pantalla completa" title="Pantalla completa (F)"><svg class="icon"><use href="#i-fullscreen" /></svg></button></div>
+            <div class="view-controls"><button class="icon-button panel-toggle" data-toggle-panel="classification" type="button" aria-label="Mostrar u ocultar clasificación" aria-controls="classification-panel" aria-expanded="true" title="Clasificación (C)"><svg class="icon"><use href="#i-flag" /></svg></button><button class="icon-button panel-toggle" data-toggle-panel="inspector" type="button" aria-label="Mostrar u ocultar panel de carrera" aria-controls="inspector-panel" aria-expanded="true" title="Panel de carrera (P)"><svg class="icon"><use href="#i-driver" /></svg></button><button id="theater-button" class="icon-button" type="button" aria-label="Modo cine" aria-pressed="false" title="Modo cine (T)"><svg class="icon"><use href="#i-theater" /></svg></button><button id="settings-button" class="icon-button" type="button" aria-label="Ajustes de reproducción" aria-haspopup="dialog" aria-controls="settings-panel" aria-expanded="false" title="Ajustes"><svg class="icon"><use href="#i-settings" /></svg></button><button id="fullscreen-button" class="icon-button" type="button" aria-label="Pantalla completa" title="Pantalla completa (F)"><svg class="icon"><use href="#i-fullscreen" /></svg></button></div>
           </div>
         </footer>
-        <section id="settings-panel" class="settings-panel floating-panel" aria-label="Ajustes de reproducción" hidden>
-          <div class="panel-heading"><h2>AJUSTES</h2><button id="settings-close" class="icon-button small" type="button" aria-label="Cerrar ajustes"><svg class="icon"><use href="#i-close" /></svg></button></div>
-          <div class="settings-content">
-            <label class="settings-field"><span>Experiencia</span><select id="presentation-mode"><option value="realistic">Realista · escala real</option><option value="tabletop">Sobremesa AR · ligera</option></select></label>
-            <div id="tabletop-settings" hidden>
-              <p class="graphics-hint">Previsualiza la maqueta con el ratón. En AR verás tu habitación y podrás colocarla manualmente sobre la mesa.</p>
-              <label class="settings-field" for="tabletop-width"><span>Tamaño <output id="tabletop-width-value">1.20 m</output></span><input id="tabletop-width" type="range" min="0.35" max="3" step="0.01" value="1.2" /></label>
-              <label class="settings-field" for="tabletop-rotation"><span>Giro</span><input id="tabletop-rotation" type="range" min="-180" max="180" step="1" value="0" /></label>
-              <p class="graphics-hint">Dentro del visor: mantén un agarre para moverla. Añade el segundo para ampliar, reducir y girar con ambas manos. El menú AR permite ajustar la altura y fijar la posición.</p>
-            </div>
-            <div class="graphics-intro"><span class="section-label">TU EQUIPO. TU EXPERIENCIA.</span><p>Ajusta el detalle y la fluidez. Los cambios se guardan en este navegador.</p></div>
-            <label class="settings-field"><span>Perfil gráfico</span><select id="graphics-preset-select"><option value="low">Rendimiento</option><option value="medium" selected>Equilibrado</option><option value="high">Calidad</option><option value="ultra">Ultra</option><option value="vr">VR fluida</option><option value="custom" disabled>Personalizado</option></select></label>
-            <p class="graphics-hint">Empieza con Equilibrado. En un visor, prueba VR fluida y ajusta la resolución.</p>
-            <label class="settings-field"><span>Mostrar rendimiento</span><select data-graphics="showStats"><option value="off">Oculto</option><option value="on">FPS y detalle</option></select></label>
-            <button id="graphics-advanced-toggle" class="text-button graphics-advanced-toggle" type="button" aria-expanded="false" aria-controls="graphics-advanced-panel">Personalizar gráficos</button>
-            <div id="graphics-advanced-panel" class="graphics-advanced" hidden>
-              <details class="graphics-group" open><summary>Imagen y distancia <span>GPU</span></summary>
-                <label class="settings-field"><span>Resolución PC</span><select id="graphics-pixel-ratio-select" data-graphics="maxPixelRatio"><option value="0.75">0,75× · ligera</option><option value="1">1× · nativa CSS</option><option value="1.25">1,25×</option><option value="1.5">1,5×</option><option value="2">2× · muy exigente</option></select></label>
-                <p class="graphics-hint">1× equivale a un píxel de render por píxel CSS. Subir la resolución aumenta mucho el trabajo de la GPU.</p>
-                <label class="settings-field"><span>Distancia de visión</span><select data-graphics="drawDistance"><option value="800">800 m</option><option value="1600">1.600 m</option><option value="3200">3.200 m</option><option value="6000">6.000 m</option></select></label>
-                <label class="settings-field"><span>Bruma de distancia</span><select id="graphics-fog-select" data-graphics="fog"><option value="on">Activada</option><option value="off">Desactivada</option></select></label>
-              </details>
-              <details class="graphics-group" open><summary>Luz y atmósfera <span>ASPECTO</span></summary>
-                <label class="settings-field"><span>Iluminación</span><select data-graphics="lighting"><option value="day">Día natural</option><option value="warm">Tarde cálida</option><option value="overcast">Luz nublada</option></select></label>
-                <label class="settings-field"><span>Exposición</span><select data-graphics="exposure"><option value="0.8">Suave · 0,8</option><option value="1">Normal · 1</option><option value="1.2">Luminosa · 1,2</option></select></label>
-                <label class="settings-field"><span>Cielo detallado</span><select data-graphics="sky"><option value="on">Activado</option><option value="off">Cielo sencillo</option></select></label>
-                <label class="settings-field"><span>Estilo de cielo</span><select data-graphics="skyStyle"><option value="clear">Despejado</option><option value="hdri">Nubes · HDR original</option></select></label>
-                <label class="settings-field"><span>Reflejos del entorno</span><select id="graphics-environment-select" data-graphics="environment"><option value="on">Activados</option><option value="off">Desactivados</option></select></label>
-                <label class="settings-field"><span>Intensidad de reflejos</span><select data-graphics="environmentIntensity"><option value="0.3">Suave</option><option value="0.6">Natural</option><option value="1">Intensa</option></select></label>
-              </details>
-              <details class="graphics-group"><summary>Sombras <span>GPU ALTO</span></summary>
-                <label class="settings-field"><span>Calidad de sombras</span><select id="graphics-shadows-select" data-graphics="shadows"><option value="off">Desactivadas</option><option value="low">Baja · 512</option><option value="medium">Media · 1.024</option><option value="high">Alta · 2.048</option></select></label>
-                <label class="settings-field"><span>Alcance de sombras</span><select data-graphics="shadowDistance"><option value="60">60 m · más nítidas</option><option value="120">120 m</option><option value="240">240 m · más cobertura</option></select></label>
-                <label class="settings-field"><span>Sombras de coches</span><select id="graphics-car-shadows-select" data-graphics="carShadows"><option value="on">Activadas</option><option value="off">Desactivadas</option></select></label>
-                <label class="settings-field"><span>Sombra de contacto</span><select data-graphics="contactShadows"><option value="on">Activada · ligera</option><option value="off">Desactivada</option></select></label>
-                <p class="graphics-hint">La sombra de contacto mantiene los coches anclados al asfalto incluso sin sombras dinámicas.</p>
-              </details>
-              <details class="graphics-group"><summary>Texturas y materiales <span>GPU</span></summary>
-                <label class="settings-field"><span>Detalle de superficies</span><select data-graphics="surfaceDetail"><option value="on">Relieve y rugosidad</option><option value="off">Solo color · ligero</option></select></label>
-                <label class="settings-field"><span>Filtrado de texturas</span><select data-graphics="anisotropy"><option value="1">1×</option><option value="4">4×</option><option value="8">8×</option><option value="16">16×</option></select></label>
-                <label class="settings-field"><span>Materiales de coches</span><select id="graphics-car-materials-select" data-graphics="carMaterials"><option value="pbr">Detallados · reflejos</option><option value="simple">Ligeros · luz difusa</option></select></label>
-                <label class="settings-field"><span>Coches detallados hasta</span><select data-graphics="detailedCarDistance"><option value="lowpoly">Lowpoly</option><option value="60">60 m</option><option value="120">120 m</option><option value="240">240 m</option><option value="6000">Toda la escena</option></select></label>
-                <p class="graphics-hint">Dentro del rango se usa el modelo detallado; más lejos, el low poly con colores de equipo. «Lowpoly» fuerza ese mesh en todos.</p>
-              </details>
-              <details class="graphics-group" open><summary>Detalle del circuito <span>GEOMETRÍA</span></summary>
-                <label class="settings-field"><span>Escapatorias y grava</span><select data-graphics="runoffs"><option value="on">Visibles</option><option value="off">Ocultas</option></select></label>
-                <label class="settings-field"><span>Decoración y carteles</span><select data-graphics="trackside"><option value="on">Visibles</option><option value="off">Ocultos</option></select></label>
-                <label class="settings-field"><span>Goma sobre el asfalto</span><select data-graphics="tyreMarks"><option value="on">Visible</option><option value="off">Oculta</option></select></label>
-                <p class="graphics-hint">Decoración generada a partir del trazado aproximado. No reproduce el equipamiento real de cada circuito.</p>
-              </details>
-              <details class="graphics-group"><summary>Realidad virtual <span>VISOR</span></summary>
-                <label class="settings-field"><span>Resolución del visor</span><select id="graphics-xr-scale-select" data-graphics="xrScale"><option value="0.5">50 % · rendimiento</option><option value="0.65">65 %</option><option value="0.75">75 % · equilibrada</option><option value="1">100 %</option><option value="1.25">125 % · exigente</option></select></label>
-                <label class="settings-field"><span>Foveación fija</span><select data-graphics="xrFoveation"><option value="0">Desactivada</option><option value="0.5">Media</option><option value="1">Alta · más fluidez</option></select></label>
-                <p class="graphics-hint">La resolución del visor se aplica al entrar de nuevo en VR. La foveación reduce el detalle periférico si el visor lo permite.</p>
-                <p id="graphics-xr-note" class="graphics-hint" hidden>Sal y vuelve a entrar en VR para aplicar la resolución seleccionada.</p>
-              </details>
-            </div>
-            <button id="graphics-reset" class="text-button graphics-reset" type="button">Restablecer perfil Equilibrado</button>
-            <div class="settings-session"><span class="section-label">SESIÓN</span><span id="session-window">—</span><span id="session-event">—</span></div>
+        <dialog id="settings-panel" class="settings-panel" aria-labelledby="settings-title">
+          <header class="settings-header">
+            <h2 id="settings-title">Ajustes</h2>
+            <button id="settings-close" class="icon-button" type="button" aria-label="Cerrar ajustes" autofocus><svg class="icon" aria-hidden="true"><use href="#i-close" /></svg></button>
+          </header>
+          <div class="settings-tabs" role="tablist" aria-label="Categorías de ajustes">
+            <button id="settings-tab-general" type="button" role="tab" aria-selected="true" aria-controls="settings-general">General</button>
+            <button id="settings-tab-image" type="button" role="tab" aria-selected="false" aria-controls="settings-image" tabindex="-1">Imagen</button>
+            <button id="settings-tab-scene" type="button" role="tab" aria-selected="false" aria-controls="settings-scene" tabindex="-1">Escena</button>
+            <button id="settings-tab-vr" type="button" role="tab" aria-selected="false" aria-controls="settings-vr" tabindex="-1">Visor VR</button>
           </div>
-        </section>
+          <div id="settings-general" class="settings-page" role="tabpanel" aria-labelledby="settings-tab-general">
+            <div class="settings-column">
+              <section class="settings-group">
+                <h3>Gráficos</h3>
+                <label class="settings-field"><span>Perfil gráfico</span><select id="graphics-preset-select" class="menu-select"><option value="low">Rendimiento</option><option value="medium" selected>Equilibrado</option><option value="high">Calidad</option><option value="ultra">Ultra</option><option value="vr">VR fluida</option><option value="custom" disabled>Personalizado</option></select></label>
+                <label class="settings-field"><span>Indicador de rendimiento</span><select class="menu-select" data-graphics="showStats"><option value="off">Oculto</option><option value="on">FPS y detalle</option></select></label>
+                <p class="graphics-hint">El perfil aplica un conjunto de ajustes de imagen y escena.</p>
+              </section>
+            </div>
+            <div class="settings-column">
+              <section class="settings-group">
+                <h3>Modo de visualización</h3>
+                <label class="settings-field"><span>Experiencia</span><select id="presentation-mode" class="menu-select"><option value="realistic">Realista · escala real</option><option value="tabletop">Sobremesa AR</option></select></label>
+                <div id="tabletop-settings" hidden>
+                  <label class="settings-field" for="tabletop-width"><span>Tamaño <output id="tabletop-width-value">1.20 m</output></span><input id="tabletop-width" type="range" min="0.35" max="3" step="0.01" value="1.2" /></label>
+                  <label class="settings-field" for="tabletop-rotation"><span>Giro</span><input id="tabletop-rotation" type="range" min="-180" max="180" step="1" value="0" /></label>
+                  <p class="graphics-hint">En AR, usa un agarre para mover la maqueta y ambos para girarla o cambiar su tamaño. Desde el menú del visor puedes ajustar la altura y fijar la posición.</p>
+                </div>
+              </section>
+            </div>
+          </div>
+          <div id="settings-image" class="settings-page" role="tabpanel" aria-labelledby="settings-tab-image" hidden>
+            <div class="settings-column">
+              <section class="settings-group">
+                <h3>Renderizado</h3>
+                <label class="settings-field"><span>Resolución en PC</span><select id="graphics-pixel-ratio-select" class="menu-select" data-graphics="maxPixelRatio"><option value="0.75">0,75× · ligera</option><option value="1">1× · nativa</option><option value="1.25">1,25×</option><option value="1.5">1,5×</option><option value="2">2× · exigente</option></select></label>
+                <label class="settings-field"><span>Distancia de visión</span><select class="menu-select" data-graphics="drawDistance"><option value="800">800 m</option><option value="1600">1.600 m</option><option value="3200">3.200 m</option><option value="6000">6.000 m</option></select></label>
+                <label class="settings-field"><span>Bruma a distancia</span><select id="graphics-fog-select" class="menu-select" data-graphics="fog"><option value="on">Activada</option><option value="off">Desactivada</option></select></label>
+              </section>
+              <section class="settings-group">
+                <h3>Sombras</h3>
+                <label class="settings-field"><span>Calidad de sombras</span><select id="graphics-shadows-select" class="menu-select" data-graphics="shadows"><option value="off">Desactivadas</option><option value="low">Baja · 512</option><option value="medium">Media · 1.024</option><option value="high">Alta · 2.048</option></select></label>
+                <label class="settings-field"><span>Alcance de sombras</span><select class="menu-select" data-graphics="shadowDistance"><option value="60">60 m · más nítidas</option><option value="120">120 m</option><option value="240">240 m · más alcance</option></select></label>
+                <label class="settings-field"><span>Sombras de coches</span><select id="graphics-car-shadows-select" class="menu-select" data-graphics="carShadows"><option value="on">Activadas</option><option value="off">Desactivadas</option></select></label>
+                <label class="settings-field"><span>Sombra de contacto</span><select class="menu-select" data-graphics="contactShadows"><option value="on">Activada · ligera</option><option value="off">Desactivada</option></select></label>
+              </section>
+            </div>
+            <div class="settings-column">
+              <section class="settings-group">
+                <h3>Luz y atmósfera</h3>
+                <label class="settings-field"><span>Iluminación</span><select class="menu-select" data-graphics="lighting"><option value="day">Día natural</option><option value="warm">Tarde cálida</option><option value="overcast">Luz nublada</option></select></label>
+                <label class="settings-field"><span>Exposición</span><select class="menu-select" data-graphics="exposure"><option value="0.8">Suave · 0,8</option><option value="1">Normal · 1</option><option value="1.2">Luminosa · 1,2</option></select></label>
+                <label class="settings-field"><span>Cielo detallado</span><select class="menu-select" data-graphics="sky"><option value="on">Activado</option><option value="off">Cielo sencillo</option></select></label>
+                <label class="settings-field"><span>Estilo de cielo</span><select class="menu-select" data-graphics="skyStyle"><option value="clear">Despejado</option><option value="hdri">Nubes · HDR</option></select></label>
+                <label class="settings-field"><span>Reflejos del entorno</span><select id="graphics-environment-select" class="menu-select" data-graphics="environment"><option value="on">Activados</option><option value="off">Desactivados</option></select></label>
+                <label class="settings-field"><span>Intensidad de reflejos</span><select class="menu-select" data-graphics="environmentIntensity"><option value="0.3">Suave</option><option value="0.6">Natural</option><option value="1">Intensa</option></select></label>
+              </section>
+            </div>
+          </div>
+          <div id="settings-scene" class="settings-page" role="tabpanel" aria-labelledby="settings-tab-scene" hidden>
+            <div class="settings-column">
+              <section class="settings-group">
+                <h3>Texturas y modelos</h3>
+                <label class="settings-field"><span>Detalle de superficies</span><select class="menu-select" data-graphics="surfaceDetail"><option value="on">Relieve y rugosidad</option><option value="off">Solo color · ligero</option></select></label>
+                <label class="settings-field"><span>Filtrado de texturas</span><select class="menu-select" data-graphics="anisotropy"><option value="1">1×</option><option value="4">4×</option><option value="8">8×</option><option value="16">16×</option></select></label>
+                <label class="settings-field"><span>Materiales de coches</span><select id="graphics-car-materials-select" class="menu-select" data-graphics="carMaterials"><option value="pbr">Detallados · reflejos</option><option value="simple">Ligeros · luz difusa</option></select></label>
+                <label class="settings-field"><span>Coches detallados hasta</span><select class="menu-select" data-graphics="detailedCarDistance"><option value="lowpoly">Modelo ligero</option><option value="60">60 m</option><option value="120">120 m</option><option value="240">240 m</option><option value="6000">Toda la escena</option></select></label>
+                <p class="graphics-hint">A partir de esa distancia, los coches usan un modelo ligero con los colores del equipo.</p>
+              </section>
+            </div>
+            <div class="settings-column">
+              <section class="settings-group">
+                <h3>Circuito</h3>
+                <label class="settings-field"><span>Escapatorias y grava</span><select class="menu-select" data-graphics="runoffs"><option value="on">Visibles</option><option value="off">Ocultas</option></select></label>
+                <label class="settings-field"><span>Decoración y carteles</span><select class="menu-select" data-graphics="trackside"><option value="on">Visibles</option><option value="off">Ocultos</option></select></label>
+                <label class="settings-field"><span>Goma sobre el asfalto</span><select class="menu-select" data-graphics="tyreMarks"><option value="on">Visible</option><option value="off">Oculta</option></select></label>
+                <p class="graphics-hint">La decoración se genera a partir del trazado aproximado del circuito.</p>
+              </section>
+            </div>
+          </div>
+          <div id="settings-vr" class="settings-page" role="tabpanel" aria-labelledby="settings-tab-vr" hidden>
+            <div class="settings-column">
+              <section class="settings-group">
+                <h3>Imagen del visor</h3>
+                <label class="settings-field"><span>Resolución del visor</span><select id="graphics-xr-scale-select" class="menu-select" data-graphics="xrScale"><option value="0.5">50 % · rendimiento</option><option value="0.65">65 %</option><option value="0.75">75 % · equilibrada</option><option value="1">100 %</option><option value="1.25">125 % · exigente</option></select></label>
+                <label class="settings-field"><span>Foveación fija</span><select class="menu-select" data-graphics="xrFoveation"><option value="0">Desactivada</option><option value="0.5">Media</option><option value="1">Alta · más fluidez</option></select></label>
+              </section>
+            </div>
+            <div class="settings-column">
+              <section class="settings-group">
+                <h3>En el visor</h3>
+                <p class="graphics-hint">La resolución se aplica al iniciar una sesión de VR. Si el visor lo admite, la foveación reduce el detalle en los bordes de la imagen para ganar fluidez.</p>
+                <p id="graphics-xr-note" class="graphics-hint" hidden>Sal y vuelve a entrar en VR para aplicar la resolución seleccionada.</p>
+              </section>
+            </div>
+          </div>
+          <footer class="settings-footer">
+            <p>Los ajustes gráficos se guardan en este navegador.</p>
+            <button id="graphics-reset" class="graphics-reset" type="button"><svg class="icon" aria-hidden="true"><use href="#i-reset" /></svg>Restablecer gráficos</button>
+          </footer>
+        </dialog>
         <dialog id="help-dialog" class="help-dialog"><div class="panel-heading"><h2>LA CARRERA, A TU MANERA.</h2><button id="help-close" class="icon-button" type="button" aria-label="Cerrar ayuda"><svg class="icon"><use href="#i-close" /></svg></button></div><p>Explora una reconstrucción 3D con datos históricos de OpenF1. Cambia de cámara, sigue a un piloto o consulta su telemetría.</p><dl class="shortcut-list"><div><dt>Reproducir / pausar</dt><dd><kbd>Espacio</kbd></dd></div><div><dt>Retroceder / avanzar 10 s</dt><dd><kbd>←</kbd> <kbd>→</kbd></dd></div><div><dt>Clasificación / panel de carrera</dt><dd><kbd>C</kbd> <kbd>P</kbd></dd></div><div><dt>Modo cine / pantalla completa</dt><dd><kbd>T</kbd> <kbd>F</kbd></dd></div><div><dt>Reiniciar</dt><dd><kbd>R</kbd></dd></div></dl><p class="data-note">La geometría y las posiciones son aproximadas. Proyecto académico independiente, no afiliado a Formula 1. La sesión no incluye audio.</p></dialog>
       </main>
     </div>

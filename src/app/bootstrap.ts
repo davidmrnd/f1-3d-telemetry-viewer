@@ -181,12 +181,11 @@ export function startReplayApplication() {
       replay.playing = false;
       appShell.hidden = false;
       ui.statusPill.classList.remove("is-ready");
-      ui.statusPill.textContent = "Error de carga.";
       ui.sessionTitle.textContent = "Error de carga";
-      ui.sessionEvent.textContent =
+      ui.statusPill.textContent =
         error instanceof Error && error.message.includes("coche")
           ? "No se pudo cargar el modelo 3D del coche (f1model.gltf)."
-          : "El visualizador necesita el snapshot JSON y el modelo GLTF. Ejecuta npm run sync:data si falta el JSON.";
+          : "No se pudo cargar el replay. Comprueba los datos de carrera y los modelos 3D.";
       syncPlayButton(false);
     }
   }

@@ -1,11 +1,11 @@
 import type { ReplayFrame } from "../types";
+import { bindSettingsDialog } from "./bind-settings-dialog";
 import { mustQuery } from "./dom";
 import type { ReplayApp } from "./replay-app";
 
 export function bindPlayerChrome(replay: ReplayApp, onFrame: (frame: ReplayFrame) => void) {
   const shell = mustQuery<HTMLElement>("#app");
-  const settings = mustQuery<HTMLElement>("#settings-panel");
-  const settingsButton = mustQuery<HTMLButtonElement>("#settings-button");
+  const settings = bindSettingsDialog();
   const theaterButton = mustQuery<HTMLButtonElement>("#theater-button");
   const help = mustQuery<HTMLDialogElement>("#help-dialog");
   const panels = {
@@ -62,20 +62,7 @@ export function bindPlayerChrome(replay: ReplayApp, onFrame: (frame: ReplayFrame
     });
   }
 
-  const setSettings = (open: boolean, restoreFocus = false) => {
-    settings.hidden = !open;
-    settingsButton.setAttribute("aria-expanded", String(open));
-    if (restoreFocus) settingsButton.focus({ preventScroll: true });
-  };
-  settingsButton.addEventListener("click", () => setSettings(Boolean(settings.hidden)));
-  mustQuery("#settings-close").addEventListener("click", () => setSettings(false, true));
-  shell.addEventListener("pointerdown", (event) => {
-    if (!settings.hidden && !settings.contains(event.target as Node) && !settingsButton.contains(event.target as Node)) setSettings(false);
-  });
-  theaterButton.addEventListener("click", () => {
-    setTheater(!theater);
-    setSettings(false);
-  });
+  theaterButton.addEventListener("click", () => setTheater(!theater));
   mustQuery("#help-button").addEventListener("click", () => help.showModal());
   mustQuery("#help-close").addEventListener("click", () => help.close());
   help.addEventListener("click", (event) => {
@@ -89,7 +76,7 @@ export function bindPlayerChrome(replay: ReplayApp, onFrame: (frame: ReplayFrame
     window.clearTimeout(idleTimer);
     idleTimer = window.setTimeout(() => {
       const focused = document.activeElement;
-      if (replay.playing && !shell.hidden && settings.hidden && !help.open
+      if (replay.playing && !shell.hidden && !settings.open && !help.open
         && !shell.querySelector(".player-controls:hover, .topbar:hover")
         && !focused?.matches(":focus-visible")) {
         shell.classList.add("is-idle");
@@ -103,10 +90,9 @@ export function bindPlayerChrome(replay: ReplayApp, onFrame: (frame: ReplayFrame
   window.addEventListener("keydown", (event) => {
     if (event.defaultPrevented || shell.hidden || shell.inert || !replay.getController() || document.pointerLockElement || event.altKey || event.ctrlKey || event.metaKey) return;
     wake();
-    if (help.open) return;
+    if (settings.open || help.open) return;
     if (event.key === "Escape") {
-      if (!settings.hidden) setSettings(false, true);
-      else if (theater) setTheater(false);
+      if (theater) setTheater(false);
       return;
     }
     if ((event.target as HTMLElement).closest("input, select, textarea, [contenteditable], [role=tab]")) return;

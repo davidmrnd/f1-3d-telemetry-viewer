@@ -55,7 +55,7 @@ export function bindViewportFullscreen(
 
   /** Un Esc sale del modo inmersivo (fullscreen), como en YouTube. */
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key !== "Escape") return;
+    if (event.defaultPrevented || event.key !== "Escape" || shell.querySelector("dialog[open]")) return;
     if (document.fullscreenElement !== shell) return;
     event.preventDefault();
     void exit();

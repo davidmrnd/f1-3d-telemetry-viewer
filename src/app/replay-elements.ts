@@ -16,8 +16,6 @@ export function queryReplayElements() {
     timeReadout: mustQuery<HTMLSpanElement>("#time-readout"),
     sessionTitle: mustQuery<HTMLElement>("#session-title"),
     sessionCircuit: mustQuery<HTMLElement>("#session-circuit"),
-    sessionWindow: mustQuery<HTMLElement>("#session-window"),
-    sessionEvent: mustQuery<HTMLElement>("#session-event"),
     carCountTag: mustQuery<HTMLDivElement>("#car-count-tag"),
   };
 }

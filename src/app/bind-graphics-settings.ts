@@ -8,8 +8,6 @@ import { deviceGraphicsMode, loadGraphicsSettings, saveGraphicsSettings, type Gr
 
 export type GraphicsControlElements = {
   presetSelect: HTMLSelectElement;
-  advancedToggle: HTMLButtonElement;
-  advancedPanel: HTMLElement;
   resetButton: HTMLButtonElement;
   xrNote: HTMLElement;
   fields: HTMLSelectElement[];
@@ -49,12 +47,6 @@ export function bindGraphicsSettings(scene: RaceScene, elements: GraphicsControl
     if (GRAPHICS_PRESETS.includes(preset)) apply({ ...settingsFromPreset(preset), showStats: current.showStats });
   });
   elements.resetButton.addEventListener("click", () => apply(mode === "vr" ? settingsFromPreset("vr") : { ...DEFAULT_GRAPHICS_SETTINGS }));
-  elements.advancedToggle.addEventListener("click", () => {
-    const open = elements.advancedPanel.hidden;
-    elements.advancedPanel.hidden = !open;
-    elements.advancedToggle.setAttribute("aria-expanded", String(open));
-    elements.advancedToggle.textContent = open ? "Ocultar ajustes detallados" : "Personalizar gráficos";
-  });
   for (const field of elements.fields) {
     field.addEventListener("change", () => {
       const key = field.dataset.graphics as keyof GraphicsSettingsValues;
@@ -80,8 +72,6 @@ export function bindGraphicsSettings(scene: RaceScene, elements: GraphicsControl
 export function queryGraphicsControlElements(): GraphicsControlElements {
   return {
     presetSelect: mustQuery("#graphics-preset-select"),
-    advancedToggle: mustQuery("#graphics-advanced-toggle"),
-    advancedPanel: mustQuery("#graphics-advanced-panel"),
     resetButton: mustQuery("#graphics-reset"),
     xrNote: mustQuery("#graphics-xr-note"),
     fields: Array.from(document.querySelectorAll<HTMLSelectElement>("[data-graphics]")),
