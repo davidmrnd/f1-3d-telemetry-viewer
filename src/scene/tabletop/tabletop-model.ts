@@ -10,7 +10,6 @@ import { F1_CAR_LENGTH_METERS, createTrackRibbon, type TrackCrossSection } from 
 
 const TRAIL_SAMPLES = 64;
 const TRAIL_DURATION_MS = 2400;
-const TABLETOP_CAR_SCALE = 3;
 
 type TrailPoint = { position: THREE.Vector3; time: number };
 type Marker = {
@@ -20,7 +19,6 @@ type Marker = {
   history: TrailPoint[];
   position: THREE.Vector3;
   height: number;
-  baseScale: number;
   car: FrameCarState | null;
 };
 
@@ -111,7 +109,7 @@ export class TabletopModel {
     bounds.getCenter(this.center);
     this.center.y = bounds.min.y;
     this.extent = Math.max(size.x, size.z, 1) + trackWidth * 8;
-    this.carLength = F1_CAR_LENGTH_METERS / this.extent * TABLETOP_CAR_SCALE;
+    this.carLength = F1_CAR_LENGTH_METERS / this.extent;
     const points = path.map(point => this.normalizePoint(point));
     const crossSections = sections.map(section => ({ ...section, center: this.normalizePoint(section.center) }));
     const width = Math.max(trackWidth / this.extent, .007);
@@ -180,7 +178,6 @@ export class TabletopModel {
         history: [],
         position: new THREE.Vector3(),
         height,
-        baseScale: model.scale.x,
         car: null,
       });
     }
@@ -210,7 +207,6 @@ export class TabletopModel {
       marker.model.visible = true;
       marker.model.position.copy(this.point);
       marker.model.rotation.set(-car.pitch, carHeadingToRotationY(heading), 0, "YXZ");
-      marker.model.scale.setScalar(marker.baseScale * (highlighted ? 1.35 : 1));
       this.matrix.position.copy(this.point);
       this.matrix.position.y += .0004;
       this.matrix.rotation.set(-Math.PI / 2, 0, 0);

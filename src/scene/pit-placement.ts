@@ -39,6 +39,14 @@ interface ParkedCar {
   position: THREE.Vector3;
   heading: number;
   pitch: number;
+  clearAt?: number;
+}
+
+function trackClearedAt(segment: ReplaySegment, stoppedAt: number): number | undefined {
+  const interruption = segment.trackStatus.find(status => status.end > stoppedAt &&
+    status.start < stoppedAt + 90000 && (status.phase === "safety_car" || status.phase === "red"));
+  if (!interruption) return undefined;
+  return segment.trackStatus.find(status => status.start >= interruption.end && status.phase === "racing")?.start;
 }
 
 function progressAt(samples: ProgressSample[], now: number): number {
@@ -153,7 +161,8 @@ export class PitLanePlacement {
       const previous = vectorFromPoint(samples[Math.max(0, before)], this.transform);
       position.y = this.circuitHeight(position.x, position.z, position.y) + CAR_CLEARANCE;
       const heading = Math.atan2(position.z - previous.z, position.x - previous.x);
-      this.parked.set(retirement.driverNumber, { time, position, heading, pitch: 0 });
+      const clearAt = this.roadDistance(position) < trackWidth / 2 ? trackClearedAt(segment, time) : undefined;
+      this.parked.set(retirement.driverNumber, { time, position, heading, pitch: 0, clearAt });
     }
   }
 
@@ -161,9 +170,10 @@ export class PitLanePlacement {
     return placements.flatMap((placement) => {
       const number = placement.car.driver.driverNumber;
       if (this.absent.has(number)) return [];
+      const parked = this.parked.get(number);
+      if (parked?.clearAt !== undefined && now >= parked.clearAt) return [];
       const visit = this.visits.get(number)?.find(({ start, end }) => now >= start && now <= end);
       let result = this.lane && visit ? this.placeInLane(placement, this.lane, visit, now) : placement;
-      const parked = this.parked.get(number);
       if (parked && now >= parked.time - 1200) {
         const weight = THREE.MathUtils.smootherstep(now, parked.time - 1200, parked.time);
         result = blendPose(result, parked, weight);

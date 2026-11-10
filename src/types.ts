@@ -191,7 +191,6 @@ export interface FrameCarState {
   sample: CarSample;
   heading: number;
   pitch: number;
-  lateralOffset: number;
 }
 
 export interface EngineAudioView {

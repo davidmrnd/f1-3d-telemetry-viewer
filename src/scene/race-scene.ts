@@ -5,6 +5,7 @@ import {
   buildVisualPlacements,
   GridLateralOffsetBlender,
   type BaseCarPlacement,
+  type DriverGridHolds,
 } from "./car-placement";
 import { CarFleet } from "./car-fleet";
 import {
@@ -53,6 +54,7 @@ import { TrackPath } from "./cameras/automatic/track-path";
 import { createTrackDecor, type TrackDecor } from "./track/track-decor";
 import { TabletopModel } from "./tabletop/tabletop-model";
 import { TabletopXr } from "./tabletop/tabletop-xr";
+import { buildTrafficTimelineSteps, type TrafficRoad, type TrafficTimeline } from "./traffic/traffic-timeline";
 
 const ENGINE_HEIGHT_METERS = .65;
 const ENGINE_REAR_OFFSET_METERS = 1.6;
@@ -95,7 +97,9 @@ export class RaceScene {
 
   private transform: SceneTransform | null = null;
   private startingGrid: StartingGridSlot[] = [];
-  private readonly gridLateralBlender = new GridLateralOffsetBlender();
+  private gridHolds: DriverGridHolds = new Map();
+  private trafficRoads: TrafficRoad[] = [];
+  private traffic: TrafficTimeline | null = null;
   private readonly cameraController = new RaceCameraController();
   private visualPlacements: BaseCarPlacement[] = [];
   private readonly listenerSpace = new THREE.Matrix4();
@@ -352,6 +356,8 @@ export class RaceScene {
     });
     this.startFinish = null;
     this.pitPlacement = null;
+    this.traffic = null;
+    this.trafficRoads = [];
     this.cars.dispose();
     if (this.trackDecor) {
       this.root.remove(this.trackDecor.group);
@@ -411,8 +417,7 @@ export class RaceScene {
     const transform = buildTransform(segment);
     this.transform = transform;
     this.startingGrid = segment.startingGrid ?? [];
-    const gridHolds = buildDriverGridHolds(segment);
-    this.gridLateralBlender.reset(gridHolds);
+    this.gridHolds = buildDriverGridHolds(segment);
 
     this.xrDrivers = segment.drivers.map(driver => driver.driverNumber);
 
@@ -433,6 +438,7 @@ export class RaceScene {
       );
 
     const trackWidth = trackWidthInScene(transform);
+    this.trafficRoads.push({ points: pathPoints, closed, width: trackWidth });
     const kerbWidth = metersToScene(TRACK_KERB_WIDTH_METERS, transform);
     const crossSections = buildTrackCrossSections(pathPoints, closed, trackWidth / 2 + kerbWidth);
     this.tabletop.load(segment.drivers, pathPoints, closed, trackWidth, crossSections);
@@ -451,6 +457,7 @@ export class RaceScene {
         const circuitHeight = createCircuitHeightSampler(road.geometry, this.terrain.geometry);
         pitLane = createPitLane(segment, transform, main, trackWidth, circuitHeight, road.material);
         if (pitLane) {
+          this.trafficRoads.push({ points: [...pitLane.path.points], closed: false, width: pitLane.width });
           this.root.add(pitLane.mesh);
           this.root.add(createPitMarkings(pitLane, main, getTrackSurfaceMaterials().white));
           pitOpening = findPitOpenings(pitLane, crossSections, closed, trackWidth);
@@ -463,7 +470,7 @@ export class RaceScene {
       this.root.add(this.trackDecor.group);
     }
 
-    this.startFinish = createStartFinishDecor(segment, pathPoints, closed, crossSections, transform, trackWidth, gridHolds);
+    this.startFinish = createStartFinishDecor(segment, pathPoints, closed, crossSections, transform, trackWidth, this.gridHolds);
     if (this.startFinish) {
       this.root.add(this.startFinish.group);
     }
@@ -476,6 +483,29 @@ export class RaceScene {
     if (this.cameraController.getMode() === "orbit") {
       this.framePreviewCamera(samplePoints);
     }
+  }
+
+  async prepareTraffic(
+    duration: number,
+    frameAt: (time: number) => ReplayFrame,
+    onProgress: (progress: number) => Promise<void>,
+  ) {
+    const transform = this.transform;
+    if (!transform) return;
+    const grid = new GridLateralOffsetBlender();
+    grid.reset(this.gridHolds);
+    const steps = buildTrafficTimelineSteps(duration, (now) => {
+      const frame = frameAt(now);
+      const base = buildVisualPlacements(frame, transform, grid.resolve(frame, this.startingGrid));
+      const placements = this.startFinish?.placeCars(base, now) ?? base;
+      return this.pitPlacement?.apply(placements, now) ?? placements;
+    }, this.trafficRoads, () => grid.reset(this.gridHolds));
+    let step = steps.next();
+    while (!step.done) {
+      await onProgress(step.value);
+      step = steps.next();
+    }
+    this.traffic = step.value;
   }
 
   setCameraMode(mode: CameraMode) {
@@ -547,21 +577,8 @@ export class RaceScene {
 
     this.resize();
     const xrPresenting = this.renderer.xr.isPresenting;
-    const transform = this.transform;
-    if (!transform) {
-      return;
-    }
-
-    const { offsets: lateralOffsets, rates: lateralRates } = this.gridLateralBlender.resolve(
-      frame,
-      this.startingGrid,
-    );
-    const basePlacements = buildVisualPlacements(frame, transform, {
-      lateralOffsets,
-      lateralRates,
-    });
-    const gridPlacements = this.startFinish?.placeCars(basePlacements, frame.now) ?? basePlacements;
-    const visualPlacements = this.pitPlacement?.apply(gridPlacements, frame.now) ?? gridPlacements;
+    if (!this.traffic) return;
+    const visualPlacements = this.traffic.sample(frame);
     this.visualPlacements = visualPlacements;
     if (this.presentationMode === "tabletop") {
       this.tabletop.update(visualPlacements, frame.now);

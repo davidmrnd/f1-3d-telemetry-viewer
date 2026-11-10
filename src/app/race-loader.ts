@@ -86,12 +86,15 @@ export function createRaceLoader(options: RaceLoaderOptions) {
       });
       await loadingView.checkpoint(40, "Preparando trayectorias…");
       const controller = await ReplayController.create(segment, (progress) =>
-        loadingView.checkpoint(40 + 19 * progress),
+        loadingView.checkpoint(40 + 14 * progress),
       );
+      await loadingView.checkpoint(55, "Construyendo el circuito…");
+      scene.loadSegment(segment);
+      await loadingView.checkpoint(70, "Preparando el tráfico y los adelantamientos…");
+      await scene.prepareTraffic(controller.getDuration(), time => controller.getFrame(time),
+        progress => loadingView.checkpoint(70 + 28 * progress));
       replay.setController(controller);
       replay.playing = false;
-      await loadingView.checkpoint(60, "Construyendo el circuito…");
-      scene.loadSegment(segment);
       radioPlayer.setSegment(segment);
       if (scene.getCameraMode() === "onboard") scene.setCameraMode("broadcast");
       paintSessionMetadata(segment, ui);

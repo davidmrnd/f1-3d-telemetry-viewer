@@ -39,9 +39,8 @@ export interface GridHoldInterval {
 export type DriverGridHolds = Map<number, GridHoldInterval[]>;
 
 export type VisualPlacementOptions = {
-  startingGrid?: StartingGridSlot[];
-  lateralOffsets?: Map<number, number>;
-  lateralRates?: Map<number, number>;
+  offsets: Map<number, number>;
+  rates: Map<number, number>;
 };
 
 function smootherstep(u: number): number {
@@ -65,10 +64,6 @@ export function buildBasePlacements(frame: ReplayFrame, transform: SceneTransfor
     position.y += CAR_TRACK_CLEARANCE_METERS;
     return { car, position, heading: car.heading };
   });
-}
-
-export function buildLaneOffsets(placements: BaseCarPlacement[]) {
-  return new Map(placements.map(({ car }) => [car.driver.driverNumber, car.lateralOffset]));
 }
 
 function speedBlendWeight(speedKmh: number, fullAtOrBelow: number, zeroAtOrAbove: number) {
@@ -293,7 +288,7 @@ function desiredGridState(
 ): { offset: number; rate: number } {
   const gridOffset = gridOffsets.get(car.driver.driverNumber);
   if (gridOffset === undefined) {
-    return { offset: car.lateralOffset, rate: 0 };
+    return { offset: 0, rate: 0 };
   }
 
   const sample = gridHoldSample(now, holds);
@@ -312,10 +307,9 @@ function desiredGridState(
     }
   }
 
-  const span = gridOffset - car.lateralOffset;
   return {
-    offset: car.lateralOffset + span * weight,
-    rate: span * weightRate,
+    offset: gridOffset * weight,
+    rate: gridOffset * weightRate,
   };
 }
 
@@ -402,25 +396,13 @@ export class GridLateralOffsetBlender {
 export function buildVisualPlacements(
   frame: ReplayFrame,
   transform: SceneTransform,
-  options: VisualPlacementOptions = {},
+  { offsets, rates }: VisualPlacementOptions,
 ): BaseCarPlacement[] {
   const basePlacements = buildBasePlacements(frame, transform);
-  const startingGrid = options.startingGrid ?? [];
-  const phase = frame.trackStatus?.phase;
-  const gridOffsets = buildGridLateralOffsets(startingGrid);
-  const lateralOffsets =
-    options.lateralOffsets ??
-    new Map(
-      basePlacements.map(({ car }) => [
-        car.driver.driverNumber,
-        desiredGridState(car, frame.now, phase, gridOffsets, [], false).offset,
-      ]),
-    );
-  const lateralRates = options.lateralRates ?? new Map<number, number>();
 
   return basePlacements.map(({ car, position }) => {
-    const offset = lateralOffsets.get(car.driver.driverNumber) ?? 0;
-    const rate = lateralRates.get(car.driver.driverNumber) ?? 0;
+    const offset = offsets.get(car.driver.driverNumber) ?? 0;
+    const rate = rates.get(car.driver.driverNumber) ?? 0;
     const speedMps = Math.max(car.sample.speed * KMH_TO_MPS, GRID_STEER_MIN_SPEED_MPS);
     const heading = car.heading + Math.atan2(rate, speedMps);
     const laneNormal = new THREE.Vector3(-Math.sin(car.heading), 0, Math.cos(car.heading));

@@ -1,8 +1,6 @@
 import { buildDriverTrajectories, buildDriverTrajectoriesSteps } from "./interpolation/build-driver-trajectories";
 import type { DriverTrajectory } from "./interpolation/driver-trajectory";
 import { TelemetryTimeline } from "./interpolation/telemetry-timeline";
-import { buildLaneOffsetTimelines, buildLaneOffsetTimelineSteps } from "./overtakes/detect-side-by-side";
-import type { LaneOffsetTimeline } from "./overtakes/lane-offset-timeline";
 import { buildRaceMilestones } from "./events/race-milestones";
 import type {
   DriverInfo,
@@ -13,18 +11,10 @@ import type {
   TrackStatusInterval,
 } from "../types";
 
-const LANE_CHANGE_MIN_SPEED_MPS = 5;
-
 interface DriverTrack {
   driver: DriverInfo;
   trajectory: DriverTrajectory;
-  laneOffset: LaneOffsetTimeline;
   telemetry: TelemetryTimeline;
-}
-
-interface PreparedReplay {
-  trajectories: Map<number, DriverTrajectory>;
-  laneOffsets: Map<number, LaneOffsetTimeline>;
 }
 
 async function prepareSteps<T>(steps: Generator<number, T>, onProgress: (progress: number) => Promise<void>) {
@@ -56,34 +46,26 @@ export class ReplayController {
   private readonly duration: number;
   private readonly tracks: DriverTrack[];
 
-  constructor(private readonly segment: ReplaySegment, prepared?: PreparedReplay) {
+  constructor(private readonly segment: ReplaySegment, trajectories = buildDriverTrajectories(segment)) {
     this.milestones = buildRaceMilestones(segment);
     this.duration = segment.timeRange.end;
     const driversByNumber = new Map(segment.drivers.map((driver) => [driver.driverNumber, driver]));
-    const trajectories = prepared?.trajectories ?? buildDriverTrajectories(segment);
-    const laneOffsets = prepared?.laneOffsets ?? buildLaneOffsetTimelines(trajectories, this.duration);
     this.tracks = [...trajectories].flatMap(([driverNumber, trajectory]) => {
       const driver = driversByNumber.get(driverNumber);
       const samples = segment.samples[driverNumber];
-      const laneOffset = laneOffsets.get(driverNumber);
-      if (!driver || !samples || samples.length === 0 || !laneOffset) {
+      if (!driver || !samples || samples.length === 0) {
         return [];
       }
-      return [{ driver, trajectory, laneOffset, telemetry: new TelemetryTimeline(samples) }];
+      return [{ driver, trajectory, telemetry: new TelemetryTimeline(samples) }];
     });
   }
 
   static async create(segment: ReplaySegment, onProgress: (progress: number) => Promise<void>) {
     const trajectories = await prepareSteps(
       buildDriverTrajectoriesSteps(segment),
-      (progress) => onProgress(progress * 0.5),
+      onProgress,
     );
-    const laneOffsets = await prepareSteps(
-      buildLaneOffsetTimelineSteps(trajectories, segment.timeRange.end),
-      (progress) => onProgress(0.5 + progress * 0.5),
-    );
-    await onProgress(1);
-    return new ReplayController(segment, { trajectories, laneOffsets });
+    return new ReplayController(segment, trajectories);
   }
 
   getDuration() {
@@ -96,15 +78,13 @@ export class ReplayController {
 
   getFrame(t: number): ReplayFrame {
     const clampedTime = Math.max(0, Math.min(this.duration, t));
-    const cars: FrameCarState[] = this.tracks.map(({ driver, trajectory, laneOffset, telemetry }) => {
+    const cars: FrameCarState[] = this.tracks.map(({ driver, trajectory, telemetry }) => {
       const pose = trajectory.poseAt(clampedTime);
-      const lane = laneOffset.sample(clampedTime);
       return {
         driver,
         sample: { ...telemetry.sampleAt(clampedTime), x: pose.x, y: pose.y, z: pose.z },
-        heading: pose.heading + Math.atan2(lane.rate, Math.max(pose.speed, LANE_CHANGE_MIN_SPEED_MPS)),
+        heading: pose.heading,
         pitch: pose.pitch,
-        lateralOffset: lane.offset,
       };
     });
 
