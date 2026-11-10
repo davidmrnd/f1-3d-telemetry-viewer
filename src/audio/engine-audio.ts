@@ -3,7 +3,7 @@ import type { CarSample } from "../types";
 import { getEngineTarget, type EngineCommand } from "./engine-telemetry";
 
 export class EngineAudio {
-  private enabled = false;
+  private unavailable = false;
   private volume = .5;
   private ducked = false;
   private graph: { source: AudioWorkletNode; gain: GainNode } | null = null;
@@ -15,19 +15,15 @@ export class EngineAudio {
     private readonly onError: () => void,
   ) {}
 
-  setEnabled(enabled: boolean) {
-    this.enabled = enabled;
-    if (!enabled) this.silence();
-  }
-
   setVolume(volume: number) {
     this.volume = volume;
     this.updateGain(.04);
+    if (volume === 0) this.silence();
   }
 
   update(sample: CarSample | undefined, radioPlaying: boolean) {
     const context = this.getContext();
-    if (!this.enabled || !sample || context?.state !== "running") {
+    if (this.unavailable || this.volume === 0 || !sample || context?.state !== "running") {
       this.silence();
       return;
     }
@@ -83,7 +79,8 @@ export class EngineAudio {
   }
 
   private fail(error: unknown) {
-    this.setEnabled(false);
+    this.unavailable = true;
+    this.silence();
     this.graph?.source.disconnect();
     this.graph?.source.port.close();
     this.graph?.gain.disconnect();

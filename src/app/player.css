@@ -229,6 +229,11 @@
 .play-button .icon { width: 29px; height: 29px; }
 .playback-controls > .icon-button:not(.play-button) { width: 32px; }
 .playback-controls > .icon-button:not(.play-button) .icon { width: 18px; height: 18px; }
+.engine-volume { display: flex; align-items: center; gap: 3px; }
+.engine-volume .icon-button { width: 30px; }
+.engine-volume .icon { width: 19px; height: 19px; }
+.engine-volume input { width: clamp(42px, 7vw, 84px); margin: 0; accent-color: #f4f4f6; color-scheme: dark; cursor: pointer; }
+.engine-status { margin: 0 0 8px; color: #ffb4b6; font-size: 11px; }
 .speed-wrap select { appearance: none; -webkit-appearance: none; cursor: pointer; color: #c7cad3; background: transparent; font-size: 12px; padding: 10px 8px; font-variant-numeric: tabular-nums; }
 select option { color: #e1e3e9; background: #1c1e24; }
 .camera-modes { display: flex; gap: 2px; margin-left: 7px; padding: 3px; border: 1px solid var(--line); border-radius: 5px; background: #121319; }
@@ -318,7 +323,7 @@ select option { color: #e1e3e9; background: #1c1e24; }
   .playback-controls { gap: 0; }
   .view-controls .icon-button { width: 30px; }
   .view-controls .icon { width: 18px; height: 18px; }
-  .playback-controls .icon-button:not(.play-button) { display: none; }
+  #reset-button { display: none; }
 }
 @media (max-width: 600px) {
   :root { --top: 60px; --edge: 16px; --panel-top: 154px; --bottom: 112px; }
@@ -348,7 +353,11 @@ select option { color: #e1e3e9; background: #1c1e24; }
   .timeline-wrap { margin-bottom: 1px; height: 24px; }
   .view-caption { bottom: calc(var(--bottom) + 5px); }
   .view-caption .camera-pill { font-size: 8px; }
-  .settings-panel { width: calc(100% - 32px); bottom: var(--bottom); max-height: calc(100% - 132px); }
+  .settings-panel { width: calc(100% - 32px); bottom: var(--bottom); max-height: calc(100% - var(--bottom) - 20px); }
+}
+@media (max-width: 470px) {
+  :root { --bottom: 164px; }
+  .view-controls { flex-basis: 100%; justify-content: flex-end; }
 }
 @media (max-height: 660px) and (min-width: 601px) {
   :root { --top: 58px; --panel-top: 133px; --bottom: 110px; }

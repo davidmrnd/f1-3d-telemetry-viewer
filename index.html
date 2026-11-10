@@ -18,6 +18,8 @@
         <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6" /></symbol>
         <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></symbol>
         <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6" /></symbol>
+        <symbol id="i-volume" viewBox="0 0 24 24"><path d="M3 9v6h4l5 4V5L7 9H3zm13 0a4 4 0 0 1 0 6m2-9a8 8 0 0 1 0 12" /></symbol>
+        <symbol id="i-volume-off" viewBox="0 0 24 24"><path d="M3 9v6h4l5 4V5L7 9H3zm13 0 5 6m0-6-5 6" /></symbol>
         <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" /></symbol>
         <symbol id="i-minimize" viewBox="0 0 24 24"><path d="M3 8h5V3m13 5h-5V3M8 21v-5H3m13 5v-5h5" /></symbol>
         <symbol id="i-theater" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M7 5v14m10-14v14" /></symbol>
@@ -115,10 +117,18 @@
         <div id="status-pill" class="status-pill" role="status">Preparando experiencia…</div>
         <output id="graphics-stats" class="graphics-stats" aria-label="Rendimiento de la escena" hidden></output>
         <footer class="player-controls player-chrome" aria-label="Controles del reproductor">
+          <p id="engine-status" class="engine-status" role="status" hidden>No se pudo activar el sonido del motor.</p>
           <div class="timeline-meta"><span id="playback-state">EN PAUSA</span><span id="time-readout">00:00.0 / 00:00.0</span></div>
           <div class="timeline-wrap"><input id="timeline" type="range" min="0" max="1000" value="0" aria-label="Posición del replay" /></div>
           <div class="control-bar">
-            <div class="playback-controls"><button id="play-toggle" class="icon-button play-button" type="button" aria-label="Reproducir" title="Reproducir (Espacio)"><svg class="icon"><use href="#i-play" /></svg></button><button id="reset-button" class="icon-button" type="button" aria-label="Reiniciar replay" title="Reiniciar (R)"><svg class="icon"><use href="#i-reset" /></svg></button><label class="speed-wrap"><span class="sr-only">Velocidad de reproducción</span><select id="speed-select"><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="1.5">1,5×</option><option value="2">2×</option></select></label>
+            <div class="playback-controls">
+              <button id="play-toggle" class="icon-button play-button" type="button" aria-label="Reproducir" title="Reproducir (Espacio)"><svg class="icon"><use href="#i-play" /></svg></button>
+              <button id="reset-button" class="icon-button" type="button" aria-label="Reiniciar replay" title="Reiniciar (R)"><svg class="icon"><use href="#i-reset" /></svg></button>
+              <div class="engine-volume" role="group" aria-label="Sonido del motor">
+                <button id="engine-mute" class="icon-button" type="button" aria-label="Silenciar motor" title="Silenciar motor"><svg class="icon" aria-hidden="true"><use href="#i-volume" /></svg></button>
+                <input id="engine-volume" type="range" min="0" max="100" value="50" aria-label="Volumen del motor" />
+              </div>
+              <label class="speed-wrap"><span class="sr-only">Velocidad de reproducción</span><select id="speed-select"><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="1.5">1,5×</option><option value="2">2×</option></select></label>
               <div id="camera-modes" class="camera-modes" role="group" aria-label="Cámara de pista"><button id="camera-auto" type="button" aria-pressed="true" title="Realización automática">Auto</button><button id="camera-free" type="button" aria-pressed="false" title="Cámara libre · WASD y ratón">Libre</button></div>
             </div>
             <div class="view-controls"><button class="icon-button panel-toggle" data-toggle-panel="classification" type="button" aria-label="Mostrar u ocultar clasificación" aria-controls="classification-panel" aria-expanded="true" title="Clasificación (C)"><svg class="icon"><use href="#i-flag" /></svg></button><button class="icon-button panel-toggle" data-toggle-panel="inspector" type="button" aria-label="Mostrar u ocultar panel de carrera" aria-controls="inspector-panel" aria-expanded="true" title="Panel de carrera (P)"><svg class="icon"><use href="#i-driver" /></svg></button><button id="theater-button" class="icon-button" type="button" aria-label="Modo cine" aria-pressed="false" title="Modo cine (T)"><svg class="icon"><use href="#i-theater" /></svg></button><button id="settings-button" class="icon-button" type="button" aria-label="Ajustes de reproducción" aria-controls="settings-panel" aria-expanded="false" title="Ajustes"><svg class="icon"><use href="#i-settings" /></svg></button><button id="fullscreen-button" class="icon-button" type="button" aria-label="Pantalla completa" title="Pantalla completa (F)"><svg class="icon"><use href="#i-fullscreen" /></svg></button></div>
@@ -127,9 +137,6 @@
         <section id="settings-panel" class="settings-panel floating-panel" aria-label="Ajustes de reproducción" hidden>
           <div class="panel-heading"><h2>AJUSTES</h2><button id="settings-close" class="icon-button small" type="button" aria-label="Cerrar ajustes"><svg class="icon"><use href="#i-close" /></svg></button></div>
           <div class="settings-content">
-            <label class="settings-field"><span>Sonido del motor</span><input id="engine-enabled" type="checkbox" /></label>
-            <label class="settings-field"><span>Volumen del motor</span><input id="engine-volume" type="range" min="0" max="100" value="50" /></label>
-            <p id="engine-status" class="graphics-hint" role="status" hidden>No se pudo activar el sonido del motor. Comprueba que el navegador admite AudioWorklet.</p>
             <label class="settings-field"><span>Experiencia</span><select id="presentation-mode"><option value="realistic">Realista · escala real</option><option value="tabletop">Sobremesa AR · ligera</option></select></label>
             <div id="tabletop-settings" hidden>
               <p class="graphics-hint">Previsualiza la maqueta con el ratón. En AR verás tu habitación y podrás colocarla manualmente sobre la mesa.</p>

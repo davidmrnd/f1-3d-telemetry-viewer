@@ -5,7 +5,9 @@ declare const sampleRate: number;
 declare function registerProcessor(name: string, processor: typeof AudioWorkletProcessor): void;
 
 const TABLE_SIZE = 1024;
+const BANK_DELAY_SECONDS = .00042;
 const SHIFT_DURATION = 0.09;
+const SHIFT_IMPACT_HZ = 185;
 const TARGET_TIMEOUT = sampleRate * 0.3;
 
 function wave(orders: readonly [order: number, gain: number, phase: number][]) {
@@ -15,8 +17,12 @@ function wave(orders: readonly [order: number, gain: number, phase: number][]) {
   });
 }
 
-const EXHAUST = wave([[1, .09, .2], [1.5, .12, .5], [3, .59, 0], [6, .31, -.5], [9, .12, -.9]]);
-const INTAKE = wave([[4.5, .10, .5], [6, .15, -.7], [9, .27, -1], [12, .19, -1.6], [15, .12, -2], [18, .08, -2.4]]);
+const BANK_PULSE = wave([
+  [1.5, .67, 1.1], [3, .54, .8], [4.5, .31, .46], [6, .29, .13],
+  [7.5, .18, -.24], [9, .15, -.62], [10.5, .09, -.98], [12, .065, -1.35],
+]);
+const CRANK = wave([[.5, .08, .5], [1, .32, -.4], [2, .18, .6], [2.5, .09, 1.3]]);
+const INTAKE = wave([[4.5, .13, .5], [6, .16, -.7], [9, .20, -1], [12, .13, -1.6]]);
 
 function sampleWave(table: Float32Array, phase: number) {
   const index = phase * TABLE_SIZE;
@@ -105,24 +111,31 @@ class EngineProcessor extends AudioWorkletProcessor {
       const cut = Math.max(0, 1 - this.shiftTime / SHIFT_DURATION) * Math.min(1, this.shiftTime / .004);
       this.shiftTime += 1 / sampleRate;
       const pitchDip = this.shift > 0 ? .075 : .028;
-      this.phase += this.rpmAudio * (1 - cut * pitchDip) / (120 * sampleRate);
+      const cycleHz = this.rpmAudio * (1 - cut * pitchDip) / 120;
+      this.phase += cycleHz / sampleRate;
       this.phase -= Math.floor(this.phase);
+      const delayedBankPhase = this.phase + 1 - 1 / 6 - cycleHz * BANK_DELAY_SECONDS;
 
       const load = this.throttle * (1 - .45 * this.brake);
       const noise = Math.random() * 2 - 1;
       this.filteredNoise += (noise - this.filteredNoise) * NOISE_FILTER;
-      const exhaust = sampleWave(EXHAUST, this.phase) * (.16 + .52 * load);
-      const intake = sampleWave(INTAKE, this.phase) * (.025 + .55 * load ** 2);
-      const air = (noise - this.filteredNoise) * (.006 + .065 * load);
+      const bankA = sampleWave(BANK_PULSE, this.phase);
+      const bankB = sampleWave(BANK_PULSE, delayedBankPhase - Math.floor(delayedBankPhase));
+      const exhaust = (bankA + .73 * bankB) * (.14 + .43 * load);
+      const vibration = sampleWave(CRANK, this.phase) * (.19 + .39 * load);
+      const intake = sampleWave(INTAKE, this.phase) * (.018 + .18 * load ** 2);
+      const air = this.filteredNoise * (.008 + .019 * load);
 
       const overrun = Math.max(0, .32 - this.throttle) * (this.overrun + .65 * this.brake);
       if (target && !this.resync && this.rpmAudio > 5800 && Math.random() < 105 * overrun / sampleRate) {
         this.crackle = Math.max(this.crackle, .18 + .42 * overrun);
       }
       this.crackle *= CRACKLE_DECAY;
-      const pops = this.crackle * (this.filteredNoise * 1.4 + exhaust * .4);
-      const click = cut ** 6 * (.22 * noise + .24 * this.filteredNoise);
-      const signal = (exhaust + intake + air) * (1 - .68 * cut) + pops + click;
+      const pops = .20 * this.crackle * (this.filteredNoise * 1.4 + exhaust * .4);
+      const shiftImpact = cut > 0
+        ? cut ** 6 * (.072 * Math.sin(2 * Math.PI * SHIFT_IMPACT_HZ * this.shiftTime) + .11 * this.filteredNoise)
+        : 0;
+      const signal = (exhaust + vibration + intake + air) * (1 - .68 * cut) + pops + shiftImpact;
       output[i] = this.level * .85 * signal / (1 + .5 * Math.abs(signal));
     }
     return true;
