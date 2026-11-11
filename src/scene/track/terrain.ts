@@ -55,11 +55,18 @@ export function createGrassTerrainGeometry(options: GrassTerrainOptions): THREE.
   const boundaryIndex = new SpatialIndex(boundary);
   const fade = Math.max(1, options.clearanceFadeMeters ?? 24);
   const clearance = options.outerClearanceMeters ?? 0.12;
+  const pad = Math.max(40, options.outerPaddingMeters ?? 320);
+  const minX = Math.min(...points.map((p) => p.x)) - halfWidth - pad;
+  const maxX = Math.max(...points.map((p) => p.x)) + halfWidth + pad;
+  const minZ = Math.min(...points.map((p) => p.z)) - halfWidth - pad;
+  const maxZ = Math.max(...points.map((p) => p.z)) + halfWidth + pad;
+  const rimWidth = Math.max(48, pad * 0.42);
+  const rimBaseY = points.reduce((sum, point) => sum + point.y, 0) / points.length - clearance;
   const project = (x: number, z: number) => {
     const edge = boundaryIndex.nearest(x, z, (segment) => segmentProjection(x, z, segment).distanceSq)!;
     return segmentProjection(x, z, edge);
   };
-  const heightAt = (x: number, z: number) => {
+  const naturalHeightAt = (x: number, z: number) => {
     const projection = project(x, z);
     const distance = Math.sqrt(projection.distanceSq);
     if (distance < 1e-5) return projection.y;
@@ -77,6 +84,13 @@ export function createGrassTerrainGeometry(options: GrassTerrainOptions): THREE.
     }
     const blend = THREE.MathUtils.smoothstep(distance, 0, fade);
     return THREE.MathUtils.lerp(projection.y, weightSum ? sum / weightSum : projection.y, blend) - clearance * blend;
+  };
+  const heightAt = (x: number, z: number) => {
+    const natural = naturalHeightAt(x, z);
+    const distToOuter = Math.min(x - minX, maxX - x, z - minZ, maxZ - z);
+    const rim = 1 - THREE.MathUtils.smoothstep(distToOuter, 0, rimWidth);
+    if (rim <= 1e-5) return natural;
+    return THREE.MathUtils.lerp(natural, rimBaseY, rim * rim);
   };
   const vertices: THREE.Vector3[] = [];
   const contours: number[][] = [];
@@ -145,11 +159,6 @@ export function createGrassTerrainGeometry(options: GrassTerrainOptions): THREE.
     const triangles = THREE.ShapeUtils.triangulateShape(planar[0], planar.slice(1));
     for (const [a, b, c] of triangles) addFace(ids[a], ids[b], ids[c]);
   };
-  const pad = Math.max(40, options.outerPaddingMeters ?? 320);
-  const minX = Math.min(...points.map((p) => p.x)) - halfWidth - pad;
-  const maxX = Math.max(...points.map((p) => p.x)) + halfWidth + pad;
-  const minZ = Math.min(...points.map((p) => p.z)) - halfWidth - pad;
-  const maxZ = Math.max(...points.map((p) => p.z)) + halfWidth + pad;
   const rectangle = [[minX, minZ], [maxX, minZ], [maxX, maxZ], [minX, maxZ]]
     .map(([x, z]) => new THREE.Vector3(x, heightAt(x, z), z));
   if (closed) {
