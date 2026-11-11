@@ -1,4 +1,5 @@
 import type { RaceCatalogEntry } from "../data/races-catalog";
+import { setAppTitle } from "./document-title";
 import { grandPrixName } from "./session-ui";
 
 function formatDuration(durationSec: number): string {
@@ -37,6 +38,7 @@ export class RacePickerView {
     this.grid.replaceChildren();
     this.empty.hidden = races.length > 0;
     this.root.hidden = false;
+    setAppTitle("Carreras");
 
     if (races.length === 0) {
       this.resolvePick = null;

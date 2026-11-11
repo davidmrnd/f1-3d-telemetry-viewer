@@ -1,4 +1,5 @@
 import type { ReplaySegment } from "../types";
+import { setAppTitle } from "./document-title";
 
 export type SessionUiElements = {
   sessionTitle: HTMLElement;
@@ -16,8 +17,14 @@ export function grandPrixName(meetingName: string) {
   return names[meetingName] ?? meetingName;
 }
 
+export function setReplayDocumentTitle(segment: ReplaySegment) {
+  const { meetingName, year } = segment.sessionRef;
+  setAppTitle(`${grandPrixName(meetingName)} ${year}`);
+}
+
 export function paintSessionMetadata(segment: ReplaySegment, ui: SessionUiElements) {
   ui.sessionTitle.textContent = grandPrixName(segment.sessionRef.meetingName);
   ui.sessionCircuit.textContent = segment.sessionRef.circuitShortName;
   ui.carCountTag.textContent = `${segment.drivers.length} pilotos`;
+  setReplayDocumentTitle(segment);
 }

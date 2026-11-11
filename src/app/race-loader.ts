@@ -14,7 +14,7 @@ import type { RadioPlayer } from "./radio-player";
 import type { RacePickerView } from "./race-picker-view";
 import type { ReplayElements } from "./replay-elements";
 import type { ReplayApp } from "./replay-app";
-import { paintSessionMetadata } from "./session-ui";
+import { paintSessionMetadata, setReplayDocumentTitle } from "./session-ui";
 import type { TimingTowerView } from "./timing-tower-view";
 
 interface RaceLoaderOptions {
@@ -77,7 +77,8 @@ export function createRaceLoader(options: RaceLoaderOptions) {
   async function loadSelectedRace(entry: RaceCatalogEntry) {
     loadingRace = true;
     appShell.inert = true;
-    loadingView.show(entry);    try {
+    loadingView.show(entry);
+    try {
       ui.statusPill.classList.remove("is-ready");
       ui.statusPill.textContent = "Cargando datos del replay...";
       await loadingView.checkpoint(0);
@@ -121,7 +122,8 @@ export function createRaceLoader(options: RaceLoaderOptions) {
       resetClock();
       loadingRace = false;
       appShell.inert = false;
-      loadingView.hide();    }
+      loadingView.hide();
+    }
   }
 
   async function chooseAndLoadRace(options: { allowQueryShortcut?: boolean } = {}) {
@@ -136,6 +138,8 @@ export function createRaceLoader(options: RaceLoaderOptions) {
       replay.playing = replay.getController() != null && wasPlaying;
       syncPlayButton(replay.playing);
       resetClock();
+      const segment = replay.getController()?.getSegment();
+      if (segment) setReplayDocumentTitle(segment);
       if (!appShell.hidden) changeRaceButton.focus({ preventScroll: true });
       return;
     }

@@ -25,6 +25,7 @@ import { RaceScene } from "../scene/race-scene";
 import { GraphicsPerformanceView } from "./graphics-performance-view";
 
 import { queryReplayElements } from "./replay-elements";
+import { setAppTitle } from "./document-title";
 import { createRaceLoader } from "./race-loader";
 import type { RaceMilestoneControls } from "../types";
 
@@ -184,6 +185,7 @@ export function startReplayApplication() {
       appShell.hidden = false;
       ui.statusPill.classList.remove("is-ready");
       ui.sessionTitle.textContent = "Error de carga";
+      setAppTitle("Error de carga");
       ui.statusPill.textContent =
         error instanceof Error && error.message.includes("coche")
           ? "No se pudo cargar el modelo 3D del coche (f1model.gltf)."

@@ -1,4 +1,5 @@
 import type { RaceCatalogEntry } from "../data/races-catalog";
+import { setAppTitle } from "./document-title";
 import { mustQuery } from "./dom";
 import { grandPrixName } from "./session-ui";
 
@@ -33,6 +34,7 @@ export class LoadingView {
     this.paint(0);
     this.title.textContent = race.circuitShortName;
     this.subtitle.textContent = `${grandPrixName(race.meetingName)} · ${race.year}`;
+    setAppTitle(race.circuitShortName);
     this.track.hidden = false;
     this.track.src = `/images/circuits/${encodeURIComponent(race.race)}.svg`;
     this.update(0, "Cargando datos del replay…");
