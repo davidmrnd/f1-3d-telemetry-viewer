@@ -1,5 +1,5 @@
 import type { FrameCarState, RaceControlEvent, ReplayFrame, ReplaySegment } from "../types";
-import { compoundLetter, formatCompoundAge, formatInterval } from "./format";
+import { compoundLetter, formatInterval } from "./format";
 
 type TowerRowNodes = {
   root: HTMLElement;
@@ -7,7 +7,6 @@ type TowerRowNodes = {
   teamColor: HTMLElement;
   acronym: HTMLElement;
   compound: HTMLElement;
-  tyreAge: HTMLElement;
   interval: HTMLElement;
 };
 
@@ -35,17 +34,14 @@ function createRow(car: FrameCarState): TowerRowNodes {
   const compound = document.createElement("span");
   compound.className = "timing-row__compound";
 
-  const tyreAge = document.createElement("span");
-  tyreAge.className = "timing-row__age";
-
-  tyre.append(compound, tyreAge);
+  tyre.append(compound);
 
   const interval = document.createElement("span");
   interval.className = "timing-row__interval";
 
   root.append(position, teamColor, acronym, tyre, interval);
 
-  return { root, position, teamColor, acronym, compound, tyreAge, interval };
+  return { root, position, teamColor, acronym, compound, interval };
 }
 
 function fillRow(nodes: TowerRowNodes, car: FrameCarState, isLeader: boolean) {
@@ -54,7 +50,6 @@ function fillRow(nodes: TowerRowNodes, car: FrameCarState, isLeader: boolean) {
   nodes.acronym.textContent = car.driver.acronym;
   nodes.compound.textContent = compoundLetter(car.sample.compound);
   nodes.compound.dataset.compound = (car.sample.compound ?? "unknown").toLowerCase();
-  nodes.tyreAge.textContent = formatCompoundAge(car.sample.tyreAge);
   nodes.interval.textContent = isLeader
     ? "LÍDER"
     : formatInterval(car.sample.intervalToAhead, car.sample.gapToLeader);
