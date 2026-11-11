@@ -257,6 +257,7 @@ function loadLiveryBodyTexture(url: string): Promise<THREE.Texture> {
     loader.load(
       url,
       (texture) => {
+        texture.flipY = false;
         texture.colorSpace = THREE.SRGBColorSpace;
         texture.name = LIVERY_BODY_TEXTURE_NAME;
         downscaleTexture(texture, DETAILED_CAR_MAX_TEXTURE_SIZE);
