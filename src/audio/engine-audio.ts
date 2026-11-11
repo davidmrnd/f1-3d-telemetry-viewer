@@ -4,9 +4,9 @@ import { getEngineTarget } from "./engine-telemetry";
 
 const VOICE_COUNT = 3;
 const VIEW_MIX = {
-  trackside: { range: 400, reference: 42, cutoff: 9200, absorption: 90 },
-  free: { range: 450, reference: 38, cutoff: 8400, absorption: 70 },
-  cockpit: { range: 150, reference: 23, cutoff: 3200, absorption: 50 },
+  trackside: { range: 260, reference: 18, cutoff: 8200, absorption: 55 },
+  free: { range: 220, reference: 14, cutoff: 7600, absorption: 42 },
+  cockpit: { range: 120, reference: 16, cutoff: 3000, absorption: 38 },
   tabletop: { range: 12, reference: 2.4, cutoff: 5500, absorption: 3 },
 };
 
@@ -115,11 +115,12 @@ export class EngineAudio {
       panner.positionX.setTargetAtTime(position.x, now, .025);
       panner.positionY.setTargetAtTime(position.y, now, .025);
       panner.positionZ.setTargetAtTime(position.z, now, .025);
-      const distanceGain = (1 - (distance / mix.range) ** 2) / (1 + distance / mix.reference);
-      const level = ownCar ? .95 : distanceGain * (cockpit ? .54 : .83);
+      const normalized = distance / mix.reference;
+      const distanceGain = Math.max(0, 1 - distance / mix.range) / (1 + normalized * normalized);
+      const level = ownCar ? .95 : distanceGain * (cockpit ? .48 : .9);
       const cutoff = ownCar ? 4700 : mix.cutoff / (1 + distance / mix.absorption);
       gain.gain.setTargetAtTime(level, now, .045);
-      lowpass.frequency.setTargetAtTime(Math.max(650, cutoff), now, .045);
+      lowpass.frequency.setTargetAtTime(Math.max(480, cutoff), now, .045);
     }
   }
 
@@ -132,11 +133,11 @@ export class EngineAudio {
     try {
       await context.audioWorklet.addModule(workletUrl);
       const compressor = context.createDynamicsCompressor();
-      compressor.threshold.value = -9;
-      compressor.knee.value = 9;
-      compressor.ratio.value = 6;
-      compressor.attack.value = .004;
-      compressor.release.value = .12;
+      compressor.threshold.value = -16;
+      compressor.knee.value = 12;
+      compressor.ratio.value = 3.2;
+      compressor.attack.value = .006;
+      compressor.release.value = .18;
       const gain = context.createGain();
       gain.gain.value = this.volume * (this.ducked ? .3 : 1);
       compressor.connect(gain).connect(context.destination);
