@@ -50,9 +50,9 @@ function fillRow(nodes: TowerRowNodes, car: FrameCarState, isLeader: boolean) {
   nodes.acronym.textContent = car.driver.acronym;
   nodes.compound.textContent = compoundLetter(car.sample.compound);
   nodes.compound.dataset.compound = (car.sample.compound ?? "unknown").toLowerCase();
-  nodes.interval.textContent = isLeader
+  nodes.interval.textContent = car.retirement?.toUpperCase() ?? (isLeader
     ? "LÍDER"
-    : formatInterval(car.sample.intervalToAhead, car.sample.gapToLeader);
+    : formatInterval(car.sample.intervalToAhead, car.sample.gapToLeader));
   nodes.root.classList.toggle("timing-row--leader", isLeader);
 }
 
@@ -104,7 +104,7 @@ export class TimingTowerView {
         nodes = createRow(car);
         this.rows.set(key, nodes);
       }
-      fillRow(nodes, car, index === 0);
+      fillRow(nodes, car, index === 0 && !car.retirement);
       order.push(nodes.root);
     }
 

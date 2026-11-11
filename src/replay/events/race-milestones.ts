@@ -130,6 +130,14 @@ export function buildRaceMilestones(segment: ReplaySegment): RaceMilestone[] {
       drivers: [pit.driverNumber], label: `${driver.acronym} entra a boxes`,
       detail: `Vuelta ${pit.lapNumber}`, approximate: false });
   }
+  for (const retirement of segment.retirements ?? []) {
+    if (retirement.status !== "dnf") continue;
+    const driver = segment.drivers.find(driver => driver.driverNumber === retirement.driverNumber);
+    if (!driver) continue;
+    milestones.push({ id: `retirement:${retirement.driverNumber}:${retirement.t}`, kind: "retirement",
+      time: retirement.t, drivers: [retirement.driverNumber], label: `${driver.acronym} abandona`,
+      detail: "Instante estimado a partir de las últimas muestras", approximate: true });
+  }
   milestones.push(...offTrackMilestones(segment, laps));
   const unique = new Map(milestones.filter(item => Number.isFinite(item.time) && item.time >= 0 && item.time <= segment.timeRange.end)
     .map(item => [item.id, item]));

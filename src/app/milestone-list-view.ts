@@ -7,6 +7,7 @@ const KINDS: Record<RaceMilestoneKind, { label: string; icon: string }> = {
   overtake: { label: "Adelantamiento", icon: "overtake" },
   off_track: { label: "Salida de pista", icon: "off-track" },
   pit_entry: { label: "Entrada a boxes", icon: "pit" },
+  retirement: { label: "Abandono", icon: "close" },
 };
 
 function element(tag: string, className: string, text = "") {
@@ -48,7 +49,8 @@ export class MilestoneListView {
     filters.setAttribute("aria-label", driverMode ? "Filtrar adelantamientos" : "Filtrar hitos del circuito");
     const options = driverMode
       ? [["all", "Todos"], ["made", "Realizados"], ["received", "Recibidos"]]
-      : [["all", "Todos"], ["overtake", "Adelantamientos"], ["finish", "Meta"], ["off_track", "Fuera de pista"], ["pit_entry", "Boxes"]];
+      : [["all", "Todos"], ["overtake", "Adelantamientos"], ["finish", "Meta"], ["off_track", "Fuera de pista"],
+        ["pit_entry", "Boxes"], ["retirement", "Abandonos"]];
     for (const [value, text] of options) {
       const button = document.createElement("button");
       const count = element("span", "milestone-filter__count", "0");

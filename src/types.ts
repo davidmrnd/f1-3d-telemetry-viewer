@@ -69,7 +69,7 @@ export interface ReplayEvent {
   metadata?: Record<string, unknown>;
 }
 
-export type RaceMilestoneKind = "finish" | "overtake" | "off_track" | "pit_entry";
+export type RaceMilestoneKind = "finish" | "overtake" | "off_track" | "pit_entry" | "retirement";
 
 export interface RaceMilestone {
   id: string;
@@ -191,6 +191,7 @@ export interface FrameCarState {
   sample: CarSample;
   heading: number;
   pitch: number;
+  retirement?: Retirement["status"];
 }
 
 export interface EngineAudioView {

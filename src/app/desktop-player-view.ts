@@ -167,6 +167,7 @@ export class DesktopPlayerView {
       dot.classList.add("map-driver");
       dot.setAttribute("r", "3.5");
       dot.setAttribute("fill", driver.teamColor);
+      dot.setAttribute("visibility", "hidden");
       const title = document.createElementNS(SVG_NS, "title");
       title.textContent = driver.fullName;
       dot.append(title);
@@ -212,6 +213,8 @@ export class DesktopPlayerView {
       for (const car of frame.cars) {
         const dot = this.mapDots.get(car.driver.driverNumber);
         if (!dot) continue;
+        dot.setAttribute("visibility", car.retirement ? "hidden" : "visible");
+        if (car.retirement) continue;
         const point = this.projection.project(car.sample.x, car.sample.z);
         dot.setAttribute("cx", point.x.toFixed(1));
         dot.setAttribute("cy", point.y.toFixed(1));
@@ -304,13 +307,15 @@ export class DesktopPlayerView {
   }
 
   private updateTelemetry(frame: ReplayFrame) {
-    const sample = frame.cars.find((car) => car.driver.driverNumber === this.selectedDriver)?.sample;
+    const car = frame.cars.find((car) => car.driver.driverNumber === this.selectedDriver);
+    const sample = car?.sample;
     const { position, tyre, gap, speed, gear, rpm, drs, throttle, brake, throttleBar, brakeBar } = this.telemetry;
     position.textContent = sample?.position != null ? `P${sample.position}` : "—";
     const compound = sample?.compound?.toUpperCase() ?? "";
     tyre.textContent = COMPOUNDS[compound] ?? "—";
     tyre.dataset.compound = compound.toLowerCase();
-    gap.textContent = sample?.position === 1 ? "Líder" : sample?.gapToLeader != null ? formatDelta(sample.gapToLeader) : "—";
+    gap.textContent = car?.retirement?.toUpperCase() ??
+      (sample?.position === 1 ? "Líder" : sample?.gapToLeader != null ? formatDelta(sample.gapToLeader) : "—");
     speed.textContent = sample ? String(Math.round(sample.speed)) : "—";
     gear.textContent = sample ? (sample.gear === 0 ? "N" : String(sample.gear)) : "—";
     rpm.textContent = sample ? Math.round(sample.rpm).toLocaleString("es") : "—";

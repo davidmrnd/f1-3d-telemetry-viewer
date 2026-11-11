@@ -5,6 +5,7 @@ import type { TrackPath } from "./cameras/automatic/track-path";
 import { pathSegments, segmentProjection } from "./track/path";
 import { SpatialIndex } from "./track/spatial";
 import type { PitLane, createCircuitHeightSampler } from "./track/pit-lane";
+import { angleDelta, HALF_WIDTH } from "./traffic/car-footprint";
 import { vectorFromPoint, type SceneTransform } from "./track-geometry";
 
 const CAR_CLEARANCE = 0.02;
@@ -12,6 +13,9 @@ const PIT_MATCH_GAP_MS = 2500;
 const TRACK_BLEND_MS = 1200;
 const JOIN_LOOKBACK_MS = 3500;
 const JOIN_LOOKAHEAD_MS = 3000;
+const RETIREMENT_APPROACH_MS = 3000;
+const RETIREMENT_SETTLE_MS = 700;
+const RETIREMENT_CLEARANCE_MS = 25000;
 
 type HeightSampler = ReturnType<typeof createCircuitHeightSampler>;
 
@@ -34,12 +38,17 @@ interface RoadJoin {
   offset: THREE.Vector3;
 }
 
-interface ParkedCar {
-  time: number;
+interface CarPose {
   position: THREE.Vector3;
   heading: number;
   pitch: number;
-  clearAt?: number;
+}
+
+interface ParkedCar extends CarPose {
+  start: number;
+  time: number;
+  clearAt: number;
+  lateralShift: number;
 }
 
 function trackClearedAt(segment: ReplaySegment, stoppedAt: number): number | undefined {
@@ -88,16 +97,12 @@ function simulateProgress(samples: CarSample[], anchors: ProgressSample[]): Prog
   return progress;
 }
 
-function blendAngle(from: number, to: number, weight: number): number {
-  return from + Math.atan2(Math.sin(to - from), Math.cos(to - from)) * weight;
-}
-
-function blendPose(placement: BaseCarPlacement, pose: Omit<ParkedCar, "time">, weight: number): BaseCarPlacement {
+function blendPose(placement: BaseCarPlacement, pose: CarPose, weight: number): BaseCarPlacement {
   return {
     ...placement,
     position: placement.position.clone().lerp(pose.position, weight),
-    heading: blendAngle(placement.heading, pose.heading, weight),
-    car: { ...placement.car, pitch: blendAngle(placement.car.pitch, pose.pitch, weight) },
+    heading: placement.heading + angleDelta(placement.heading, pose.heading) * weight,
+    car: { ...placement.car, pitch: placement.car.pitch + angleDelta(placement.car.pitch, pose.pitch) * weight },
   };
 }
 
@@ -143,26 +148,46 @@ export class PitLanePlacement {
         continue;
       }
       const samples = segment.samples[retirement.driverNumber] ?? [];
-      const lastMoving = samples.findIndex((sample) => sample.t >= retirement.t);
-      const index = lastMoving < 0 ? samples.length - 1 : lastMoving;
+      const firstAtRetirement = samples.findIndex((sample) => sample.t >= retirement.t);
+      const index = firstAtRetirement < 0 ? samples.length - 1 : firstAtRetirement;
       if (index < 0) continue;
-      const stopped = samples.slice(index).find((sample) => sample.t <= retirement.t + 10000 && sample.speed <= 5);
-      const sample = stopped ?? samples[index];
+      let stopIndex = index;
+      for (let i = index; samples[i]?.t <= retirement.t + 10000; i++) {
+        if (samples[i].speed <= 2) {
+          stopIndex = i;
+          break;
+        }
+      }
+      const sample = samples[stopIndex];
       const time = Math.max(retirement.t, sample.t);
       const position = vectorFromPoint(sample, this.transform);
       const pit = this.pitProgress(position);
       if (pit !== null && lane) {
         const offset = this.parkingOffset(lane, pit);
-        this.parked.set(retirement.driverNumber, { ...this.lanePose(lane, pit, offset), time });
+        this.parked.set(retirement.driverNumber, {
+          ...this.lanePose(lane, pit, offset),
+          start: time - TRACK_BLEND_MS,
+          time,
+          clearAt: time + RETIREMENT_CLEARANCE_MS,
+          lateralShift: 0,
+        });
         continue;
       }
-      let before = index - 1;
-      while (before >= 0 && Math.hypot(sample.x - samples[before].x, sample.z - samples[before].z) < 15) before--;
-      const previous = vectorFromPoint(samples[Math.max(0, before)], this.transform);
-      position.y = this.circuitHeight(position.x, position.z, position.y) + CAR_CLEARANCE;
-      const heading = Math.atan2(position.z - previous.z, position.x - previous.x);
-      const clearAt = this.roadDistance(position) < trackWidth / 2 ? trackClearedAt(segment, time) : undefined;
-      this.parked.set(retirement.driverNumber, { time, position, heading, pitch: 0, clearAt });
+      const projection = main.projectPointPlanar(position)!;
+      const tangent = main.tangentAt(projection);
+      const normal = new THREE.Vector3(-tangent.z, 0, tangent.x);
+      const lateralShift = this.roadParkingShift(position, projection, tangent, normal);
+      const parkedPosition = position.addScaledVector(normal, lateralShift);
+      parkedPosition.y = circuitHeight(parkedPosition.x, parkedPosition.z, parkedPosition.y) + CAR_CLEARANCE;
+      this.parked.set(retirement.driverNumber, {
+        position: parkedPosition,
+        heading: Math.atan2(tangent.z, tangent.x),
+        pitch: 0,
+        start: Math.max(samples[0].t, time - (lateralShift ? RETIREMENT_APPROACH_MS : TRACK_BLEND_MS)),
+        time,
+        clearAt: trackClearedAt(segment, time) ?? time + RETIREMENT_CLEARANCE_MS,
+        lateralShift,
+      });
     }
   }
 
@@ -171,15 +196,53 @@ export class PitLanePlacement {
       const number = placement.car.driver.driverNumber;
       if (this.absent.has(number)) return [];
       const parked = this.parked.get(number);
-      if (parked?.clearAt !== undefined && now >= parked.clearAt) return [];
+      if (parked && now >= parked.clearAt) return [];
       const visit = this.visits.get(number)?.find(({ start, end }) => now >= start && now <= end);
-      let result = this.lane && visit ? this.placeInLane(placement, this.lane, visit, now) : placement;
-      if (parked && now >= parked.time - 1200) {
-        const weight = THREE.MathUtils.smootherstep(now, parked.time - 1200, parked.time);
-        result = blendPose(result, parked, weight);
-      }
+      const result = this.lane && visit ? this.placeInLane(placement, this.lane, visit, now) : placement;
+      if (parked && now >= parked.start) return [this.placeRetiringCar(result, parked, now)];
       return [result];
     });
+  }
+
+  private roadParkingShift(
+    position: THREE.Vector3, projection: NonNullable<ReturnType<TrackPath["projectPointPlanar"]>>,
+    tangent: THREE.Vector3, normal: THREE.Vector3,
+  ): number {
+    const edge = this.trackWidth / 2;
+    if (this.roadDistance(position) >= edge + HALF_WIDTH) return 0;
+
+    const lateral = position.clone().sub(projection.point).dot(normal);
+    const incoming = projection.point.clone().sub(this.main.pointAt(projection.distance - 32));
+    const turn = incoming.x * tangent.z - incoming.z * tangent.x;
+    const preferredSide = Math.abs(lateral) >= 1 ? Math.sign(lateral) : turn > 0 ? -1 : 1;
+    for (const side of [preferredSide, -preferredSide]) {
+      const shift = side * (edge + HALF_WIDTH + 0.4) - lateral;
+      const candidate = position.clone().addScaledVector(normal, shift);
+      if (this.roadDistance(candidate) < edge + HALF_WIDTH) continue;
+      if (this.lane && Number.isFinite(this.lane.heightAt(candidate.x, candidate.z, NaN))) continue;
+      return shift;
+    }
+    return 0;
+  }
+
+  private placeRetiringCar(placement: BaseCarPlacement, parked: ParkedCar, now: number): BaseCarPlacement {
+    if (now >= parked.time) {
+      return { ...placement, position: parked.position.clone(), heading: parked.heading,
+        car: { ...placement.car, pitch: parked.pitch } };
+    }
+    const weight = THREE.MathUtils.smootherstep(now, parked.start, parked.time);
+    if (!parked.lateralShift) return blendPose(placement, parked, weight);
+
+    const offset = parked.lateralShift * weight;
+    const position = placement.position.clone();
+    position.x -= Math.sin(placement.heading) * offset;
+    position.z += Math.cos(placement.heading) * offset;
+    position.y = this.circuitHeight(position.x, position.z, position.y - CAR_CLEARANCE) + CAR_CLEARANCE;
+    const u = (now - parked.start) / (parked.time - parked.start);
+    const lateralSpeed = parked.lateralShift * 30000 * u ** 2 * (1 - u) ** 2 / (parked.time - parked.start);
+    const steering = Math.atan2(lateralSpeed, Math.max(5, placement.car.sample.speed / 3.6));
+    const settle = THREE.MathUtils.smootherstep(now, Math.max(parked.start, parked.time - RETIREMENT_SETTLE_MS), parked.time);
+    return blendPose({ ...placement, position, heading: placement.heading + steering }, parked, settle);
   }
 
   private roadDistance(point: THREE.Vector3): number {
@@ -289,7 +352,7 @@ export class PitLanePlacement {
     return position;
   }
 
-  private lanePose(lane: PitLane, distance: number, offset: number): Omit<ParkedCar, "time"> {
+  private lanePose(lane: PitLane, distance: number, offset: number): CarPose {
     const direction = this.lanePoint(lane, distance + 3, offset).sub(this.lanePoint(lane, distance - 3, offset));
     return {
       position: this.lanePoint(lane, distance, offset),

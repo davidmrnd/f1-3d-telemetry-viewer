@@ -53,7 +53,7 @@ export class XrWristTiming {
     if (!this.surface.mesh.visible) { this.wasVisible = false; return; }
     if (this.wasVisible && now - this.lastPaint < 500) return;
     const cars = this.frame?.cars.slice(0, 20) ?? [];
-    const signature = cars.map(c => `${c.driver.driverNumber}:${c.sample.position}:${c.sample.intervalToAhead?.toFixed(2)}:${c.sample.compound}`).join("|");
+    const signature = cars.map(c => `${c.driver.driverNumber}:${c.sample.position}:${c.sample.intervalToAhead?.toFixed(2)}:${c.sample.compound}:${c.retirement}`).join("|");
     if (signature !== this.signature || !this.wasVisible) {
       const ctx = this.surface.context;
       panelWindowBackground(ctx, 384, 640);
@@ -83,7 +83,8 @@ export class XrWristTiming {
         panelText(ctx, compound.slice(0, 1) || "—", 177, y + 13, 16,
           compound === "SOFT" ? "#ff545e" : compound === "MEDIUM" ? "#f3d14c" : ["INTERMEDIATE", "INTER"].includes(compound) ? "#63e5b2" : compound === "WET" ? "#64aaff" : "#f1f5fc");
         const gap = car.sample.intervalToAhead;
-        panelText(ctx, car.sample.position === 1 ? "LÍDER" : gap != null ? `+${gap.toFixed(2)}` : "—", 250, y + 13, 18, "#c0c1cb");
+        const interval = car.retirement?.toUpperCase() ?? (car.sample.position === 1 ? "LÍDER" : gap != null ? `+${gap.toFixed(2)}` : "—");
+        panelText(ctx, interval, 250, y + 13, 18, "#c0c1cb");
       });
       this.surface.texture.needsUpdate = true;
       this.signature = signature;

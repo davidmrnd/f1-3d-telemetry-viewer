@@ -8,6 +8,7 @@ import type {
   ReplayEvent,
   ReplayFrame,
   ReplaySegment,
+  Retirement,
   TrackStatusInterval,
 } from "../types";
 
@@ -15,6 +16,7 @@ interface DriverTrack {
   driver: DriverInfo;
   trajectory: DriverTrajectory;
   telemetry: TelemetryTimeline;
+  retirement: Retirement | undefined;
 }
 
 async function prepareSteps<T>(steps: Generator<number, T>, onProgress: (progress: number) => Promise<void>) {
@@ -50,13 +52,14 @@ export class ReplayController {
     this.milestones = buildRaceMilestones(segment);
     this.duration = segment.timeRange.end;
     const driversByNumber = new Map(segment.drivers.map((driver) => [driver.driverNumber, driver]));
+    const retirements = new Map(segment.retirements?.map((retirement) => [retirement.driverNumber, retirement]));
     this.tracks = [...trajectories].flatMap(([driverNumber, trajectory]) => {
       const driver = driversByNumber.get(driverNumber);
       const samples = segment.samples[driverNumber];
       if (!driver || !samples || samples.length === 0) {
         return [];
       }
-      return [{ driver, trajectory, telemetry: new TelemetryTimeline(samples) }];
+      return [{ driver, trajectory, telemetry: new TelemetryTimeline(samples), retirement: retirements.get(driverNumber) }];
     });
   }
 
@@ -78,20 +81,22 @@ export class ReplayController {
 
   getFrame(t: number): ReplayFrame {
     const clampedTime = Math.max(0, Math.min(this.duration, t));
-    const cars: FrameCarState[] = this.tracks.map(({ driver, trajectory, telemetry }) => {
+    const cars: FrameCarState[] = this.tracks.map(({ driver, trajectory, telemetry, retirement }) => {
       const pose = trajectory.poseAt(clampedTime);
       return {
         driver,
         sample: { ...telemetry.sampleAt(clampedTime), x: pose.x, y: pose.y, z: pose.z },
         heading: pose.heading,
         pitch: pose.pitch,
+        retirement: retirement && clampedTime >= retirement.t ? retirement.status : undefined,
       };
     });
 
     cars.sort((a, b) => {
+      const retirementOrder = Number(Boolean(a.retirement)) - Number(Boolean(b.retirement));
       const positionA = a.sample.position ?? Number.MAX_SAFE_INTEGER;
       const positionB = b.sample.position ?? Number.MAX_SAFE_INTEGER;
-      return positionA - positionB;
+      return retirementOrder || positionA - positionB;
     });
 
     return {

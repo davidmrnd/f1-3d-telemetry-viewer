@@ -2,7 +2,8 @@ import type { DriverInfo, RaceMilestone, RaceMilestoneControls } from "../../typ
 import { createXrPanel, panelRoundedBox, panelText, panelWindowBackground } from "./xr-panel";
 
 const PAGE_SIZE = 5;
-const FILTERS = [["all", "Todos"], ["finish", "Meta"], ["overtake", "Adelant."], ["off_track", "Fuera"], ["pit_entry", "Boxes"]];
+const FILTERS = [["all", "Todos"], ["finish", "Meta"], ["overtake", "Adelant."], ["off_track", "Fuera"],
+  ["pit_entry", "Boxes"], ["retirement", "Abandonos"]];
 const DRIVER_FILTERS = [["all", "Todos"], ["made", "Realizados"], ["received", "Recibidos"]];
 
 export class RaceMilestoneHistory {
@@ -45,7 +46,7 @@ export class RaceMilestoneHistory {
     panelWindowBackground(ctx, 720, canvas.height);
     panelText(ctx, this.driver ? "HISTORIAL DE ADELANTAMIENTOS" : "HITOS DEL CIRCUITO", 24, 34, 25, "#fff", 800);
     panelText(ctx, this.driver?.fullName ?? "Elige un instante para revivirlo", 24, 78, 27, this.driver?.teamColor ?? "#84f4c8", 700, 672);
-    panelText(ctx, this.driver ? this.summary() : "Meta · adelantamientos · salidas de pista · boxes", 24, 110, 18, "#b3c0ce", 500, 672);
+    panelText(ctx, this.driver ? this.summary() : "Meta · adelantamientos · salidas de pista · boxes · abandonos", 24, 110, 18, "#b3c0ce", 500, 672);
     const filters = this.driver ? DRIVER_FILTERS : FILTERS;
     const width = 672 / filters.length;
     filters.forEach(([value, label], index) => {
