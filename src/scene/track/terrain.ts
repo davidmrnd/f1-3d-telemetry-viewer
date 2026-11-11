@@ -5,6 +5,7 @@ import { SpatialIndex } from "./spatial";
 
 export interface GrassTerrainOptions {
   halfExtentMeters?: number;
+  outerPaddingMeters?: number;
   gridSpacingMeters?: number;
   gridSegments?: number;
   grassTileMeters?: number;
@@ -144,11 +145,11 @@ export function createGrassTerrainGeometry(options: GrassTerrainOptions): THREE.
     const triangles = THREE.ShapeUtils.triangulateShape(planar[0], planar.slice(1));
     for (const [a, b, c] of triangles) addFace(ids[a], ids[b], ids[c]);
   };
-  const extent = options.halfExtentMeters ?? 3000;
-  const minX = Math.min(-extent, ...points.map((p) => p.x - halfWidth - 80));
-  const maxX = Math.max(extent, ...points.map((p) => p.x + halfWidth + 80));
-  const minZ = Math.min(-extent, ...points.map((p) => p.z - halfWidth - 80));
-  const maxZ = Math.max(extent, ...points.map((p) => p.z + halfWidth + 80));
+  const pad = Math.max(40, options.outerPaddingMeters ?? 320);
+  const minX = Math.min(...points.map((p) => p.x)) - halfWidth - pad;
+  const maxX = Math.max(...points.map((p) => p.x)) + halfWidth + pad;
+  const minZ = Math.min(...points.map((p) => p.z)) - halfWidth - pad;
+  const maxZ = Math.max(...points.map((p) => p.z)) + halfWidth + pad;
   const rectangle = [[minX, minZ], [maxX, minZ], [maxX, maxZ], [minX, maxZ]]
     .map(([x, z]) => new THREE.Vector3(x, heightAt(x, z), z));
   if (closed) {
@@ -183,7 +184,9 @@ export function createGrassTerrainGeometry(options: GrassTerrainOptions): THREE.
     removeFace(face);
     for (let i = 0; i < sequence.length - 1; i++) addFace(sequence[i], sequence[i + 1], opposite);
   }
-  const spacing = Math.max(2, options.gridSpacingMeters ?? (options.gridSegments ? extent * 2 / options.gridSegments : 16));
+  const spacing = Math.max(2, options.gridSpacingMeters ?? (options.gridSegments
+    ? Math.max(maxX - minX, maxZ - minZ) / options.gridSegments
+    : 14));
   const midpointCache = new Map<string, number>();
   legalize([...adjacency.keys()]);
   while (pending.length) {
@@ -223,12 +226,21 @@ export function createGrassTerrainGeometry(options: GrassTerrainOptions): THREE.
   const uvs = new Float32Array(vertices.length * 2);
   const colors = new Float32Array(vertices.length * 3);
   const tile = Math.max(0.01, options.grassTileMeters ?? 4);
+  const edgeStart = halfWidth + pad * 0.42;
+  const edgeEnd = halfWidth + pad * 0.98;
   vertices.forEach((p, i) => {
     positions.set([p.x, p.y, p.z], i * 3);
     uvs.set([p.x / tile, p.z / tile], i * 2);
     const variation = 0.88 + Math.sin(p.x * 0.014 + Math.sin(p.z * 0.009)) * 0.05
       + Math.cos(p.z * 0.026 - p.x * 0.008) * 0.035;
-    colors.set([variation, variation, variation * 0.94], i * 3);
+    const lateral = Math.sqrt(project(p.x, p.z).distanceSq);
+    const edgeFade = THREE.MathUtils.smoothstep(lateral, edgeStart, edgeEnd);
+    const tone = THREE.MathUtils.lerp(variation, 0.84, edgeFade * 0.7);
+    colors.set([
+      THREE.MathUtils.lerp(tone, 0.78, edgeFade * 0.35),
+      THREE.MathUtils.lerp(tone, 0.82, edgeFade * 0.35),
+      THREE.MathUtils.lerp(tone * 0.94, 0.84, edgeFade * 0.4),
+    ], i * 3);
   });
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));

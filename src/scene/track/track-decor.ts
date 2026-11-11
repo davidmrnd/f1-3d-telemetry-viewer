@@ -3,6 +3,7 @@ import type { GraphicsSettings } from "../graphics-settings";
 import { getTrackSurfaceMaterials } from "../track-environment";
 import { TrackPath } from "../cameras/automatic/track-path";
 import { createCircuitProps } from "./circuit-props";
+import { createHorizonRing } from "./horizon-ring";
 import type { PitLane } from "./pit-lane";
 import { pathSegments, segmentProjection } from "./path";
 import { crossSectionPoint, type TrackCrossSection } from "./ribbon";
@@ -184,14 +185,18 @@ export function createTrackDecor(
   batch(trackside, box, materials.steel, signPosts);
   const props = createCircuitProps(new TrackPath(points, closed), width, pitLane, heightAt, urban, materials.concrete);
   trackside.add(props);
+  const horizon = createHorizonRing(points);
+  group.add(horizon.group);
   return {
     group,
     applySettings: (settings) => {
       runoffs.visible = settings.runoffs;
       trackside.visible = settings.trackside;
       tyreMarks.visible = settings.tyreMarks;
+      horizon.group.visible = settings.sky || settings.fog;
     },
     dispose: () => {
+      horizon.dispose();
       props.removeFromParent();
       for (const object of props.children) {
         if (object instanceof THREE.InstancedMesh) object.dispose();

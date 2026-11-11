@@ -336,7 +336,7 @@ export class RaceScene {
     if (changed("fog", "drawDistance", "lighting")) this.scene.fog = settings.fog ? new THREE.Fog(fogColor, settings.drawDistance * 0.22, settings.drawDistance * 0.96) : null;
     if (changed("sky", "skyStyle", "lighting", "environmentIntensity")) applySkyQuality(this.scene, settings, fogColor);
     if (changed("surfaceDetail", "anisotropy")) applySurfaceQuality(settings, this.renderer);
-    if (changed("runoffs", "trackside", "tyreMarks", "shadows")) this.trackDecor?.applySettings(settings);
+    if (changed("runoffs", "trackside", "tyreMarks", "shadows", "sky", "fog")) this.trackDecor?.applySettings(settings);
     this.cars.setContactShadowsVisible(settings.contactShadows);
     if (changed("carMaterials", "carShadows", "shadows")) this.cars.applyGraphicsSettings(settings);
     this.graphicsInitialized = true;

@@ -4,6 +4,7 @@ import { createGrassTerrainGeometry } from "./terrain";
 import {
   getTrackSurfaceMaterials,
   GROUND_PLANE_SIZE_METERS,
+  TRACK_GROUND_PADDING_METERS,
   TRACK_TILE_METERS,
 } from "../track-environment";
 
@@ -71,8 +72,8 @@ export class RaceTerrain {
   ) {
     this.ground.geometry.dispose();
     this.ground.geometry = createGrassTerrainGeometry({
-      halfExtentMeters: GROUND_PLANE_SIZE_METERS / 2,
-      gridSpacingMeters: 16,
+      outerPaddingMeters: TRACK_GROUND_PADDING_METERS,
+      gridSpacingMeters: 12,
       grassTileMeters: TRACK_TILE_METERS.grass,
       centerline: pathPoints,
       centerlineClosed: closed,

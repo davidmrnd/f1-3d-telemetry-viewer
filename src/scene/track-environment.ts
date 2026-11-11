@@ -33,7 +33,9 @@ const PBR_SETS = {
 
 const SKY_HDRI_URL = `${TEXTURE_ROOT}/sky/DaySkyHDRI063B_2K_HDR.exr`;
 
-export const GROUND_PLANE_SIZE_METERS = 6000;
+export const GROUND_PLANE_SIZE_METERS = 2200;
+export const TRACK_GROUND_PADDING_METERS = 320;
+export const HORIZON_CLEARANCE_METERS = 90;
 
 export interface TrackSurfaceMaterials {
   road: THREE.MeshStandardMaterial;
