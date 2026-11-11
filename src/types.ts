@@ -198,6 +198,7 @@ export interface EngineAudioView {
   perspective: "trackside" | "free" | "cockpit" | "tabletop";
   subject: number | null;
   sources: readonly { sample: CarSample; position: TrackPoint3D }[];
+  grandstands: readonly TrackPoint3D[];
 }
 
 export interface ReplayFrame {

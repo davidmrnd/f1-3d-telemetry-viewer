@@ -20,7 +20,7 @@ function planarDistance(path: TrackPath, point: THREE.Vector3) {
 export function createCircuitProps(
   main: TrackPath, width: number, pit: PitLane | null,
   heightAt: ReturnType<typeof createTerrainHeightSampler>, urban: boolean, concrete: THREE.Material,
-): THREE.Group {
+) {
   const group = new THREE.Group();
   group.name = "kenney-circuit-props";
   const placements = new Map<TrackModel, TrackModelPlacement[]>();
@@ -139,9 +139,16 @@ export function createCircuitProps(
     }
   }
 
+  const grandstands: THREE.Vector3[] = [];
   for (const [model, list] of placements) {
     const mesh = instanceTrackModel(model, list);
-    if (mesh) group.add(mesh);
+    if (!mesh) continue;
+    group.add(mesh);
+    if (model === "stand") {
+      for (const { position, size } of list) {
+        grandstands.push(position.clone().setY(position.y + size.y * 0.55));
+      }
+    }
   }
-  return group;
+  return { group, grandstands };
 }

@@ -1,4 +1,6 @@
+import { CrowdAudio } from "../audio/crowd-audio";
 import { EngineAudio } from "../audio/engine-audio";
+import type { EngineAudioView } from "../types";
 import { mustQuery } from "./dom";
 import type { RadioPlayer } from "./radio-player";
 
@@ -7,11 +9,14 @@ export function bindEngineAudio(radio: RadioPlayer) {
   const icon = mustQuery<SVGUseElement>("#engine-mute use");
   const volume = mustQuery<HTMLInputElement>("#engine-volume");
   const status = mustQuery<HTMLElement>("#engine-status");
+  const crowd = new CrowdAudio();
   const engine = new EngineAudio(() => radio.getAudioContext(), () => {
-    mute.disabled = true;
-    volume.disabled = true;
     status.hidden = false;
   });
+  const silence = () => {
+    engine.silence();
+    crowd.silence();
+  };
 
   let lastVolume = Number(volume.defaultValue);
   const syncVolume = () => {
@@ -19,7 +24,8 @@ export function bindEngineAudio(radio: RadioPlayer) {
     const muted = value === 0;
     if (!muted) lastVolume = value;
     engine.setVolume(value / 100);
-    const label = muted ? "Restaurar sonido del motor" : "Silenciar motor";
+    if (muted) crowd.silence();
+    const label = muted ? "Restaurar sonido del circuito" : "Silenciar circuito";
     mute.setAttribute("aria-label", label);
     mute.title = label;
     icon.setAttribute("href", muted ? "#i-volume-off" : "#i-volume");
@@ -29,7 +35,19 @@ export function bindEngineAudio(radio: RadioPlayer) {
     syncVolume();
   });
   volume.addEventListener("input", syncVolume);
-  window.addEventListener("pagehide", () => engine.silence());
+  window.addEventListener("pagehide", silence);
   syncVolume();
-  return engine;
+  return {
+    silence,
+    update(getView: () => EngineAudioView | null, radioPlaying: boolean) {
+      const context = radio.getAudioContext();
+      if (context?.state !== "running" || volume.valueAsNumber === 0) {
+        silence();
+        return;
+      }
+      const view = getView();
+      engine.update(() => view, radioPlaying);
+      crowd.update(context, view, volume.valueAsNumber / 100, radioPlaying);
+    },
+  };
 }

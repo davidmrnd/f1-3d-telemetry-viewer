@@ -12,6 +12,7 @@ import { createTerrainHeightSampler } from "./terrain-height";
 
 export interface TrackDecor {
   group: THREE.Group;
+  grandstands: readonly THREE.Vector3[];
   applySettings: (settings: GraphicsSettings) => void;
   dispose: () => void;
 }
@@ -183,12 +184,15 @@ export function createTrackDecor(
     batch(trackside, plane, material, matrices);
   }
   batch(trackside, box, materials.steel, signPosts);
-  const props = createCircuitProps(new TrackPath(points, closed), width, pitLane, heightAt, urban, materials.concrete);
+  const { group: props, grandstands } = createCircuitProps(
+    new TrackPath(points, closed), width, pitLane, heightAt, urban, materials.concrete,
+  );
   trackside.add(props);
   const horizon = createHorizonRing(points);
   group.add(horizon.group);
   return {
     group,
+    grandstands,
     applySettings: (settings) => {
       runoffs.visible = settings.runoffs;
       trackside.visible = settings.trackside;

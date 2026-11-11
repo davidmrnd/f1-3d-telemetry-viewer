@@ -562,7 +562,10 @@ export class RaceScene {
     }
     const perspective = tabletop ? "tabletop" : this.cameraController.isOnboardShot() ? "cockpit"
       : this.getCameraMode() === "broadcast" ? "trackside" : "free";
-    return { perspective, sources, subject: tabletop ? null : this.cameraController.getSubjectNumber() };
+    const grandstands = tabletop ? [] : this.trackDecor?.grandstands.map(
+      position => position.clone().applyMatrix4(this.listenerSpace),
+    ) ?? [];
+    return { perspective, sources, grandstands, subject: tabletop ? null : this.cameraController.getSubjectNumber() };
   }
 
   getActiveCameraLabel(): string {
