@@ -108,7 +108,9 @@ export function startReplayApplication() {
       paintFrame(frame, controller.getDuration(), scene, timingTower, ui);
       desktopPlayer.update(frame, mode, scene.getFollowDriver());
     }
-    if (replay.playing) {
+    if (scene.isArPresenting() || scene.getPresentationMode() === "tabletop") {
+      engine.silence();
+    } else if (replay.playing) {
       engine.update(() => scene.getEngineAudioView(), Boolean(broadcast));
     }
   };
