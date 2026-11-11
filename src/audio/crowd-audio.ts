@@ -2,6 +2,8 @@ import type { EngineAudioView } from "../types";
 
 const AUDIBLE_RANGE = 205;
 const MAX_LEVEL = 0.2;
+const MAX_VOICES = 4;
+const RETENTION_BIAS = 1.1;
 const FADE_OUT = 0.24;
 const CLIP_FADE = 0.45;
 const CLIPS = ["crowd1.mp3", "crowd2.mp3", "crowd3.mp3"];
@@ -12,6 +14,7 @@ interface CrowdVoice {
   gain: GainNode;
   sources: Set<AudioBufferSourceNode>;
   clip: { buffer: AudioBuffer; endsAt: number } | null;
+  retiring: boolean;
 }
 
 export class CrowdAudio {
@@ -30,21 +33,28 @@ export class CrowdAudio {
     }
     if (!this.buffers.length) return;
 
-    const weights = view.grandstands.map(({ x, y, z }) => {
-      const distance = Math.hypot(x, y, z);
-      return Math.max(0, 1 - distance / AUDIBLE_RANGE) ** 2;
-    });
-    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    const selected = view.grandstands.flatMap((position, index) => {
+      const distance = Math.hypot(position.x, position.y, position.z);
+      const weight = Math.max(0, 1 - distance / AUDIBLE_RANGE) ** 2;
+      if (!weight) return [];
+      const voice = this.voices.get(index);
+      const score = voice && !voice.retiring ? weight * RETENTION_BIAS : weight;
+      return [{ index, position, weight, score }];
+    }).sort((a, b) => b.score - a.score).slice(0, MAX_VOICES);
+    const totalWeight = selected.reduce((sum, { weight }) => sum + weight, 0);
     const level = MAX_LEVEL * volume * (radioPlaying ? 0.28 : 1)
       * (view.perspective === "cockpit" ? 0.45 : 1) / Math.max(1, totalWeight);
     const now = context.currentTime;
     for (const [index, voice] of this.voices) {
-      if (!weights[index]) this.stop(index, voice);
+      if (!selected.some(candidate => candidate.index === index)) this.stop(index, voice);
     }
-    for (const [index, { x, y, z }] of view.grandstands.entries()) {
-      const weight = weights[index];
-      if (!weight) continue;
-      const voice = this.voices.get(index) ?? this.start(context, index, x, y, z);
+    for (const { index, position: { x, y, z }, weight } of selected) {
+      let voice = this.voices.get(index);
+      if (voice?.retiring) continue;
+      if (!voice) {
+        if (this.voices.size >= MAX_VOICES) continue;
+        voice = this.start(context, index, x, y, z);
+      }
       if (!voice.clip || now + 0.12 >= voice.clip.endsAt - CLIP_FADE) {
         this.playClip(context, index, voice, this.buffers);
       }
@@ -66,7 +76,7 @@ export class CrowdAudio {
     });
     const gain = new GainNode(context, { gain: 0 });
     filter.connect(panner).connect(gain).connect(context.destination);
-    const voice: CrowdVoice = { filter, panner, gain, sources: new Set(), clip: null };
+    const voice: CrowdVoice = { filter, panner, gain, sources: new Set(), clip: null, retiring: false };
     this.voices.set(index, voice);
     return voice;
   }
@@ -93,26 +103,29 @@ export class CrowdAudio {
       source.disconnect();
       envelope.disconnect();
       voice.sources.delete(source);
-      if (!voice.sources.size && this.voices.get(index) !== voice) {
-        voice.filter.disconnect();
-        voice.panner.disconnect();
-        voice.gain.disconnect();
-      }
+      if (!voice.sources.size && voice.retiring) this.disconnect(index, voice);
     };
     source.start(startsAt, offset);
   }
 
-  private stop(index: number, { filter, panner, gain, sources }: CrowdVoice) {
-    this.voices.delete(index);
+  private stop(index: number, voice: CrowdVoice) {
+    if (voice.retiring) return;
+    voice.retiring = true;
+    const { gain, sources } = voice;
     if (!sources.size) {
-      filter.disconnect();
-      panner.disconnect();
-      gain.disconnect();
+      this.disconnect(index, voice);
       return;
     }
     const now = gain.context.currentTime;
     gain.gain.setTargetAtTime(0, now, FADE_OUT / 5);
     for (const source of sources) source.stop(now + FADE_OUT);
+  }
+
+  private disconnect(index: number, { filter, panner, gain }: CrowdVoice) {
+    filter.disconnect();
+    panner.disconnect();
+    gain.disconnect();
+    this.voices.delete(index);
   }
 
   private async load(context: AudioContext) {

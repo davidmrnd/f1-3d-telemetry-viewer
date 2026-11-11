@@ -94,22 +94,39 @@ export function createCircuitProps(
   }
 
   const mainSide = width / 2;
+  const standSize = size(19, 8.2, 9);
+  const standDistances: number[] = [];
+  const placeStand = (distance: number) => {
+    if (!main.closed && (distance < 12 || distance > main.totalLength - 12)) return false;
+    const { position, tangent, normal } = pathFrame(main, distance);
+    if (tangent.dot(pathFrame(main, distance + 10).tangent) < 0.985) return false;
+    for (const side of [-1, 1]) {
+      const point = position.clone().addScaledVector(normal, side * (mainSide + (urban ? 9.5 : 15)));
+      if (!clearOfProps(point, 10)) continue;
+      const stand = fit(point, normal.clone().multiplyScalar(-side), standSize, 1.4);
+      if (!stand) continue;
+      add("stand", stand, 10);
+      standDistances.push(distance);
+      return true;
+    }
+    return false;
+  };
+
   const grandstandZone = pit ? main.projectPointPlanar(pit.path.pointAt(pit.path.totalLength / 2))?.distance : undefined;
   const standZones = [grandstandZone ?? main.totalLength * 0.12, main.totalLength * 0.43, main.totalLength * 0.72];
   for (const [zoneIndex, zone] of standZones.entries()) {
     for (const shift of zoneIndex === 0 ? [-42, -20, 2, 24, 46] : [-11, 11]) {
-      const distance = zone + shift;
-      if (!main.closed && (distance < 12 || distance > main.totalLength - 12)) continue;
-      const { position, tangent, normal } = pathFrame(main, distance);
-      if (tangent.dot(pathFrame(main, distance + 10).tangent) < 0.985) continue;
-      for (const side of [-1, 1]) {
-        const point = position.clone().addScaledVector(normal, side * (mainSide + (urban ? 9.5 : 15)));
-        if (!clearOfProps(point, 10)) continue;
-        const stand = fit(point, normal.clone().multiplyScalar(-side), size(19, 8.2, 9), 1.4);
-        if (!stand) continue;
-        add("stand", stand, 10);
-        break;
-      }
+      placeStand(zone + shift);
+    }
+  }
+
+  const extraZones = Math.floor(main.totalLength / 240);
+  for (let zone = 0; zone < extraZones; zone++) {
+    const center = (zone + 0.5) * main.totalLength / extraZones;
+    for (const shift of [0, -25, 25, -50, 50, -75, 75]) {
+      const distance = center + shift;
+      if (standDistances.some(other => main.linearDistance(distance, other) < 105)) continue;
+      if (placeStand(distance)) break;
     }
   }
 
