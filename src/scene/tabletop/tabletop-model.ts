@@ -10,6 +10,7 @@ import { F1_CAR_LENGTH_METERS, createTrackRibbon, type TrackCrossSection } from 
 
 const TRAIL_SAMPLES = 64;
 const TRAIL_DURATION_MS = 2400;
+const TABLETOP_CAR_SCALE = 3;
 
 type TrailPoint = { position: THREE.Vector3; time: number };
 type Marker = {
@@ -109,7 +110,7 @@ export class TabletopModel {
     bounds.getCenter(this.center);
     this.center.y = bounds.min.y;
     this.extent = Math.max(size.x, size.z, 1) + trackWidth * 8;
-    this.carLength = F1_CAR_LENGTH_METERS / this.extent;
+    this.carLength = F1_CAR_LENGTH_METERS / this.extent * TABLETOP_CAR_SCALE;
     const points = path.map(point => this.normalizePoint(point));
     const crossSections = sections.map(section => ({ ...section, center: this.normalizePoint(section.center) }));
     const width = Math.max(trackWidth / this.extent, .007);
