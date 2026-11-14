@@ -48,7 +48,7 @@ export const CAR_MATERIAL_LABELS: Record<CarMaterialQuality, string> = {
 const BASE: GraphicsSettingsValues = {
   maxPixelRatio: 1.25, shadows: "medium", shadowDistance: 120,
   environment: true, environmentIntensity: 0.6, fog: true, drawDistance: 3200,
-  xrScale: 0.75, xrFoveation: 0.5, carMaterials: "pbr", carShadows: true,
+  xrScale: 1.25, xrFoveation: 0, carMaterials: "pbr", carShadows: true,
   detailedCarDistance: 120, contactShadows: true, surfaceDetail: true, anisotropy: 8, sky: true, skyStyle: "clear",
   exposure: 1, lighting: "day", runoffs: true,
   trackside: true, tyreMarks: true, showStats: false,
