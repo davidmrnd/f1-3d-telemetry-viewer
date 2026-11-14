@@ -20,6 +20,7 @@ function planarDistance(path: TrackPath, point: THREE.Vector3) {
 export function createCircuitProps(
   main: TrackPath, width: number, pit: PitLane | null,
   heightAt: ReturnType<typeof createTerrainHeightSampler>, urban: boolean, concrete: THREE.Material,
+  tunnelContains?: (distance: number, margin?: number) => boolean,
 ) {
   const group = new THREE.Group();
   group.name = "kenney-circuit-props";
@@ -97,6 +98,7 @@ export function createCircuitProps(
   const standSize = size(19, 8.2, 9);
   const standDistances: number[] = [];
   const placeStand = (distance: number) => {
+    if (tunnelContains?.(distance, 16)) return false;
     if (!main.closed && (distance < 12 || distance > main.totalLength - 12)) return false;
     const { position, tangent, normal } = pathFrame(main, distance);
     if (tangent.dot(pathFrame(main, distance + 10).tangent) < 0.985) return false;
@@ -133,6 +135,7 @@ export function createCircuitProps(
   const plantSpacing = Math.max(57, main.totalLength / 75);
   const treeTints = [new THREE.Color("#789775"), new THREE.Color("#9aa989"), new THREE.Color("#789886")];
   for (let i = 0, distance = 25; distance < main.totalLength - 25; i++, distance += plantSpacing) {
+    if (tunnelContains?.(distance, 5)) continue;
     const { position, normal } = pathFrame(main, distance);
     const side = i % 2 === 0 ? 1 : -1;
     const point = position.addScaledVector(normal, side * (mainSide + 14 + (i * 13 % 25)));
@@ -148,7 +151,9 @@ export function createCircuitProps(
     const zone = main.totalLength * (i + 0.4) / 8;
     const side = i % 2 ? -1 : 1;
     for (let j = 0; j < 6; j++) {
-      const { position, normal } = pathFrame(main, zone + j * 3.15);
+      const distance = zone + j * 3.15;
+      if (tunnelContains?.(distance, 15)) continue;
+      const { position, normal } = pathFrame(main, distance);
       position.addScaledVector(normal, side * (mainSide + (urban ? 2.2 : 4.8)));
       if (!clearOfProps(position, 1.5)) continue;
       const barrier = fit(position, normal.multiplyScalar(-side), size(3.05, 0.85, 0.72), 0.8);

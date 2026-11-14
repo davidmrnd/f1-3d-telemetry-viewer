@@ -22,6 +22,7 @@ export function createTrackDecor(
   width: number, kerbWidth: number, terrain: THREE.BufferGeometry, urban: boolean,
   pitOpening?: (side: number, index: number) => boolean,
   pitLane: PitLane | null = null,
+  tunnelContains?: (distance: number, margin?: number) => boolean,
 ): TrackDecor {
   const group = new THREE.Group();
   group.name = "circuit-equipment";
@@ -171,6 +172,7 @@ export function createTrackDecor(
       let target = distances[corner] - distance;
       if (!closed && target < 0) continue;
       target = (target + total) % total;
+      if (tunnelContains?.(target, 4)) continue;
       let i = 0;
       while (i < distances.length - 1 && distances[i] < target) i++;
       const side = bends[corner] > 0 ? -1 : 1;
@@ -185,7 +187,7 @@ export function createTrackDecor(
   }
   batch(trackside, box, materials.steel, signPosts);
   const { group: props, grandstands } = createCircuitProps(
-    new TrackPath(points, closed), width, pitLane, heightAt, urban, materials.concrete,
+    new TrackPath(points, closed), width, pitLane, heightAt, urban, materials.concrete, tunnelContains,
   );
   trackside.add(props);
   const horizon = createHorizonRing(points);

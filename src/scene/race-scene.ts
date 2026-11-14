@@ -25,6 +25,7 @@ import {
   applySkyQuality,
   applySurfaceQuality,
   getTrackSurfaceMaterials,
+  TRACK_TILE_METERS,
 } from "./track-environment";
 import { RaceCameraController } from "./cameras/race-camera-controller";
 import type { CameraMode } from "./cameras/types";
@@ -52,6 +53,7 @@ import { createPitMarkings } from "./track/pit-markings";
 import { PitLanePlacement } from "./pit-placement";
 import { TrackPath } from "./cameras/automatic/track-path";
 import { createTrackDecor, type TrackDecor } from "./track/track-decor";
+import { createMonacoTunnel, type MonacoTunnel } from "./track/monaco-tunnel";
 import { TabletopModel } from "./tabletop/tabletop-model";
 import { TabletopXr } from "./tabletop/tabletop-xr";
 import { buildTrafficTimelineSteps, type TrafficRoad, type TrafficTimeline } from "./traffic/traffic-timeline";
@@ -94,6 +96,7 @@ export class RaceScene {
   private readonly terrain: RaceTerrain;
   private readonly lighting: RaceLighting;
   private trackDecor: TrackDecor | null = null;
+  private monacoTunnel: MonacoTunnel | null = null;
 
   private transform: SceneTransform | null = null;
   private startingGrid: StartingGridSlot[] = [];
@@ -335,7 +338,10 @@ export class RaceScene {
     if (changed("environment")) this.scene.environment = settings.environment ? this.environmentMap : null;
     if (changed("fog", "drawDistance", "lighting")) this.scene.fog = settings.fog ? new THREE.Fog(fogColor, settings.drawDistance * 0.22, settings.drawDistance * 0.96) : null;
     if (changed("sky", "skyStyle", "lighting", "environmentIntensity")) applySkyQuality(this.scene, settings, fogColor);
-    if (changed("surfaceDetail", "anisotropy")) applySurfaceQuality(settings, this.renderer);
+    if (changed("surfaceDetail", "anisotropy")) {
+      applySurfaceQuality(settings, this.renderer);
+      this.monacoTunnel?.syncRoadMaterial();
+    }
     if (changed("runoffs", "trackside", "tyreMarks", "shadows", "sky", "fog")) this.trackDecor?.applySettings(settings);
     this.cars.setContactShadowsVisible(settings.contactShadows);
     if (changed("carMaterials", "carShadows", "shadows")) this.cars.applyGraphicsSettings(settings);
@@ -359,6 +365,11 @@ export class RaceScene {
     this.traffic = null;
     this.trafficRoads = [];
     this.cars.dispose();
+    if (this.monacoTunnel) {
+      this.root.remove(this.monacoTunnel.group);
+      this.monacoTunnel.dispose();
+      this.monacoTunnel = null;
+    }
     if (this.trackDecor) {
       this.root.remove(this.trackDecor.group);
       this.trackDecor.dispose();
@@ -450,10 +461,10 @@ export class RaceScene {
 
     if (pathPoints.length > 4) {
       const road = addTrackRoad(this.root, pathPoints, closed, trackWidth, crossSections);
+      const main = new TrackPath(pathPoints, closed);
       let pitLane: PitLane | null = null;
       let pitOpening: ReturnType<typeof findPitOpenings> | undefined;
       if (segment.circuit.pitLane || segment.retirements?.length) {
-        const main = new TrackPath(pathPoints, closed);
         const circuitHeight = createCircuitHeightSampler(road.geometry, this.terrain.geometry);
         pitLane = createPitLane(segment, transform, main, trackWidth, circuitHeight, road.material);
         if (pitLane) {
@@ -464,9 +475,21 @@ export class RaceScene {
         }
         this.pitPlacement = new PitLanePlacement(segment, pitLane, main, trackWidth, transform, circuitHeight);
       }
-      addTrackKerbs(this.root, pathPoints, closed, trackWidth, kerbWidth, crossSections, pitOpening);
+      const tunnel = createMonacoTunnel(segment, transform, main, crossSections, trackWidth + 2 * kerbWidth);
+      this.monacoTunnel = tunnel;
+      let skipKerb = pitOpening;
+      if (tunnel) {
+        const uv = road.geometry.getAttribute("uv");
+        const covered = pathPoints.map((_, index) =>
+          tunnel.contains((uv.getY(index * 2) + uv.getY(index * 2 + 2)) * TRACK_TILE_METERS.road / 2));
+        skipKerb = (side, index) => covered[index] || (pitOpening?.(side, index) ?? false);
+        tunnel.shadeRoad(road);
+        this.root.add(tunnel.group);
+      }
+      addTrackKerbs(this.root, pathPoints, closed, trackWidth, kerbWidth, crossSections, skipKerb);
       this.trackDecor = createTrackDecor(pathPoints, crossSections, closed, trackWidth, kerbWidth,
-        this.terrain.geometry, /monte|monaco|baku/i.test(segment.sessionRef.circuitShortName), pitOpening, pitLane);
+        this.terrain.geometry, /monte|monaco|baku/i.test(segment.sessionRef.circuitShortName), pitOpening, pitLane,
+        this.monacoTunnel?.contains);
       this.root.add(this.trackDecor.group);
     }
 
