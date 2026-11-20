@@ -8,7 +8,7 @@ import type { PitLane } from "./pit-lane";
 import { pathSegments, segmentProjection } from "./path";
 import { crossSectionPoint, type TrackCrossSection } from "./ribbon";
 import { SpatialIndex } from "./spatial";
-import { createTerrainHeightSampler } from "./terrain-height";
+import type { createTerrainHeightSampler } from "./terrain-height";
 
 export interface TrackDecor {
   group: THREE.Group;
@@ -19,7 +19,7 @@ export interface TrackDecor {
 
 export function createTrackDecor(
   points: THREE.Vector3[], sections: TrackCrossSection[], closed: boolean,
-  width: number, kerbWidth: number, terrain: THREE.BufferGeometry, urban: boolean,
+  width: number, kerbWidth: number, heightAt: ReturnType<typeof createTerrainHeightSampler>, urban: boolean,
   pitOpening?: (side: number, index: number) => boolean,
   pitLane: PitLane | null = null,
   tunnelContains?: (distance: number, margin?: number) => boolean,
@@ -31,7 +31,6 @@ export function createTrackDecor(
   const tyreMarks = new THREE.Group();
   group.add(runoffs, trackside, tyreMarks);
   const materials = getTrackSurfaceMaterials();
-  const heightAt = createTerrainHeightSampler(terrain);
   const distances = [0];
   for (let i = 1; i < points.length; i++) distances.push(distances[i - 1] + points[i].distanceTo(points[i - 1]));
   const total = distances.at(-1)! + (closed ? points.at(-1)!.distanceTo(points[0]) : 0);

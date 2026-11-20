@@ -18,6 +18,7 @@ const LINE_STEP_METERS = 1;
 const HORIZONTAL_SMOOTHING_SIGMA_METERS = 3;
 const ELEVATION_SMOOTHING_SIGMA_METERS = 8;
 const FIX_PROJECTION_RADIUS_METERS = NODE_MIN_SPACING_METERS + REVERSAL_GUARD_METERS;
+const SEGMENTS_PER_LOOKUP_BUCKET = 8;
 
 interface NodeSelection {
   nodes: TrackPoint3D[];
@@ -91,9 +92,23 @@ function catmullRom(p0: number, p1: number, p2: number, p3: number, u: number): 
 
 export class DrivingLine {
   readonly length: number;
+  private readonly intervalStarts: Uint32Array;
+  private readonly bucketSize: number;
 
   private constructor(private readonly polyline: Polyline3) {
     this.length = polylineLength(polyline);
+    const { arcLengths } = polyline;
+    const lastInterval = arcLengths.length - 2;
+    this.intervalStarts = new Uint32Array(Math.max(1, Math.ceil((arcLengths.length - 1) / SEGMENTS_PER_LOOKUP_BUCKET)));
+    this.bucketSize = this.length / this.intervalStarts.length;
+    let interval = 0;
+    for (let bucket = 1; bucket < this.intervalStarts.length; bucket += 1) {
+      const distance = bucket * this.bucketSize;
+      while (interval < lastInterval && arcLengths[interval + 1] <= distance) {
+        interval += 1;
+      }
+      this.intervalStarts[bucket] = interval;
+    }
   }
 
   static fromFixes(fixes: LocationFix[]): DrivingLineFit {
@@ -142,7 +157,7 @@ export class DrivingLine {
       return this.extendAlong(count - 2, count - 1, count - 1, distance - this.length);
     }
 
-    const index = intervalIndexAt(arcLengths, distance);
+    const index = this.findInterval(distance);
     const span = arcLengths[index + 1] - arcLengths[index];
     const u = span > 0 ? (distance - arcLengths[index]) / span : 0;
     return {
@@ -150,6 +165,20 @@ export class DrivingLine {
       y: catmullRom(valueBefore(ys, index), ys[index], ys[index + 1], valueAfter(ys, index), u),
       z: catmullRom(valueBefore(zs, index), zs[index], zs[index + 1], valueAfter(zs, index), u),
     };
+  }
+
+  private findInterval(distance: number): number {
+    const { arcLengths } = this.polyline;
+    const bucket = Math.floor(distance / this.bucketSize);
+    let index = this.intervalStarts[bucket];
+    if (index === undefined || arcLengths[index] > distance) {
+      return intervalIndexAt(arcLengths, distance);
+    }
+    const lastInterval = arcLengths.length - 2;
+    while (index < lastInterval && arcLengths[index + 1] <= distance) {
+      index += 1;
+    }
+    return index;
   }
 
   private extendAlong(fromIndex: number, toIndex: number, anchorIndex: number, offset: number): TrackPoint3D {

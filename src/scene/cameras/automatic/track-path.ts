@@ -6,11 +6,28 @@ export interface TrackProjection {
   segmentIndex: number;
 }
 
+function projectionSegments(points: readonly THREE.Vector3[]) {
+  return points.slice(0, -1).map((start, index) => {
+    const end = points[index + 1];
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const dz = end.z - start.z;
+    const length = Math.hypot(dx, dy, dz);
+    return {
+      start, dx, dy, dz, length,
+      denominator: dx * dx + dz * dz,
+      minX: Math.min(start.x, start.x + dx), maxX: Math.max(start.x, start.x + dx),
+      minZ: Math.min(start.z, start.z + dz), maxZ: Math.max(start.z, start.z + dz),
+    };
+  });
+}
+
 export class TrackPath {
   readonly points: readonly THREE.Vector3[];
   readonly totalLength: number;
 
   private readonly cumulative: number[];
+  private segments?: ReturnType<typeof projectionSegments>;
 
   constructor(points: THREE.Vector3[], readonly closed = false) {
     this.points = closed && points.length > 1 ? [...points, points[0]] : points;
@@ -29,15 +46,7 @@ export class TrackPath {
     return sum.divideScalar(this.points.length);
   }
 
-  projectPoint(point: THREE.Vector3): TrackProjection | null {
-    return this.projectPointInternal(point, false);
-  }
-
   projectPointPlanar(point: THREE.Vector3): TrackProjection | null {
-    return this.projectPointInternal(point, true);
-  }
-
-  private projectPointInternal(point: THREE.Vector3, planar: boolean): TrackProjection | null {
     if (this.points.length < 2) {
       return null;
     }
@@ -47,27 +56,22 @@ export class TrackPath {
     let bestSegment = 0;
     let bestArc = 0;
 
-    for (let index = 0; index < this.points.length - 1; index += 1) {
-      const start = this.points[index];
-      const end = this.points[index + 1];
-      const dx = end.x - start.x;
-      const dy = end.y - start.y;
-      const dz = end.z - start.z;
-      const length = Math.hypot(dx, dy, dz);
-      if (length <= 1e-6) {
-        continue;
-      }
-
-      const denominator = planar ? dx * dx + dz * dz : length * length;
-      if (denominator <= 1e-8) continue;
+    const segments = this.segments ??= projectionSegments(this.points);
+    const { x, z } = point;
+    for (let index = 0; index < segments.length; index += 1) {
+      const { start, dx, dy, dz, length, denominator, minX, maxX, minZ, maxZ } = segments[index];
+      const boundX = Math.max(minX - x, 0, x - maxX);
+      const boundZ = Math.max(minZ - z, 0, z - maxZ);
+      if (boundX * boundX + boundZ * boundZ >= bestDistance) continue;
+      if (length <= 1e-6 || denominator <= 1e-8) continue;
       const fraction = THREE.MathUtils.clamp(
-        ((point.x - start.x) * dx + (point.z - start.z) * dz + (planar ? 0 : (point.y - start.y) * dy)) / denominator,
+        ((x - start.x) * dx + (z - start.z) * dz) / denominator,
         0, 1,
       );
       const px = start.x + dx * fraction;
       const py = start.y + dy * fraction;
       const pz = start.z + dz * fraction;
-      const distanceSq = (px - point.x) ** 2 + (pz - point.z) ** 2 + (planar ? 0 : (py - point.y) ** 2);
+      const distanceSq = (px - x) ** 2 + (pz - z) ** 2;
 
       if (distanceSq < bestDistance) {
         bestDistance = distanceSq;

@@ -33,12 +33,14 @@ export function carMotion(from: TrafficPose, to: TrafficPose) {
   const tilt = Math.sin(pitch);
   const length = HALF_LENGTH + MODEL_HEIGHT * tilt;
   const verticalMargin = HALF_LENGTH * tilt;
-  const yaw = Math.abs(angleDelta(from.heading, to.heading));
+  const stationary = from === to;
+  const yaw = stationary && Number.isFinite(from.heading) ? 0 : Math.abs(angleDelta(from.heading, to.heading));
+  const ax = Math.cos(from.heading), az = Math.sin(from.heading);
   return {
     from, to, length, verticalMargin,
     rotationMargin: Math.hypot(length, HALF_WIDTH) * yaw * yaw / 8,
-    ax: Math.cos(from.heading), az: Math.sin(from.heading),
-    bx: Math.cos(to.heading), bz: Math.sin(to.heading),
+    ax, az,
+    bx: stationary ? ax : Math.cos(to.heading), bz: stationary ? az : Math.sin(to.heading),
     minX: Math.min(from.x, to.x), maxX: Math.max(from.x, to.x),
     minZ: Math.min(from.z, to.z), maxZ: Math.max(from.z, to.z),
   };

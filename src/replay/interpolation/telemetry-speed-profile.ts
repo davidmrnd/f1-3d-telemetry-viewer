@@ -55,13 +55,23 @@ export class TelemetrySpeedProfile {
       return this.speeds[count - 1];
     }
 
-    const index = intervalIndexAt(this.times, t);
-    const ratio = (t - this.times[index]) / (this.times[index + 1] - this.times[index]);
-    return this.speeds[index] + (this.speeds[index + 1] - this.speeds[index]) * ratio;
+    return this.speedInInterval(t, intervalIndexAt(this.times, t));
   }
 
   distanceBetween(from: number, to: number): number {
     return this.cumulativeDistanceAt(to) - this.cumulativeDistanceAt(from);
+  }
+
+  fillCumulativeDistances(sortedTimes: Float64Array, offset: number, distances: Float64Array): void {
+    const lastInterval = this.times.length - 2;
+    let interval = 0;
+    for (let i = 0; i < sortedTimes.length; i += 1) {
+      const t = sortedTimes[i] + offset;
+      while (interval < lastInterval && this.times[interval + 1] <= t) {
+        interval += 1;
+      }
+      distances[i] = this.cumulativeDistanceAt(t, interval);
+    }
   }
 
   slopeAround(index: number): number {
@@ -97,7 +107,12 @@ export class TelemetrySpeedProfile {
     return intervals;
   }
 
-  private cumulativeDistanceAt(t: number): number {
+  private speedInInterval(t: number, index: number): number {
+    const ratio = (t - this.times[index]) / (this.times[index + 1] - this.times[index]);
+    return this.speeds[index] + (this.speeds[index + 1] - this.speeds[index]) * ratio;
+  }
+
+  private cumulativeDistanceAt(t: number, interval?: number): number {
     const count = this.times.length;
     if (count === 0) {
       return 0;
@@ -109,8 +124,8 @@ export class TelemetrySpeedProfile {
       return this.cumulativeDistances[count - 1] + this.speeds[count - 1] * msToSeconds(t - this.times[count - 1]);
     }
 
-    const index = intervalIndexAt(this.times, t);
-    const meanSpeed = (this.speeds[index] + this.speedAt(t)) / 2;
+    const index = interval ?? intervalIndexAt(this.times, t);
+    const meanSpeed = (this.speeds[index] + this.speedInInterval(t, index)) / 2;
     return this.cumulativeDistances[index] + meanSpeed * msToSeconds(t - this.times[index]);
   }
 }

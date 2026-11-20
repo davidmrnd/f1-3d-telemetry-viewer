@@ -27,6 +27,7 @@ import { GraphicsPerformanceView } from "./graphics-performance-view";
 import { queryReplayElements } from "./replay-elements";
 import { setAppTitle } from "./document-title";
 import { createRaceLoader } from "./race-loader";
+import { loadRacesCatalog } from "../data/races-catalog";
 import type { RaceMilestoneControls } from "../types";
 
 export function startReplayApplication() {
@@ -82,7 +83,7 @@ export function startReplayApplication() {
   const resetClock = () => { lastTick = performance.now(); };
   appShell.addEventListener("xrsessionchange", resetClock);
   const loadingFrames = new AnimationFrames();
-  const loadingView = new LoadingView(undefined, loadingFrames);
+  const loadingView = new LoadingView(loadingFrames);
   const syncPlayButton = (playing: boolean) => {
     if (!playing) engine.silence();
     const label = playing ? "Pausar" : "Reproducir";
@@ -130,7 +131,10 @@ export function startReplayApplication() {
   });
 
   function tick(now: number) {
-    if (raceLoader.isLoading()) { scene.render(); return; }
+    if (raceLoader.isLoading() || appShell.hidden) {
+      if (scene.isXrPresenting()) scene.render();
+      return;
+    }
     if (!replay.getController()) {
       scene.update({ now: 0, normalized: 0, cars: [], activeEvent: null, trackStatus: null });
       scene.render();
@@ -159,26 +163,33 @@ export function startReplayApplication() {
 
     try {
       ui.statusPill.textContent = "Cargando modelos 3D...";
-      await Promise.all([preloadCarModels(), preloadTrackEnvironment(), preloadTrackModels()]);
-      scene.initTrackEnvironment();
+      const catalogRequest = loadRacesCatalog();
+      const sceneReady = Promise.all([preloadCarModels(), preloadTrackEnvironment(), preloadTrackModels()]).then(() => {
+        scene.initTrackEnvironment();
 
-      const graphics = bindGraphicsSettings(scene, queryGraphicsControlElements());
-      bindTabletop(scene);
-      bindXr(scene, ui, graphics, () => syncPlayButton(replay.togglePlay()), {
-        getPlaybackState: () => {
-          const duration = replay.getController()?.getDuration() ?? 0;
-          return { playing: replay.playing, speed: replay.speed, normalizedTime: duration ? replay.currentTime / duration : 0,
-            timeLabel: `${formatReplayTime(replay.currentTime)} / ${formatReplayTime(duration)}` };
-        },
-        onSeek: ratio => replay.setTimeRatio(ratio),
-        onJump: seconds => {
-          const duration = replay.getController()?.getDuration() ?? 0;
-          if (duration > 0) replay.setTimeRatio((replay.currentTime + seconds * 1000) / duration);
-        },
-        onSetSpeed: speed => { replay.setSpeed(speed); ui.speedSelect.value = String(speed); },
+        const graphics = bindGraphicsSettings(scene, queryGraphicsControlElements());
+        bindTabletop(scene);
+        bindXr(scene, ui, graphics, () => syncPlayButton(replay.togglePlay()), {
+          getPlaybackState: () => {
+            const duration = replay.getController()?.getDuration() ?? 0;
+            return { playing: replay.playing, speed: replay.speed, normalizedTime: duration ? replay.currentTime / duration : 0,
+              timeLabel: `${formatReplayTime(replay.currentTime)} / ${formatReplayTime(duration)}` };
+          },
+          onSeek: ratio => replay.setTimeRatio(ratio),
+          onJump: seconds => {
+            const duration = replay.getController()?.getDuration() ?? 0;
+            if (duration > 0) replay.setTimeRatio((replay.currentTime + seconds * 1000) / duration);
+          },
+          onSetSpeed: speed => { replay.setSpeed(speed); ui.speedSelect.value = String(speed); },
+        });
       });
 
-      await raceLoader.chooseAndLoadRace();
+      const [assets, race] = await Promise.allSettled([
+        sceneReady,
+        catalogRequest.then(catalog => raceLoader.chooseAndLoadRace({ catalog, sceneReady })),
+      ]);
+      if (assets.status === "rejected") throw assets.reason;
+      if (race.status === "rejected") throw race.reason;
     } catch (error) {
       console.error(error);
       replay.playing = false;

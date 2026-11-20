@@ -93,7 +93,10 @@ function* planTraffic(
     for (const target of targets) {
       const { id } = target;
       const pose = poses.get(id)!;
-      drift += Math.max(0, Math.hypot(pose.x - target.x, pose.z - target.z) - 10);
+      const dx = pose.x - target.x, dz = pose.z - target.z;
+      if (!(Math.abs(dx) <= 5 && Math.abs(dz) <= 5)) {
+        drift += Math.max(0, Math.hypot(dx, dz) - 10);
+      }
       samplesCount++;
       let samples = posesByDriver.get(id);
       if (!samples) {

@@ -7,6 +7,7 @@ import type { CameraModeHandler, CameraUpdateContext } from "../types";
 import { BroadcastDirector } from "./broadcast-director";
 import { BroadcastFraming, setBroadcastFov } from "./broadcast-framing";
 import { buildCornerCameraRig, type CornerCameraRig } from "./corner-camera-rig";
+import type { TrackPath } from "./track-path";
 import type { BroadcastCarInput } from "./types";
 
 export class BroadcastCameraMode implements CameraModeHandler {
@@ -30,8 +31,8 @@ export class BroadcastCameraMode implements CameraModeHandler {
     return this.subjectNumber;
   }
 
-  loadSegment(segment: ReplaySegment, transform: SceneTransform) {
-    this.rig = buildCornerCameraRig(segment, transform);
+  loadSegment(segment: ReplaySegment, transform: SceneTransform, path: TrackPath) {
+    this.rig = buildCornerCameraRig(segment, transform, path);
     this.reset();
   }
 

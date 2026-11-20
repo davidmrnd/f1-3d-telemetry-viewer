@@ -1,5 +1,5 @@
 import type { TrackPoint3D } from "../../types";
-import { intervalIndexAt, upperBound } from "./sorted-search";
+import { upperBound } from "./sorted-search";
 
 export interface Polyline3 {
   arcLengths: Float64Array;
@@ -33,13 +33,12 @@ export function polylineLength(line: Polyline3): number {
   return line.arcLengths[line.arcLengths.length - 1];
 }
 
-export function linearPointOnPolyline(line: Polyline3, distance: number): TrackPoint3D {
+function linearPointOnPolyline(line: Polyline3, distance: number, index: number): TrackPoint3D {
   const { arcLengths, xs, ys, zs } = line;
   if (arcLengths.length < 2) {
     return { x: xs[0], y: ys[0], z: zs[0] };
   }
 
-  const index = intervalIndexAt(arcLengths, distance);
   const span = arcLengths[index + 1] - arcLengths[index];
   const ratio = span > 0 ? clamp01((distance - arcLengths[index]) / span) : 0;
   return {
@@ -95,8 +94,14 @@ export function resampleUniformly(line: Polyline3, targetStep: number): UniformR
   const ys = new Float64Array(count);
   const zs = new Float64Array(count);
 
+  const { arcLengths } = line;
+  let interval = 0;
   for (let index = 0; index < count; index += 1) {
-    const point = linearPointOnPolyline(line, index * step);
+    const distance = index * step;
+    while (interval < arcLengths.length - 2 && arcLengths[interval + 1] <= distance) {
+      interval += 1;
+    }
+    const point = linearPointOnPolyline(line, distance, interval);
     xs[index] = point.x;
     ys[index] = point.y;
     zs[index] = point.z;

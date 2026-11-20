@@ -1,4 +1,5 @@
 import type { RaceCatalogEntry } from "../data/races-catalog";
+import type { AnimationFrames } from "./animation-frames";
 import { setAppTitle } from "./document-title";
 import { mustQuery } from "./dom";
 import { grandPrixName } from "./session-ui";
@@ -16,13 +17,9 @@ export class LoadingView {
   private lastFrame = 0;
   private animationId = 0;
   private lastYield = 0;
-  private readonly completions: (() => void)[] = [];
   private readonly reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-  constructor(
-    private readonly onProgress: (percentage: number, stage: string) => void = () => {},
-    private readonly frames = { request: (callback: FrameRequestCallback) => requestAnimationFrame(callback), cancel: (id: number) => cancelAnimationFrame(id) },
-  ) {
+  constructor(private readonly frames: AnimationFrames) {
     this.track.addEventListener("error", () => { this.track.hidden = true; });
   }
 
@@ -58,12 +55,10 @@ export class LoadingView {
 
   async checkpoint(percentage: number, stage?: string) {
     this.update(percentage, stage);
-    if (percentage >= 100 && this.animationId) {
-      await new Promise<void>((resolve) => { this.completions.push(resolve); });
-    }
-    if (!stage && percentage < 100 && performance.now() - this.lastYield < 12) return;
+    if (!stage && performance.now() - this.lastYield < 24) return;
+    this.lastYield = performance.now();
     await new Promise<void>((resolve) => {
-      this.frames.request(() => { this.frames.request(() => resolve()); });
+      this.frames.request(() => { setTimeout(resolve, 0); });
     });
     this.lastYield = performance.now();
   }
@@ -93,12 +88,10 @@ export class LoadingView {
     this.percentage.textContent = `${rounded} %`;
     this.progress.setAttribute("aria-valuenow", String(rounded));
     this.progress.style.setProperty("--loading-progress", `${value.toFixed(3)}%`);
-    this.onProgress(rounded, this.stage.textContent ?? "Cargando…");
   }
 
   private stopAnimation() {
     this.frames.cancel(this.animationId);
     this.animationId = 0;
-    for (const complete of this.completions.splice(0)) complete();
   }
 }

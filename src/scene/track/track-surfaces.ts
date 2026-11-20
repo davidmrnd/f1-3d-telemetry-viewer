@@ -8,6 +8,52 @@ import {
   TRACK_TILE_METERS,
 } from "../track-environment";
 
+export interface TerrainSnapshot {
+  index: Uint16Array | Uint32Array;
+  positions: Float32Array;
+  normals: Float32Array;
+  uvs: Float32Array;
+  colors: Float32Array;
+}
+
+export function buildRaceTerrain(
+  centerline: THREE.Vector3[], closed: boolean, edge: number, crossSections: TrackCrossSection[],
+): THREE.BufferGeometry {
+  return createGrassTerrainGeometry({
+    outerPaddingMeters: TRACK_GROUND_PADDING_METERS,
+    gridSpacingMeters: 12,
+    grassTileMeters: TRACK_TILE_METERS.grass,
+    centerline,
+    centerlineClosed: closed,
+    trackHalfWidthMeters: edge,
+    crossSections,
+    outerClearanceMeters: 0.12,
+    clearanceFadeMeters: 28,
+  });
+}
+
+export function snapshotTerrain(geometry: THREE.BufferGeometry): TerrainSnapshot {
+  return {
+    index: geometry.getIndex()!.array as Uint16Array | Uint32Array,
+    positions: geometry.getAttribute("position").array as Float32Array,
+    normals: geometry.getAttribute("normal").array as Float32Array,
+    uvs: geometry.getAttribute("uv").array as Float32Array,
+    colors: geometry.getAttribute("color").array as Float32Array,
+  };
+}
+
+function restoreTerrain(snapshot: TerrainSnapshot): THREE.BufferGeometry {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setIndex(new THREE.BufferAttribute(snapshot.index, 1));
+  geometry.setAttribute("position", new THREE.BufferAttribute(snapshot.positions, 3));
+  geometry.setAttribute("normal", new THREE.BufferAttribute(snapshot.normals, 3));
+  geometry.setAttribute("uv", new THREE.BufferAttribute(snapshot.uvs, 2));
+  geometry.setAttribute("color", new THREE.BufferAttribute(snapshot.colors, 3));
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
 export class RaceTerrain {
   private readonly ground: THREE.Mesh;
   private readonly groundBase: THREE.Mesh;
@@ -69,19 +115,12 @@ export class RaceTerrain {
     trackWidth: number,
     kerbWidth: number,
     crossSections: TrackCrossSection[],
+    snapshot?: TerrainSnapshot,
   ) {
     this.ground.geometry.dispose();
-    this.ground.geometry = createGrassTerrainGeometry({
-      outerPaddingMeters: TRACK_GROUND_PADDING_METERS,
-      gridSpacingMeters: 12,
-      grassTileMeters: TRACK_TILE_METERS.grass,
-      centerline: pathPoints,
-      centerlineClosed: closed,
-      trackHalfWidthMeters: trackWidth / 2 + kerbWidth,
-      crossSections,
-      outerClearanceMeters: 0.12,
-      clearanceFadeMeters: 28,
-    });
+    this.ground.geometry = snapshot
+      ? restoreTerrain(snapshot)
+      : buildRaceTerrain(pathPoints, closed, trackWidth / 2 + kerbWidth, crossSections);
     this.groundBase.visible = false;
   }
 }

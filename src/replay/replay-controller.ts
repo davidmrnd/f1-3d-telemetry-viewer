@@ -83,9 +83,13 @@ export class ReplayController {
     const clampedTime = Math.max(0, Math.min(this.duration, t));
     const cars: FrameCarState[] = this.tracks.map(({ driver, trajectory, telemetry, retirement }) => {
       const pose = trajectory.poseAt(clampedTime);
+      const sample = telemetry.sampleAt(clampedTime);
+      sample.x = pose.x;
+      sample.y = pose.y;
+      sample.z = pose.z;
       return {
         driver,
-        sample: { ...telemetry.sampleAt(clampedTime), x: pose.x, y: pose.y, z: pose.z },
+        sample,
         heading: pose.heading,
         pitch: pose.pitch,
         retirement: retirement && clampedTime >= retirement.t ? retirement.status : undefined,

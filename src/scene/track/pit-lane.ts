@@ -22,9 +22,8 @@ export interface PitLane {
   heightAt: ReturnType<typeof createTerrainHeightSampler>;
 }
 
-export function createCircuitHeightSampler(road: THREE.BufferGeometry, terrain: THREE.BufferGeometry) {
+export function createCircuitHeightSampler(road: THREE.BufferGeometry, groundHeight: ReturnType<typeof createTerrainHeightSampler>) {
   const roadHeight = createTerrainHeightSampler(road);
-  const groundHeight = createTerrainHeightSampler(terrain);
   return (x: number, z: number, fallback: number) => {
     const onRoad = roadHeight(x, z, NaN);
     return Number.isFinite(onRoad) ? onRoad : groundHeight(x, z, fallback);

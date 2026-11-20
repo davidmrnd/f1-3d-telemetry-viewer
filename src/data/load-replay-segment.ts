@@ -49,24 +49,27 @@ async function readResponseBytes(response: Response, onProgress?: ReplayLoadProg
   return bytes;
 }
 
-export async function loadReplaySegment(path: string, onProgress?: ReplayLoadProgress): Promise<ReplaySegment> {
+async function loadReplayBytes(path: string, onProgress?: ReplayLoadProgress): Promise<Uint8Array> {
   const response = await fetch(path);
   if (!response.ok) {
     throw new Error(
       `No se pudo cargar ${path}. Ejecuta "npm run sync:data" para generarlo desde OpenF1.`,
     );
   }
-  const bytes = await readResponseBytes(response, onProgress);
-  return normalizeSegment(decodeReplaySegmentBinary(bytes));
+  return readResponseBytes(response, onProgress);
 }
 
-export async function loadReplaySegmentFromRace(entry: RaceCatalogEntry, onProgress?: ReplayLoadProgress): Promise<ReplaySegment> {
-  const segment = await loadReplaySegment(entry.path, onProgress);
+export async function loadReplayCapture(entry: RaceCatalogEntry, onProgress?: ReplayLoadProgress) {
+  const bytes = await loadReplayBytes(entry.path, onProgress);
+  const segment = normalizeSegment(decodeReplaySegmentBinary(bytes));
   return {
-    ...segment,
-    sessionRef: {
-      ...segment.sessionRef,
-      totalLaps: entry.totalLaps ?? segment.sessionRef.totalLaps ?? null,
+    bytes,
+    segment: {
+      ...segment,
+      sessionRef: {
+        ...segment.sessionRef,
+        totalLaps: entry.totalLaps ?? segment.sessionRef.totalLaps ?? null,
+      },
     },
   };
 }

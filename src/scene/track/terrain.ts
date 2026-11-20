@@ -4,7 +4,6 @@ import { buildTrackCrossSections, crossSectionPoint, type TrackCrossSection } fr
 import { SpatialIndex } from "./spatial";
 
 export interface GrassTerrainOptions {
-  halfExtentMeters?: number;
   outerPaddingMeters?: number;
   gridSpacingMeters?: number;
   gridSegments?: number;
@@ -22,18 +21,18 @@ interface Face {
   active: boolean;
 }
 
-function edgeKey(a: number, b: number): string {
-  return a < b ? a + "," + b : b + "," + a;
+const EDGE_KEY_STRIDE = 2 ** 26;
+type EdgeKey = number | string;
+
+function edgeKey(a: number, b: number): EdgeKey {
+  const first = Math.min(a, b), last = Math.max(a, b);
+  return last < EDGE_KEY_STRIDE ? first * EDGE_KEY_STRIDE + last : first + "," + last;
 }
 
-export function projectPointOntoPolylineXZ(x: number, z: number, points: THREE.Vector3[], closed: boolean) {
-  if (points.length === 1) return { y: points[0].y, lateralDistance: Math.hypot(x - points[0].x, z - points[0].z) };
-  let best = { y: 0, distanceSq: Infinity };
-  for (const segment of pathSegments(points, closed)) {
-    const projection = segmentProjection(x, z, segment);
-    if (projection.distanceSq < best.distanceSq) best = projection;
-  }
-  return Number.isFinite(best.distanceSq) ? { y: best.y, lateralDistance: Math.sqrt(best.distanceSq) } : null;
+function edgeVertices(key: EdgeKey): number[] {
+  return typeof key === "number"
+    ? [Math.floor(key / EDGE_KEY_STRIDE), key % EDGE_KEY_STRIDE]
+    : key.split(",").map(Number);
 }
 
 export function createGrassTerrainGeometry(options: GrassTerrainOptions): THREE.BufferGeometry {
@@ -95,7 +94,7 @@ export function createGrassTerrainGeometry(options: GrassTerrainOptions): THREE.
   const vertices: THREE.Vector3[] = [];
   const contours: number[][] = [];
   const faces = new Set<Face>();
-  const adjacency = new Map<string, Set<Face>>();
+  const adjacency = new Map<EdgeKey, Set<Face>>();
   const pending: Face[] = [];
   const addVertex = (x: number, z: number, y = heightAt(x, z)) => {
     vertices.push(new THREE.Vector3(Math.fround(x), Math.fround(y), Math.fround(z)));
@@ -125,12 +124,12 @@ export function createGrassTerrainGeometry(options: GrassTerrainOptions): THREE.
       if (!entries.size) adjacency.delete(key);
     }
   };
-  const legalize = (queue: string[]) => {
+  const legalize = (queue: EdgeKey[]) => {
     while (queue.length) {
       const key = queue.pop()!;
       const entries = adjacency.get(key);
       if (entries?.size !== 2) continue;
-      const [a, b] = key.split(",").map(Number);
+      const [a, b] = edgeVertices(key);
       const [first, second] = [...entries];
       const c = first.vertices.find((id) => id !== a && id !== b)!;
       const d = second.vertices.find((id) => id !== a && id !== b)!;
@@ -173,7 +172,7 @@ export function createGrassTerrainGeometry(options: GrassTerrainOptions): THREE.
   for (const contour of contours) contour.forEach((id, position) => membership.set(id, { contour, position }));
   for (const [key, entries] of [...adjacency]) {
     if (entries.size !== 1) continue;
-    const [a, b] = key.split(",").map(Number);
+    const [a, b] = edgeVertices(key);
     const first = membership.get(a)!;
     const last = membership.get(b)!;
     if (first.contour !== last.contour) continue;
@@ -196,7 +195,7 @@ export function createGrassTerrainGeometry(options: GrassTerrainOptions): THREE.
   const spacing = Math.max(2, options.gridSpacingMeters ?? (options.gridSegments
     ? Math.max(maxX - minX, maxZ - minZ) / options.gridSegments
     : 14));
-  const midpointCache = new Map<string, number>();
+  const midpointCache = new Map<EdgeKey, number>();
   legalize([...adjacency.keys()]);
   while (pending.length) {
     const face = pending.pop()!;
@@ -221,7 +220,7 @@ export function createGrassTerrainGeometry(options: GrassTerrainOptions): THREE.
       middle = addVertex(x, z, boundaryEdge ? (vertices[a].y + vertices[b].y) / 2 : heightAt(x, z));
       midpointCache.set(key, middle);
     }
-    const queue: string[] = [];
+    const queue: EdgeKey[] = [];
     for (const neighbor of [...adjacency.get(key)!]) {
       const opposite = neighbor.vertices.find((id) => id !== a && id !== b)!;
       removeFace(neighbor);

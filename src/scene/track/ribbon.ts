@@ -15,10 +15,10 @@ export interface TrackRibbonOptions {
   skipSegment?: (index: number) => boolean;
 }
 
-function smoothWidthLimits(sections: TrackCrossSection[], limits: number[], closed: boolean) {
+function widthNeighborhoods(sections: TrackCrossSection[], closed: boolean) {
   const radius = 12;
-  const neighborhoods = sections.map((_section, index) => {
-    const neighbors = [{ index, distance: 0 }];
+  return sections.map((_section, index) => {
+    const neighbors = [{ index, weight: 1 }];
     for (const direction of [-1, 1]) {
       let previous = index;
       let distance = 0;
@@ -30,19 +30,21 @@ function smoothWidthLimits(sections: TrackCrossSection[], limits: number[], clos
         const b = sections[next].center;
         distance += Math.hypot(a.x - b.x, a.z - b.z);
         if (distance > radius + 1e-8) break;
-        neighbors.push({ index: next, distance });
+        neighbors.push({ index: next, weight: (1 + Math.cos(Math.PI * Math.min(distance / radius, 1))) / 2 });
         previous = next;
       }
     }
     return neighbors;
   });
+}
+
+function smoothWidthLimits(sections: TrackCrossSection[], limits: number[], neighborhoods: ReturnType<typeof widthNeighborhoods>) {
   const minimums = neighborhoods.map((neighbors) =>
     Math.min(...neighbors.map(({ index }) => limits[index])));
   for (let i = 0; i < sections.length; i++) {
     let sum = 0;
     let weights = 0;
-    for (const { index, distance } of neighborhoods[i]) {
-      const weight = (1 + Math.cos(Math.PI * Math.min(distance / radius, 1))) / 2;
+    for (const { index, weight } of neighborhoods[i]) {
       sum += minimums[index] * weight;
       weights += weight;
     }
@@ -75,8 +77,9 @@ export function buildTrackCrossSections(points: THREE.Vector3[], closed: boolean
     return { center, lateral, widthScale };
   });
   const widthLimits = sections.map((section) => section.widthScale);
+  const neighborhoods = widthNeighborhoods(sections, closed);
   for (let pass = 0; pass < 64; pass++) {
-    smoothWidthLimits(sections, widthLimits, closed);
+    smoothWidthLimits(sections, widthLimits, neighborhoods);
     let changed = false;
     const reduceWidth = (index: number) => {
       widthLimits[index] = Math.min(widthLimits[index], sections[index].widthScale * 0.9);
@@ -99,16 +102,12 @@ export function buildTrackCrossSections(points: THREE.Vector3[], closed: boolean
     }
     if (!changed) break;
   }
-  smoothWidthLimits(sections, widthLimits, closed);
+  smoothWidthLimits(sections, widthLimits, neighborhoods);
   return sections;
 }
 
 export function crossSectionPoint(section: TrackCrossSection, offset: number): THREE.Vector3 {
   return section.center.clone().addScaledVector(section.lateral, offset * section.widthScale);
-}
-
-export function offsetPolyline(points: THREE.Vector3[], offsetMeters: number, closed: boolean): THREE.Vector3[] {
-  return buildTrackCrossSections(points, closed, Math.abs(offsetMeters)).map((section) => crossSectionPoint(section, offsetMeters));
 }
 
 export function createTrackRibbon(points: THREE.Vector3[], width: number, options: TrackRibbonOptions = {}): THREE.BufferGeometry {

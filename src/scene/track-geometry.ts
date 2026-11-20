@@ -8,21 +8,9 @@ export const F1_CAR_LENGTH_METERS = 5.5;
 export const TRACK_SURFACE_WIDTH_METERS = 12;
 export const TRACK_KERB_WIDTH_METERS = 0.35;
 
-export {
-  buildVisualCircuitPath,
-  cleanCircuitPoints,
-  densifyPolylineLinear,
-  findPathIntersectionsXZ,
-  isClosedCircuitPath,
-  normalizeCircuitPath,
-  smoothPolylineCatmullRom,
-  TRACK_PATH_DENSIFY_SPACING_METERS,
-  TRACK_PATH_SMOOTH_SPACING_METERS,
-} from "./track/path";
-export { buildTrackCrossSections, createTrackRibbon, offsetPolyline } from "./track/ribbon";
-export type { TrackCrossSection, TrackRibbonOptions } from "./track/ribbon";
-export { createGrassTerrainGeometry, projectPointOntoPolylineXZ } from "./track/terrain";
-export type { GrassTerrainOptions } from "./track/terrain";
+export { buildVisualCircuitPath } from "./track/path";
+export { buildTrackCrossSections, createTrackRibbon } from "./track/ribbon";
+export type { TrackCrossSection } from "./track/ribbon";
 
 const TRACK_LAP_MIN_FLYING_SPEED_KMH = 80;
 const TRACK_LAP_CORNER_COVERAGE_METERS = 40;
@@ -298,27 +286,20 @@ export function trackWidthInScene(transform: SceneTransform): number {
 }
 
 export function buildTransform(segment: ReplaySegment): SceneTransform {
-  const pointCloud: TrackPoint3D[] = [
-    ...segment.circuit.centerline,
-    ...Object.values(segment.samples).flat().map((sample) => ({
-      x: sample.x,
-      y: sample.y,
-      z: sample.z,
-    })),
-  ];
-
   let minY = Infinity;
   let minX = Infinity;
   let maxX = -Infinity;
   let minZ = Infinity;
   let maxZ = -Infinity;
-  for (const point of pointCloud) {
-    if (!isFiniteTrackPoint(point)) continue;
-    minY = Math.min(minY, point.y);
-    minX = Math.min(minX, point.x);
-    maxX = Math.max(maxX, point.x);
-    minZ = Math.min(minZ, point.z);
-    maxZ = Math.max(maxZ, point.z);
+  for (const points of [segment.circuit.centerline, ...Object.values(segment.samples)]) {
+    for (const point of points) {
+      if (!isFiniteTrackPoint(point)) continue;
+      minY = Math.min(minY, point.y);
+      minX = Math.min(minX, point.x);
+      maxX = Math.max(maxX, point.x);
+      minZ = Math.min(minZ, point.z);
+      maxZ = Math.max(maxZ, point.z);
+    }
   }
   if (!Number.isFinite(minY)) {
     minY = minX = maxX = minZ = maxZ = 0;

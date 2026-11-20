@@ -51,21 +51,6 @@ function smootherstepSlope(u: number): number {
   return 30 * u * u * (1 - u) * (1 - u);
 }
 
-export function buildBasePlacements(frame: ReplayFrame, transform: SceneTransform): BaseCarPlacement[] {
-  return frame.cars.map((car) => {
-    const position = vectorFromPoint(
-      {
-        x: car.sample.x,
-        y: car.sample.y,
-        z: car.sample.z,
-      },
-      transform,
-    );
-    position.y += CAR_TRACK_CLEARANCE_METERS;
-    return { car, position, heading: car.heading };
-  });
-}
-
 function speedBlendWeight(speedKmh: number, fullAtOrBelow: number, zeroAtOrAbove: number) {
   if (speedKmh <= fullAtOrBelow) {
     return 1;
@@ -141,8 +126,8 @@ function findStationaryIntervals(
   for (let t = rangeStart; t <= rangeEnd; t += GRID_HOLD_SCAN_STEP_MS) {
     const phase = phaseAt(trackStatus, t);
     const eligible = phase === "formation" || phase === "pre_session" || phase === "standing_start";
-    const speed = sampleSpeedAt(samples, t);
-    const stationary = eligible && speed !== null && speed <= GRID_PACK_SPEED_KMH;
+    const speed = eligible ? sampleSpeedAt(samples, t) : null;
+    const stationary = speed !== null && speed <= GRID_PACK_SPEED_KMH;
 
     if (stationary) {
       if (holdStart === null) {
@@ -271,13 +256,6 @@ export function buildGridLateralOffsets(startingGrid: StartingGridSlot[]) {
   return offsets;
 }
 
-export function shouldUseGridPlacement(frame: ReplayFrame, holds: GridHoldInterval[] = []) {
-  if (holds.length > 0) {
-    return gridHoldWeight(frame.now, holds) > 0.05;
-  }
-  return frame.trackStatus?.phase === "standing_start";
-}
-
 function desiredGridState(
   car: FrameCarState,
   now: number,
@@ -318,6 +296,11 @@ export class GridLateralOffsetBlender {
   private lastNow: number | null = null;
   private launchHold = false;
   private holdsByDriver: DriverGridHolds = new Map();
+  private readonly gridOffsets: Map<number, number>;
+
+  constructor(startingGrid: StartingGridSlot[]) {
+    this.gridOffsets = buildGridLateralOffsets(startingGrid);
+  }
 
   reset(holdsByDriver: DriverGridHolds = new Map()) {
     this.current.clear();
@@ -326,12 +309,8 @@ export class GridLateralOffsetBlender {
     this.holdsByDriver = holdsByDriver;
   }
 
-  resolve(
-    frame: ReplayFrame,
-    startingGrid: StartingGridSlot[],
-  ): { offsets: Map<number, number>; rates: Map<number, number> } {
+  resolve(frame: ReplayFrame): VisualPlacementOptions {
     const phase = frame.trackStatus?.phase;
-    const gridOffsets = buildGridLateralOffsets(startingGrid);
     const now = frame.now;
     const seeked =
       this.lastNow !== null && Math.abs(now - this.lastNow) > GRID_SEEK_SNAP_MS;
@@ -367,7 +346,7 @@ export class GridLateralOffsetBlender {
         car,
         now,
         phase,
-        gridOffsets,
+        this.gridOffsets,
         holds,
         this.launchHold,
       );
@@ -398,18 +377,16 @@ export function buildVisualPlacements(
   transform: SceneTransform,
   { offsets, rates }: VisualPlacementOptions,
 ): BaseCarPlacement[] {
-  const basePlacements = buildBasePlacements(frame, transform);
-
-  return basePlacements.map(({ car, position }) => {
+  return frame.cars.map(car => {
+    const position = vectorFromPoint(car.sample, transform);
+    position.y += CAR_TRACK_CLEARANCE_METERS;
     const offset = offsets.get(car.driver.driverNumber) ?? 0;
     const rate = rates.get(car.driver.driverNumber) ?? 0;
     const speedMps = Math.max(car.sample.speed * KMH_TO_MPS, GRID_STEER_MIN_SPEED_MPS);
     const heading = car.heading + Math.atan2(rate, speedMps);
-    const laneNormal = new THREE.Vector3(-Math.sin(car.heading), 0, Math.cos(car.heading));
-    return {
-      car,
-      position: position.clone().add(laneNormal.multiplyScalar(offset)),
-      heading,
-    };
+    position.x += -Math.sin(car.heading) * offset;
+    position.y += 0 * offset;
+    position.z += Math.cos(car.heading) * offset;
+    return { car, position, heading };
   });
 }

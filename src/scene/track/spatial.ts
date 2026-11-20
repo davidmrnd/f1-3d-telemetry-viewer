@@ -75,8 +75,10 @@ export class SpatialIndex<T extends BoundsXZ> {
       bounds.maxZ = Math.max(bounds.maxZ, item.maxZ);
     }
     if (items.length <= 8) return { ...bounds, items };
-    const axis = bounds.maxX - bounds.minX > bounds.maxZ - bounds.minZ ? "X" : "Z";
-    items.sort((a, b) => a[`min${axis}`] + a[`max${axis}`] - b[`min${axis}`] - b[`max${axis}`]);
+    const splitOnX = bounds.maxX - bounds.minX > bounds.maxZ - bounds.minZ;
+    items.sort(splitOnX
+      ? (a, b) => a.minX + a.maxX - b.minX - b.maxX
+      : (a, b) => a.minZ + a.maxZ - b.minZ - b.maxZ);
     const middle = Math.floor(items.length / 2);
     return { ...bounds, left: this.build(items.slice(0, middle)), right: this.build(items.slice(middle)) };
   }

@@ -2,10 +2,12 @@ import {
   findRaceInCatalog,
   loadRacesCatalog,
   type RaceCatalogEntry,
+  type RacesCatalog,
 } from "../data/races-catalog";
-import { loadReplaySegmentFromRace } from "../data/load-replay-segment";
+import { loadReplayCapture } from "../data/load-replay-segment";
 import { ReplayController } from "../replay/replay-controller";
 import type { RaceScene } from "../scene/race-scene";
+import { prepareCircuitInWorker } from "../scene/track/prepare-circuit-in-worker";
 import type { ReplayFrame } from "../types";
 import type { DesktopPlayerView } from "./desktop-player-view";
 import { mustQuery } from "./dom";
@@ -55,7 +57,6 @@ export function createRaceLoader(options: RaceLoaderOptions) {
   async function pickRace(
     races: RaceCatalogEntry[],
     preferredId: string | null,
-    options: { allowQueryShortcut?: boolean } = {},
   ): Promise<RaceCatalogEntry | null> {
     if (races.length === 0) {
       appShell.hidden = true;
@@ -63,34 +64,26 @@ export function createRaceLoader(options: RaceLoaderOptions) {
       return null;
     }
 
-    if (options.allowQueryShortcut !== false) {
-      const fromQuery = raceFromQuery(races);
-      if (fromQuery) {
-        return fromQuery;
-      }
-    }
-
     appShell.hidden = true;
     return racePicker.open(races, preferredId, replay.getController() != null);
   }
 
-  async function loadSelectedRace(entry: RaceCatalogEntry) {
+  async function loadSelectedRace(entry: RaceCatalogEntry, sceneReady = Promise.resolve()) {
     loadingRace = true;
     appShell.inert = true;
     loadingView.show(entry);
     try {
       ui.statusPill.classList.remove("is-ready");
       ui.statusPill.textContent = "Cargando datos del replay...";
-      await loadingView.checkpoint(0);
-      const segment = await loadReplaySegmentFromRace(entry, (loaded, total) => {
+      const { bytes, segment } = await loadReplayCapture(entry, (loaded, total) => {
         if (total) loadingView.update(35 * Math.min(1, loaded / total));
       });
-      await loadingView.checkpoint(40, "Preparando trayectorias…");
-      const controller = await ReplayController.create(segment, (progress) =>
-        loadingView.checkpoint(40 + 14 * progress),
-      );
-      await loadingView.checkpoint(55, "Construyendo el circuito…");
-      scene.loadSegment(segment);
+      await loadingView.checkpoint(40, "Preparando trayectorias y circuito…");
+      const circuitPreparation = prepareCircuitInWorker(bytes);
+      const [controller] = await Promise.all([
+        ReplayController.create(segment, progress => loadingView.checkpoint(40 + 28 * progress)),
+        Promise.all([sceneReady, circuitPreparation]).then(([, circuit]) => scene.loadSegment(segment, circuit)),
+      ]);
       await loadingView.checkpoint(70, "Preparando el tráfico y los adelantamientos…");
       await scene.prepareTraffic(controller.getDuration(), time => controller.getFrame(time),
         progress => loadingView.checkpoint(70 + 28 * progress));
@@ -106,7 +99,6 @@ export function createRaceLoader(options: RaceLoaderOptions) {
       appShell.hidden = false;
       scene.resize();
       const initialFrame = controller.getFrame(0);
-      await loadingView.checkpoint(99, "Últimos detalles…");
       render(initialFrame);
       syncPlayButton(false);
       ui.statusPill.textContent = "Listo.";
@@ -117,7 +109,6 @@ export function createRaceLoader(options: RaceLoaderOptions) {
       url.searchParams.set("year", String(entry.year));
       url.searchParams.set("race", entry.race);
       window.history.replaceState({}, "", url);
-      await loadingView.checkpoint(100, "Finalizando…");
     } finally {
       resetClock();
       loadingRace = false;
@@ -126,13 +117,23 @@ export function createRaceLoader(options: RaceLoaderOptions) {
     }
   }
 
-  async function chooseAndLoadRace(options: { allowQueryShortcut?: boolean } = {}) {
+  async function chooseAndLoadRace(options: {
+    allowQueryShortcut?: boolean;
+    catalog?: RacesCatalog;
+    sceneReady?: Promise<void>;
+  } = {}) {
     radioPlayer.stop();
     const wasPlaying = replay.playing;
     replay.playing = false;
     syncPlayButton(false);
-    const catalog = await loadRacesCatalog();
-    const selected = await pickRace(catalog.races, catalog.activeId, options);
+    const catalog = options.catalog ?? await loadRacesCatalog();
+    const fromQuery = options.allowQueryShortcut === false ? null : raceFromQuery(catalog.races);
+    if (fromQuery) {
+      await loadSelectedRace(fromQuery, options.sceneReady);
+      return;
+    }
+    if (options.sceneReady) await options.sceneReady;
+    const selected = await pickRace(catalog.races, catalog.activeId);
     if (!selected) {
       appShell.hidden = replay.getController() == null;
       replay.playing = replay.getController() != null && wasPlaying;

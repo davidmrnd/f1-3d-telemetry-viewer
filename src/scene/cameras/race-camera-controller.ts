@@ -3,6 +3,7 @@ import type { ReplaySegment } from "../../types";
 import type { BaseCarPlacement } from "../car-placement";
 import type { SceneTransform } from "../track-geometry";
 import { BroadcastCameraMode } from "./automatic/broadcast-camera-mode";
+import type { TrackPath } from "./automatic/track-path";
 import { OrbitCameraMode } from "./manual/orbit-camera-mode";
 import { OnboardCameraMode } from "./onboard/onboard-camera-mode";
 import type { CameraMode, CameraModeHandler } from "./types";
@@ -20,8 +21,8 @@ export class RaceCameraController {
     onboard: this.onboardMode,
   };
 
-  loadSegment(segment: ReplaySegment, transform: SceneTransform) {
-    this.broadcastMode.loadSegment(segment, transform);
+  loadSegment(segment: ReplaySegment, transform: SceneTransform, path: TrackPath) {
+    this.broadcastMode.loadSegment(segment, transform, path);
     this.onboardMode.setDrivers(segment.drivers);
     this.handlers[this.mode].reset();
     this.activeLabel = "";

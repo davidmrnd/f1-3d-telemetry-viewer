@@ -9,10 +9,7 @@ import {
 } from "./car-placement";
 import { CarFleet } from "./car-fleet";
 import {
-  buildTrackCenterline,
   buildTransform,
-  buildVisualCircuitPath,
-  buildTrackCrossSections,
   carLengthInScene,
   metersToScene,
   TRACK_KERB_WIDTH_METERS,
@@ -50,6 +47,8 @@ import { RaceLighting } from "./lighting";
 import { RaceTerrain, addTrackRoad, addTrackKerbs } from "./track/track-surfaces";
 import { createCircuitHeightSampler, createPitLane, findPitOpenings, type PitLane } from "./track/pit-lane";
 import { createPitMarkings } from "./track/pit-markings";
+import { prepareCircuit, type CircuitSnapshot } from "./track/circuit-preparation";
+import { createTerrainHeightSampler } from "./track/terrain-height";
 import { PitLanePlacement } from "./pit-placement";
 import { TrackPath } from "./cameras/automatic/track-path";
 import { createTrackDecor, type TrackDecor } from "./track/track-decor";
@@ -421,7 +420,7 @@ export class RaceScene {
     this.controls.update();
   }
 
-  loadSegment(segment: ReplaySegment) {
+  loadSegment(segment: ReplaySegment, prepared?: CircuitSnapshot) {
     this.xrDriverInfo = segment.drivers;
     this.xrInterface?.setDrivers(segment.drivers);
     this.disposeRootContents();
@@ -432,40 +431,26 @@ export class RaceScene {
 
     this.xrDrivers = segment.drivers.map(driver => driver.driverNumber);
 
-    const { path: pathPoints, closed } = buildVisualCircuitPath(
-      buildTrackCenterline(segment).map((point) => vectorFromPoint(point, transform)),
-    );
-    const samplePoints = Object.values(segment.samples)
-      .flat()
-      .map((sample) =>
-        vectorFromPoint(
-          {
-            x: sample.x,
-            y: sample.y,
-            z: sample.z,
-          },
-          transform,
-        ),
-      );
-
     const trackWidth = trackWidthInScene(transform);
-    this.trafficRoads.push({ points: pathPoints, closed, width: trackWidth });
     const kerbWidth = metersToScene(TRACK_KERB_WIDTH_METERS, transform);
-    const crossSections = buildTrackCrossSections(pathPoints, closed, trackWidth / 2 + kerbWidth);
+    const { points: pathPoints, closed, sections: crossSections } =
+      prepareCircuit(segment, transform, trackWidth / 2 + kerbWidth, prepared);
+    const main = new TrackPath(pathPoints, closed);
+    this.trafficRoads.push({ points: pathPoints, closed, width: trackWidth });
     this.tabletop.load(segment.drivers, pathPoints, closed, trackWidth, crossSections);
     this.tabletopXr.resetInteraction();
 
     if (pathPoints.length > 1) {
-      this.terrain.rebuild(pathPoints, closed, trackWidth, kerbWidth, crossSections);
+      this.terrain.rebuild(pathPoints, closed, trackWidth, kerbWidth, crossSections, prepared?.terrain);
     }
 
     if (pathPoints.length > 4) {
+      const groundHeight = createTerrainHeightSampler(this.terrain.geometry);
       const road = addTrackRoad(this.root, pathPoints, closed, trackWidth, crossSections);
-      const main = new TrackPath(pathPoints, closed);
       let pitLane: PitLane | null = null;
       let pitOpening: ReturnType<typeof findPitOpenings> | undefined;
       if (segment.circuit.pitLane || segment.retirements?.length) {
-        const circuitHeight = createCircuitHeightSampler(road.geometry, this.terrain.geometry);
+        const circuitHeight = createCircuitHeightSampler(road.geometry, groundHeight);
         pitLane = createPitLane(segment, transform, main, trackWidth, circuitHeight, road.material);
         if (pitLane) {
           this.trafficRoads.push({ points: [...pitLane.path.points], closed: false, width: pitLane.width });
@@ -488,7 +473,7 @@ export class RaceScene {
       }
       addTrackKerbs(this.root, pathPoints, closed, trackWidth, kerbWidth, crossSections, skipKerb);
       this.trackDecor = createTrackDecor(pathPoints, crossSections, closed, trackWidth, kerbWidth,
-        this.terrain.geometry, /monte|monaco|baku/i.test(segment.sessionRef.circuitShortName), pitOpening, pitLane,
+        groundHeight, /monte|monaco|baku/i.test(segment.sessionRef.circuitShortName), pitOpening, pitLane,
         this.monacoTunnel?.contains);
       this.root.add(this.trackDecor.group);
     }
@@ -502,8 +487,10 @@ export class RaceScene {
     this.graphicsInitialized = false;
     this.applyGraphicsSettings(this.graphicsSettings);
 
-    this.cameraController.loadSegment(segment, transform);
+    this.cameraController.loadSegment(segment, transform, main);
     if (this.cameraController.getMode() === "orbit") {
+      const samplePoints = Object.values(segment.samples)
+        .flatMap(samples => samples.map(sample => vectorFromPoint(sample, transform)));
       this.framePreviewCamera(samplePoints);
     }
   }
@@ -515,11 +502,11 @@ export class RaceScene {
   ) {
     const transform = this.transform;
     if (!transform) return;
-    const grid = new GridLateralOffsetBlender();
+    const grid = new GridLateralOffsetBlender(this.startingGrid);
     grid.reset(this.gridHolds);
     const steps = buildTrafficTimelineSteps(duration, (now) => {
       const frame = frameAt(now);
-      const base = buildVisualPlacements(frame, transform, grid.resolve(frame, this.startingGrid));
+      const base = buildVisualPlacements(frame, transform, grid.resolve(frame));
       const placements = this.startFinish?.placeCars(base, now) ?? base;
       return this.pitPlacement?.apply(placements, now) ?? placements;
     }, this.trafficRoads, () => grid.reset(this.gridHolds));

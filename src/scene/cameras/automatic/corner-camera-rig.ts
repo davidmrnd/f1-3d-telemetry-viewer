@@ -1,12 +1,7 @@
 import * as THREE from "three";
 import type { ReplaySegment } from "../../../types";
-import {
-  buildTrackCenterline,
-  buildVisualCircuitPath,
-  vectorFromPoint,
-  type SceneTransform,
-} from "../../track-geometry";
-import { TrackPath } from "./track-path";
+import { vectorFromPoint, type SceneTransform } from "../../track-geometry";
+import type { TrackPath } from "./track-path";
 import type { CornerCameraDefinition } from "./types";
 
 const MAX_CAMERA_GAP_METERS = 180;
@@ -16,11 +11,8 @@ export interface CornerCameraRig {
   cameras: CornerCameraDefinition[];
 }
 
-export function buildCornerCameraRig(segment: ReplaySegment, transform: SceneTransform): CornerCameraRig {
-  const { path: pathPoints, closed } = buildVisualCircuitPath(
-    buildTrackCenterline(segment).map((point) => vectorFromPoint(point, transform)),
-  );
-  const path = new TrackPath(pathPoints, closed);
+export function buildCornerCameraRig(segment: ReplaySegment, transform: SceneTransform, path: TrackPath): CornerCameraRig {
+  const { closed } = path;
   if (path.points.length < 2 || path.totalLength <= 0) return { path, cameras: [] };
 
   const cameras = segment.circuit.corners.map((corner) => {

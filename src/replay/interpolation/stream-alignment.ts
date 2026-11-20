@@ -26,6 +26,13 @@ interface AlignmentCost {
   count: number;
 }
 
+interface AlignmentSamples {
+  times: Float64Array;
+  arcLengths: Float64Array;
+  telemetry: TelemetrySpeedProfile;
+  distances: Float64Array;
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -37,26 +44,26 @@ function huberLoss(residual: number): number {
     : ALIGNMENT_HUBER_DELTA_METERS * (magnitude - 0.5 * ALIGNMENT_HUBER_DELTA_METERS);
 }
 
-function alignmentCost(track: AlignmentTrack, lagMs: number): AlignmentCost {
-  const { fixes, fixArcLengths, telemetry } = track;
+function alignmentCost({ times, arcLengths, telemetry, distances }: AlignmentSamples, lagMs: number): AlignmentCost {
+  telemetry.fillCumulativeDistances(times, lagMs, distances);
   let total = 0;
   let count = 0;
   let windowEnd = 0;
 
-  for (let start = 0; start < fixes.length; start += 1) {
+  for (let start = 0; start < times.length; start += 1) {
     windowEnd = Math.max(windowEnd, start + 1);
-    while (windowEnd < fixes.length && fixes[windowEnd].t - fixes[start].t < ALIGNMENT_WINDOW_MS) {
+    while (windowEnd < times.length && times[windowEnd] - times[start] < ALIGNMENT_WINDOW_MS) {
       windowEnd += 1;
     }
-    if (windowEnd >= fixes.length) {
+    if (windowEnd >= times.length) {
       break;
     }
 
-    const expected = telemetry.distanceBetween(fixes[start].t + lagMs, fixes[windowEnd].t + lagMs);
+    const expected = distances[windowEnd] - distances[start];
     if (expected < ALIGNMENT_MIN_DISTANCE_METERS) {
       continue;
     }
-    total += huberLoss(fixArcLengths[windowEnd] - fixArcLengths[start] - expected);
+    total += huberLoss(arcLengths[windowEnd] - arcLengths[start] - expected);
     count += 1;
   }
 
@@ -64,14 +71,20 @@ function alignmentCost(track: AlignmentTrack, lagMs: number): AlignmentCost {
 }
 
 export function estimateTelemetryLagMs(tracks: AlignmentTrack[]): number {
+  const samples: AlignmentSamples[] = tracks.map(({ fixes, fixArcLengths, telemetry }) => ({
+    times: Float64Array.from(fixes, fix => fix.t),
+    arcLengths: fixArcLengths,
+    telemetry,
+    distances: new Float64Array(fixes.length),
+  }));
   let bestLag = 0;
   let bestCost = Number.POSITIVE_INFINITY;
 
   for (let lag = -LAG_SEARCH_LIMIT_MS; lag <= LAG_SEARCH_LIMIT_MS; lag += LAG_SEARCH_STEP_MS) {
     let total = 0;
     let count = 0;
-    for (const track of tracks) {
-      const cost = alignmentCost(track, lag);
+    for (const sample of samples) {
+      const cost = alignmentCost(sample, lag);
       total += cost.total;
       count += cost.count;
     }
