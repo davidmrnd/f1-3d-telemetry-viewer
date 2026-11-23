@@ -1,7 +1,8 @@
 import * as THREE from "three";
+import { publicUrl } from "../../public-url";
 import { HORIZON_CLEARANCE_METERS, TRACK_GROUND_PADDING_METERS } from "../track-environment";
 
-const HORIZON_ROOT = "/textures/horizon";
+const HORIZON_ROOT = publicUrl("textures/horizon");
 const SKYLINE_URLS = [
   `${HORIZON_ROOT}/skyline-city-a.svg`,
   `${HORIZON_ROOT}/skyline-city-b.svg`,

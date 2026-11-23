@@ -1,9 +1,9 @@
 import type { DriverInfo } from "../types";
+import { publicUrl } from "../public-url";
 
-/** Nombre de la textura principal en el GLTF (ranura intercambiable por equipo). */
 export const LIVERY_BODY_TEXTURE_NAME = "livery-body";
 
-const MANIFEST_URL = "/models/cars/manifest.json";
+const MANIFEST_URL = publicUrl("models/cars/manifest.json");
 
 export interface CarLiveryAssets {
   body: string;

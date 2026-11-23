@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
+import { publicUrl } from "../public-url";
 import type { GraphicsSettings } from "./graphics-settings";
 
 export const TRACK_TILE_METERS = {
@@ -8,7 +9,7 @@ export const TRACK_TILE_METERS = {
   kerb: 2.4,
 } as const;
 
-const TEXTURE_ROOT = "/textures";
+const TEXTURE_ROOT = publicUrl("textures");
 
 const PBR_SETS = {
   road: {

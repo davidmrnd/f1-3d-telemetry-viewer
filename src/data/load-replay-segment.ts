@@ -1,4 +1,5 @@
 import type { GhostCapture, ReplaySegment } from "../types";
+import { publicUrl } from "../public-url";
 import type { RaceCatalogEntry } from "./races-catalog";
 import { decodeGhostCaptureBinary, decodeReplaySegmentBinary } from "./replay-segment-binary";
 import { resolveStartingGrid } from "./starting-grid";
@@ -50,7 +51,7 @@ async function readResponseBytes(response: Response, onProgress?: ReplayLoadProg
 }
 
 async function loadReplayBytes(path: string, onProgress?: ReplayLoadProgress): Promise<Uint8Array> {
-  const response = await fetch(path);
+  const response = await fetch(publicUrl(path));
   if (!response.ok) {
     throw new Error(
       `No se pudo cargar ${path}. Ejecuta "npm run sync:data" para generarlo desde OpenF1.`,
@@ -75,7 +76,7 @@ export async function loadReplayCapture(entry: RaceCatalogEntry, onProgress?: Re
 }
 
 export async function loadGhostCapture(entry: RaceCatalogEntry): Promise<GhostCapture> {
-  const response = await fetch(`/data/ghost-laps/${entry.sessionKey}.bin`);
+  const response = await fetch(publicUrl(`data/ghost-laps/${entry.sessionKey}.bin`));
   if (!response.ok) throw new Error("Todavía no hay vueltas fantasma para esta carrera.");
   const capture = decodeGhostCaptureBinary(await response.arrayBuffer());
   if (capture.sessionRef.sessionKey !== entry.sessionKey || capture.ghostLaps.length === 0) {

@@ -1,4 +1,5 @@
 import type { RaceCatalogEntry } from "../data/races-catalog";
+import { publicUrl } from "../public-url";
 import { setAppTitle } from "./document-title";
 import { grandPrixName } from "./session-ui";
 
@@ -61,7 +62,7 @@ export class RacePickerView {
       const track = document.createElement("img");
       track.className = "race-picker-card-track";
       track.alt = "";
-      track.src = `/images/circuits/${encodeURIComponent(entry.race)}.svg`;
+      track.src = publicUrl(`images/circuits/${encodeURIComponent(entry.race)}.svg`);
       track.addEventListener("error", () => { track.hidden = true; });
 
       const title = document.createElement("strong");

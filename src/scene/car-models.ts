@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { publicUrl } from "../public-url";
 import {
   getCarsManifest,
   getLiveryTextureUrls,
@@ -169,7 +170,7 @@ function loadGltfScene(url: string): Promise<THREE.Group> {
   const loader = new GLTFLoader();
   return new Promise((resolve, reject) => {
     loader.load(
-      url,
+      publicUrl(url),
       (gltf) => resolve(gltf.scene),
       undefined,
       (error) => reject(error instanceof Error ? error : new Error(String(error))),
@@ -255,7 +256,7 @@ function loadLiveryBodyTexture(url: string): Promise<THREE.Texture> {
   return new Promise((resolve, reject) => {
     const loader = new THREE.TextureLoader();
     loader.load(
-      url,
+      publicUrl(url),
       (texture) => {
         texture.flipY = false;
         texture.colorSpace = THREE.SRGBColorSpace;

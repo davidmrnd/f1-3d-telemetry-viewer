@@ -1,4 +1,5 @@
 import type { DriverInfo, RadioBroadcastState, ReplaySegment, TeamRadioClip, TeamRadioControls } from "../types";
+import { publicUrl } from "../public-url";
 
 type RadioJob = {
   clip: TeamRadioClip;
@@ -154,7 +155,7 @@ export class RadioPlayer implements TeamRadioControls {
     try {
       const openingPromise = this.loadOpening(context);
       if (!job.buffer) {
-        const response = await fetch(job.clip.audioPath, { signal: abort.signal });
+        const response = await fetch(publicUrl(job.clip.audioPath), { signal: abort.signal });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         job.buffer = await context.decodeAudioData(await response.arrayBuffer());
       }

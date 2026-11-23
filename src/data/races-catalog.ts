@@ -1,3 +1,5 @@
+import { publicUrl } from "../public-url";
+
 export interface RaceCatalogEntry {
   id: string;
   year: number;
@@ -17,7 +19,7 @@ export interface RacesCatalog {
   activeId: string | null;
 }
 
-const RACES_CATALOG_URL = "/data/races-catalog.json";
+const RACES_CATALOG_URL = publicUrl("data/races-catalog.json");
 
 export async function loadRacesCatalog(): Promise<RacesCatalog> {
   const response = await fetch(RACES_CATALOG_URL);
