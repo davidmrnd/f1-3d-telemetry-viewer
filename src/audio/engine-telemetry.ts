@@ -25,10 +25,14 @@ function clampRpm(rpm: number) {
   return Math.max(IDLE_RPM, Math.min(MAX_RPM, rpm));
 }
 
-export function getEngineTarget(sample: CarSample): EngineTarget {
+export function getEngineTarget(sample: CarSample, simulated = false): EngineTarget {
   const ratio = RPM_PER_KMH[sample.gear] ?? 0;
   const speed = Number.isFinite(sample.speed) ? Math.max(0, sample.speed) : 0;
   const throttle = pedal(sample.throttle);
+  const brake = pedal(sample.brake);
+  if (simulated && Number.isFinite(sample.rpm)) {
+    return { rpmTarget: clampRpm(sample.rpm), throttle, brake, gear: sample.gear };
+  }
   const freeRpm = IDLE_RPM + throttle * 7200;
   const clutchSlip = ratio === 0 ? 1 : Math.max(0, 1 - speed / 55);
   const gearedRpm = clampRpm(speed * ratio);
@@ -37,7 +41,7 @@ export function getEngineTarget(sample: CarSample): EngineTarget {
   return {
     rpmTarget: rpmSynth + (recordedRpm - rpmSynth) * RECORDED_RPM_WEIGHT,
     throttle,
-    brake: pedal(sample.brake),
+    brake,
     gear: ratio ? sample.gear : 0,
   };
 }

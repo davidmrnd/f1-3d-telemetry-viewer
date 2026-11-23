@@ -15,7 +15,7 @@
 .race-badges { display: flex; align-items: center; gap: 8px; }
 .replay-badge, .lap-badge, .event-pill { display: flex; gap: 8px; align-items: center; height: 33px; padding: 0 13px; border: 1px solid var(--line); background: rgba(10,11,14,.78); border-radius: 4px; font-size: 10px; font-weight: 600; letter-spacing: .6px; white-space: nowrap; }
 .replay-badge { border-color: var(--accent); background: var(--accent); color: #fff; }
-.replay-badge > span { width: 5px; height: 5px; background: white; border-radius: 50%; }
+.replay-badge > span:first-child { width: 5px; height: 5px; background: white; border-radius: 50%; }
 .lap-badge { text-transform: uppercase; }
 .event-pill { color: #e4c891; border-color: #736141; font-size: 9px; }
 .race-title { text-align: right; }

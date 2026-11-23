@@ -140,10 +140,10 @@ export function createCircuitProps(
     const side = i % 2 === 0 ? 1 : -1;
     const point = position.addScaledVector(normal, side * (mainSide + 14 + (i * 13 % 25)));
     if (!clearOfProps(point, 2.5)) continue;
-    if (urban && i % 3 !== 0) continue;
+    const lamp = urban && i % 3 === 0;
     const height = 6 + i * 7 % 6;
-    const prop = fit(point, normal.multiplyScalar(-side), urban ? size(0.5, 8, 1.8) : size(height * 0.34, height, height * 0.34), 1.6);
-    if (prop) add(urban ? "lamp" : "tree", urban ? prop : { ...prop, tint: treeTints[i % treeTints.length] }, 2.5);
+    const prop = fit(point, normal.multiplyScalar(-side), lamp ? size(0.5, 8, 1.8) : size(height * 0.34, height, height * 0.34), 1.6);
+    if (prop) add(lamp ? "lamp" : "tree", lamp ? prop : { ...prop, tint: treeTints[i % treeTints.length] }, 2.5);
   }
 
   const red = new THREE.Color("#d96353");

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { TrackPoint3D } from "../../../types";
 
 export interface TrackProjection {
   distance: number;
@@ -46,7 +47,7 @@ export class TrackPath {
     return sum.divideScalar(this.points.length);
   }
 
-  projectPointPlanar(point: THREE.Vector3): TrackProjection | null {
+  projectPointPlanar(point: TrackPoint3D, search?: { distance: number; radius: number }): TrackProjection | null {
     if (this.points.length < 2) {
       return null;
     }
@@ -57,8 +58,14 @@ export class TrackPath {
     let bestArc = 0;
 
     const segments = this.segments ??= projectionSegments(this.points);
+    const local = search && search.radius * 2 < this.totalLength ? search : undefined;
+    const first = local ? this.segmentAt(local.distance - local.radius).index : 0;
+    const last = local ? this.segmentAt(local.distance + local.radius).index : segments.length - 1;
+    const count = last - first + 1 + (last < first ? segments.length : 0);
     const { x, z } = point;
-    for (let index = 0; index < segments.length; index += 1) {
+    for (let offset = 0; offset < count; offset += 1) {
+      const cursor = first + offset;
+      const index = cursor < segments.length ? cursor : cursor - segments.length;
       const { start, dx, dy, dz, length, denominator, minX, maxX, minZ, maxZ } = segments[index];
       const boundX = Math.max(minX - x, 0, x - maxX);
       const boundZ = Math.max(minZ - z, 0, z - maxZ);

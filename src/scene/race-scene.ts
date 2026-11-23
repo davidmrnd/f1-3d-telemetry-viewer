@@ -25,6 +25,7 @@ import {
   TRACK_TILE_METERS,
 } from "./track-environment";
 import { RaceCameraController } from "./cameras/race-camera-controller";
+import { DrivingCamera } from "./cameras/driving-camera";
 import type { CameraMode } from "./cameras/types";
 import {
   DEFAULT_GRAPHICS_SETTINGS,
@@ -34,9 +35,12 @@ import {
   createStartFinishDecor,
   type StartFinishDecor,
 } from "./start-finish";
-import type { DriverInfo, EngineAudioView, RaceMilestoneControls, RadioBroadcastState, ReplayFrame, ReplaySegment, StartingGridSlot, TeamRadioClip, TeamRadioControls } from "../types";
+import type { DriverInfo, EngineAudioView, FrameCarState, RaceMilestoneControls, RadioBroadcastState, ReplayFrame, ReplaySegment, StartingGridSlot, TeamRadioClip, TeamRadioControls, VehiclePose } from "../types";
+import { DrivingTrack } from "./driving-track";
+import { GhostCar } from "./ghost-car";
 import { paintRadioBroadcast, RADIO_CARD_HEIGHT, RADIO_CARD_WIDTH } from "./radio-broadcast-graphic";
 import { createXrPanel } from "./xr/xr-panel";
+import { DrivingVrHud, type DrivingVrReadout } from "./xr/driving-vr-hud";
 import { XrRig } from "./xr/xr-rig";
 import { XrSessionController } from "./xr/xr-session";
 import { XrControllers } from "./xr/xr-controllers";
@@ -103,6 +107,11 @@ export class RaceScene {
   private trafficRoads: TrafficRoad[] = [];
   private traffic: TrafficTimeline | null = null;
   private readonly cameraController = new RaceCameraController();
+  private readonly drivingCamera = new DrivingCamera();
+  private drivingCockpit = false;
+  private drivingTrack: DrivingTrack | null = null;
+  private ghostCar: GhostCar | null = null;
+  private drivingVrHud: DrivingVrHud | null = null;
   private visualPlacements: BaseCarPlacement[] = [];
   private readonly listenerSpace = new THREE.Matrix4();
   private startFinish: StartFinishDecor | null = null;
@@ -304,6 +313,7 @@ export class RaceScene {
       return;
     }
     this.xrRig.calibrate(this.xrHead);
+    if (this.drivingTrack) return;
     this.xrInterface?.prepare(this.xrHead, this.xrControllers);
     this.xrControllers.update();
   }
@@ -363,6 +373,9 @@ export class RaceScene {
     this.pitPlacement = null;
     this.traffic = null;
     this.trafficRoads = [];
+    this.drivingTrack = null;
+    this.ghostCar?.dispose();
+    this.ghostCar = null;
     this.cars.dispose();
     if (this.monacoTunnel) {
       this.root.remove(this.monacoTunnel.group);
@@ -420,7 +433,7 @@ export class RaceScene {
     this.controls.update();
   }
 
-  loadSegment(segment: ReplaySegment, prepared?: CircuitSnapshot) {
+  loadSegment(segment: ReplaySegment, prepared?: CircuitSnapshot, driving?: { driver: DriverInfo; solo: boolean }) {
     this.xrDriverInfo = segment.drivers;
     this.xrInterface?.setDrivers(segment.drivers);
     this.disposeRootContents();
@@ -444,6 +457,11 @@ export class RaceScene {
       this.terrain.rebuild(pathPoints, closed, trackWidth, kerbWidth, crossSections, prepared?.terrain);
     }
 
+    let drivingHeights: {
+      road: ReturnType<typeof createTerrainHeightSampler>;
+      ground: ReturnType<typeof createTerrainHeightSampler>;
+      pit: PitLane["heightAt"] | undefined;
+    } | null = null;
     if (pathPoints.length > 4) {
       const groundHeight = createTerrainHeightSampler(this.terrain.geometry);
       const road = addTrackRoad(this.root, pathPoints, closed, trackWidth, crossSections);
@@ -459,6 +477,9 @@ export class RaceScene {
           pitOpening = findPitOpenings(pitLane, crossSections, closed, trackWidth);
         }
         this.pitPlacement = new PitLanePlacement(segment, pitLane, main, trackWidth, transform, circuitHeight);
+      }
+      if (driving) {
+        drivingHeights = { road: createTerrainHeightSampler(road.geometry), ground: groundHeight, pit: pitLane?.heightAt };
       }
       const tunnel = createMonacoTunnel(segment, transform, main, crossSections, trackWidth + 2 * kerbWidth);
       this.monacoTunnel = tunnel;
@@ -483,7 +504,13 @@ export class RaceScene {
       this.root.add(this.startFinish.group);
     }
 
-    this.cars.load(segment.drivers, carLengthInScene(transform));
+    const carLength = carLengthInScene(transform);
+    this.cars.load(driving?.solo ? [driving.driver] : segment.drivers, carLength);
+    if (driving && drivingHeights) {
+      this.drivingTrack = new DrivingTrack(main, trackWidth, transform, this.startFinish?.pose,
+        drivingHeights.road, drivingHeights.ground, drivingHeights.pit);
+      this.ghostCar = new GhostCar(this.root, driving.driver, carLength);
+    }
     this.graphicsInitialized = false;
     this.applyGraphicsSettings(this.graphicsSettings);
 
@@ -493,6 +520,48 @@ export class RaceScene {
         .flatMap(samples => samples.map(sample => vectorFromPoint(sample, transform)));
       this.framePreviewCamera(samplePoints);
     }
+  }
+
+  getDrivingTrack() { return this.drivingTrack; }
+
+  getTraffic() { return this.traffic; }
+
+  hasXrHeadPose() { return this.xrHeadValid; }
+
+  recenterDrivingVr() {
+    if (!this.xrHeadValid) return;
+    this.xrRig.recenter();
+    this.xrRig.calibrate(this.xrHead);
+  }
+
+  updateDrivingVrHud(readout: DrivingVrReadout) {
+    this.drivingVrHud?.update(readout, this.xrHeadValid ? this.xrHead : null, performance.now());
+  }
+
+  updateDriving(
+    recorded: BaseCarPlacement[], player: FrameCarState, pose: VehiclePose, ghost: VehiclePose | null, time: number, snap: boolean,
+    cockpit: boolean,
+  ) {
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - this.lastUpdateMs) / 1000);
+    this.lastUpdateMs = now;
+    this.resize();
+    this.controls.enabled = false;
+    this.visualPlacements = [
+      ...recorded,
+      { car: player, position: new THREE.Vector3(pose.x, pose.y, pose.z), heading: pose.heading },
+    ];
+    this.cars.update(this.visualPlacements);
+    this.ghostCar?.update(ghost);
+    this.startFinish?.update(time);
+    this.eventBeacon.visible = false;
+    const vr = this.isXrPresenting();
+    this.drivingCockpit = vr || cockpit;
+    this.drivingCamera.update(pose, this.camera, this.controls.target, dt, snap, this.drivingCockpit, vr);
+    if (vr) this.xrRig.applyDesiredCamera(this.camera);
+    this.lighting.update(this.controls.target);
+    this.cars.updateDetail(this.camera, vr, this.graphicsSettings.detailedCarDistance,
+      this.drivingCockpit ? player.driver.driverNumber : undefined);
   }
 
   async prepareTraffic(
@@ -570,12 +639,16 @@ export class RaceScene {
       }
       sources.push({ sample: car.sample, position: source.applyMatrix4(this.listenerSpace) });
     }
-    const perspective = tabletop ? "tabletop" : this.cameraController.isOnboardShot() ? "cockpit"
+    const player = this.drivingTrack ? this.visualPlacements.at(-1)?.car.driver.driverNumber : undefined;
+    const cockpit = this.drivingTrack ? this.drivingCockpit : this.cameraController.isOnboardShot();
+    const perspective = tabletop ? "tabletop" : cockpit ? "cockpit"
+      : this.drivingTrack ? "free"
       : this.getCameraMode() === "broadcast" ? "trackside" : "free";
     const grandstands = tabletop ? [] : this.trackDecor?.grandstands.map(
       position => position.clone().applyMatrix4(this.listenerSpace),
     ) ?? [];
-    return { perspective, sources, grandstands, subject: tabletop ? null : this.cameraController.getSubjectNumber() };
+    return { perspective, sources, grandstands, player,
+      subject: tabletop ? null : player ?? this.cameraController.getSubjectNumber() };
   }
 
   getActiveCameraLabel(): string {
@@ -680,6 +753,14 @@ export class RaceScene {
   private handleXrSessionStart() {
     this.xrHeadValid = false;
     this.renderer.xr.getSession()?.addEventListener("select", this.radio.unlock);
+    if (this.drivingTrack && !this.isArPresenting()) {
+      this.xrRig.setActive(true);
+      this.xrControllers.setActive(false);
+      this.controls.enabled = false;
+      this.drivingVrHud ??= new DrivingVrHud(this.xrRig.viewerRoot);
+      this.xrHooks.onSessionStart?.();
+      return;
+    }
     const radioParent = this.isArPresenting() ? this.tabletopScene : this.xrRig.viewerRoot;
     this.xrRadio.mesh.renderOrder = 1200;
     radioParent.add(this.xrRadio.mesh);
@@ -712,6 +793,7 @@ export class RaceScene {
   }
 
   private handleXrSessionEnd() {
+    this.drivingVrHud?.hide();
     this.updateRadioBroadcast(null);
     this.xrRadio.mesh.removeFromParent();
     if (this.xrSession.getMode() === "immersive-ar") {

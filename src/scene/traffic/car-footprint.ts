@@ -1,12 +1,7 @@
 import { F1_CAR_LENGTH_METERS } from "../track-geometry";
+import type { VehiclePose } from "../../types";
 
-export interface TrafficPose {
-  x: number;
-  y: number;
-  z: number;
-  heading: number;
-  pitch: number;
-}
+export type TrafficPose = VehiclePose;
 
 const HALF_LENGTH = F1_CAR_LENGTH_METERS / 2 + 0.07;
 export const HALF_WIDTH = 1.12;
@@ -97,4 +92,25 @@ export function motionsConflict(a: CarMotion, b: CarMotion, depth = 2): boolean 
   const midB = interpolatePose(b.from, b.to, 0.5);
   return motionsConflict(carMotion(midA, a.to), carMotion(midB, b.to), depth - 1) ||
     motionsConflict(carMotion(a.from, midA), carMotion(b.from, midB), depth - 1);
+}
+
+export function separatingContact(a: TrafficPose, b: TrafficPose) {
+  if (Math.abs(a.x - b.x) > 2 * CORNER_RADIUS || Math.abs(a.z - b.z) > 2 * CORNER_RADIUS) return null;
+  const am = carMotion(a, a);
+  const bm = carMotion(b, b);
+  if (Math.abs(a.y - b.y) >= MODEL_HEIGHT + am.verticalMargin + bm.verticalMargin) return null;
+  const dx = a.x - b.x;
+  const dz = a.z - b.z;
+  let contact = { x: 0, z: 0, depth: Infinity };
+  for (const [x, z] of [[am.ax, am.az], [-am.az, am.ax], [bm.ax, bm.az], [-bm.az, bm.ax]]) {
+    const separation = dx * x + dz * z;
+    const depth = projectionRadius(am.length, am.ax, am.az, x, z)
+      + projectionRadius(bm.length, bm.ax, bm.az, x, z) - Math.abs(separation);
+    if (depth <= 0) return null;
+    if (depth < contact.depth) {
+      const side = separation < 0 ? -1 : 1;
+      contact = { x: x * side, z: z * side, depth };
+    }
+  }
+  return contact;
 }

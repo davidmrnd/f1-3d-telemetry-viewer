@@ -1,0 +1,96 @@
+{
+  "races": [
+    {
+      "id": "2025-baku-9904",
+      "year": 2025,
+      "race": "baku",
+      "circuitShortName": "Baku",
+      "meetingName": "Azerbaijan Grand Prix",
+      "sessionKey": 9904,
+      "fileName": "baku-2025-9904.bin",
+      "path": "/data/2025/baku/baku-2025-9904.bin",
+      "durationSec": 3400,
+      "updatedAt": "2026-10-20T22:41:59.810Z",
+      "totalLaps": 51
+    },
+    {
+      "id": "2025-catalunya-9971",
+      "year": 2025,
+      "race": "catalunya",
+      "circuitShortName": "Catalunya",
+      "meetingName": "Spanish Grand Prix",
+      "sessionKey": 9971,
+      "fileName": "catalunya-2025-9971.bin",
+      "path": "/data/2025/catalunya/catalunya-2025-9971.bin",
+      "durationSec": 600,
+      "updatedAt": "2026-10-19T15:12:51.870Z",
+      "totalLaps": 66
+    },
+    {
+      "id": "2025-hungaroring-9928",
+      "year": 2025,
+      "race": "hungaroring",
+      "circuitShortName": "Hungaroring",
+      "meetingName": "Hungarian Grand Prix",
+      "sessionKey": 9928,
+      "totalLaps": 70,
+      "fileName": "hungaroring-2025-9928.bin",
+      "path": "/data/2025/hungaroring/hungaroring-2025-9928.bin",
+      "durationSec": 1800,
+      "updatedAt": "2026-10-21T11:52:35.687Z"
+    },
+    {
+      "id": "2025-monte-carlo-9979",
+      "year": 2025,
+      "race": "monte-carlo",
+      "circuitShortName": "Monte Carlo",
+      "meetingName": "Monaco Grand Prix",
+      "sessionKey": 9979,
+      "fileName": "monte-carlo-2025-9979.bin",
+      "path": "/data/2025/monte-carlo/monte-carlo-2025-9979.bin",
+      "durationSec": 1800,
+      "updatedAt": "2026-10-19T15:08:28.334Z",
+      "totalLaps": 78
+    },
+    {
+      "id": "2025-monza-9912",
+      "year": 2025,
+      "race": "monza",
+      "circuitShortName": "Monza",
+      "meetingName": "Italian Grand Prix",
+      "sessionKey": 9912,
+      "totalLaps": 53,
+      "fileName": "monza-2025-9912.bin",
+      "path": "/data/2025/monza/monza-2025-9912.bin",
+      "durationSec": 1800,
+      "updatedAt": "2026-11-11T15:45:36.126Z"
+    },
+    {
+      "id": "2025-silverstone-9947",
+      "year": 2025,
+      "race": "silverstone",
+      "circuitShortName": "Silverstone",
+      "meetingName": "British Grand Prix",
+      "sessionKey": 9947,
+      "fileName": "silverstone-2025-9947.bin",
+      "path": "/data/2025/silverstone/silverstone-2025-9947.bin",
+      "durationSec": 1800,
+      "updatedAt": "2026-10-19T15:24:52.041Z",
+      "totalLaps": 52
+    },
+    {
+      "id": "2025-spa-francorchamps-9939",
+      "year": 2025,
+      "race": "spa-francorchamps",
+      "circuitShortName": "Spa-Francorchamps",
+      "meetingName": "Belgian Grand Prix",
+      "sessionKey": 9939,
+      "fileName": "spa-francorchamps-2025-9939.bin",
+      "path": "/data/2025/spa-francorchamps/spa-francorchamps-2025-9939.bin",
+      "durationSec": 1800,
+      "updatedAt": "2026-10-19T15:48:42.967Z",
+      "totalLaps": 44
+    }
+  ],
+  "activeId": "2025-monza-9912"
+}

@@ -66,16 +66,17 @@ export class CarFleet {
     camera: THREE.PerspectiveCamera,
     xrPresenting: boolean,
     carDistance: GraphicsSettings["detailedCarDistance"],
+    cockpitDriver?: number,
   ) {
     const zoomDetailScale = xrPresenting ? 1 : Math.max(1,
       Math.tan(THREE.MathUtils.degToRad(30)) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)),
     );
     const forceLowPoly = carDistance === "lowpoly";
     const distance = (forceLowPoly ? 0 : carDistance) * zoomDetailScale;
-    for (const visual of this.carVisuals.values()) {
+    for (const [driverNumber, visual] of this.carVisuals) {
       if (!visual.group.visible) continue;
-      const useDetailed = !forceLowPoly && visual.group.position.distanceToSquared(camera.position)
-        < distance * distance * (visual.detailed.visible ? 1.21 : 0.81);
+      const useDetailed = driverNumber === cockpitDriver || (!forceLowPoly && visual.group.position.distanceToSquared(camera.position)
+        < distance * distance * (visual.detailed.visible ? 1.21 : 0.81));
       visual.detailed.visible = useDetailed;
       visual.lowpoly.visible = !useDetailed;
     }

@@ -1,7 +1,8 @@
 node_modules
 dist
 docs/
-public/data/
+/tmp/
+/public/data/**/*.tmp
 .DS_Store
 .env
 .env.*

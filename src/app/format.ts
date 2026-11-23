@@ -5,6 +5,13 @@ export function formatReplayTime(ms: number) {
   return `${String(minutes).padStart(2, "0")}:${seconds.toFixed(1).padStart(4, "0")}`;
 }
 
+export function formatLapTime(ms: number) {
+  const rounded = Math.round(Math.max(0, ms));
+  const minutes = Math.floor(rounded / 60000);
+  const seconds = Math.floor(rounded / 1000) % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}.${String(rounded % 1000).padStart(3, "0")}`;
+}
+
 export function formatDelta(value: number | null) {
   if (value == null) {
     return "--";

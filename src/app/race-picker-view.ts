@@ -80,7 +80,7 @@ export class RacePickerView {
       card.addEventListener("click", () => this.finish(entry));
       this.grid.append(card);
     }
-    this.grid.querySelector<HTMLButtonElement>(".is-preferred")?.focus();
+    (this.grid.querySelector<HTMLButtonElement>(".is-preferred") ?? this.grid.querySelector("button"))?.focus();
 
     return new Promise((resolve) => {
       this.resolvePick = resolve;

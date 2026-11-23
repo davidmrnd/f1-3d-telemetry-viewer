@@ -26,6 +26,42 @@ export interface TrackPoint3D {
   z: number;
 }
 
+export interface VehiclePose extends TrackPoint3D {
+  heading: number;
+  pitch: number;
+}
+
+export interface PlayerVehicle extends VehiclePose {
+  speed: number;
+  lateralSpeed: number;
+  steering: number;
+}
+
+export interface DrivingSurface {
+  height: number;
+  asphalt: boolean;
+  mainTrack: boolean;
+}
+
+export interface LapGate {
+  origin: TrackPoint3D;
+  heading: number;
+  halfWidth: number;
+}
+
+export interface GhostLap {
+  driverNumber: number;
+  lapNumber: number;
+  durationMs: number;
+}
+
+export interface GhostCapture {
+  sessionRef: SessionRef;
+  drivers: DriverInfo[];
+  ghostLaps: GhostLap[];
+  samples: Record<number, CarSample[]>;
+}
+
 export interface CircuitCorner {
   number: number;
   angle: number;
@@ -197,6 +233,7 @@ export interface FrameCarState {
 export interface EngineAudioView {
   perspective: "trackside" | "free" | "cockpit" | "tabletop";
   subject: number | null;
+  player?: number;
   sources: readonly { sample: CarSample; position: TrackPoint3D }[];
   grandstands: readonly TrackPoint3D[];
 }

@@ -6,6 +6,9 @@ export default defineConfig({
   server: {
     https: true,
     host: true,
+    watch: {
+      ignored: ["**/docs/**"],
+    },
   },
   preview: {
     https: true,

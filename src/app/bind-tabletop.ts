@@ -2,6 +2,7 @@ import type { PresentationMode, RaceScene } from "../scene/race-scene";
 import { mustQuery } from "./dom";
 
 export function bindTabletop(scene: RaceScene) {
+  const shell = mustQuery<HTMLElement>("#app");
   const mode = mustQuery<HTMLSelectElement>("#presentation-mode");
   const panel = mustQuery<HTMLElement>("#tabletop-settings");
   const width = mustQuery<HTMLInputElement>("#tabletop-width");
@@ -12,7 +13,7 @@ export function bindTabletop(scene: RaceScene) {
   const sync = () => {
     const tabletop = scene.getPresentationMode() === "tabletop";
     mode.value = scene.getPresentationMode();
-    mode.disabled = scene.isXrPresenting();
+    mode.disabled = scene.isXrPresenting() || shell.classList.contains("is-driving");
     panel.hidden = !tabletop;
     width.value = String(scene.getTabletopWidth());
     readout.value = `${scene.getTabletopWidth().toFixed(2)} m`;
@@ -20,12 +21,12 @@ export function bindTabletop(scene: RaceScene) {
     cameraModes.inert = tabletop;
     driverOnboard.disabled = tabletop;
     driverOnboard.title = tabletop ? "Disponible en la experiencia realista" : "";
-    mustQuery<HTMLElement>("#app").classList.toggle("is-tabletop", tabletop);
+    shell.classList.toggle("is-tabletop", tabletop);
   };
   mode.addEventListener("change", () => { scene.setPresentationMode(mode.value as PresentationMode); sync(); });
   width.addEventListener("input", () => { scene.setTabletopWidth(Number(width.value)); sync(); });
   rotation.addEventListener("input", () => scene.setTabletopRotation(Number(rotation.value)));
-  mustQuery("#app").addEventListener("xrsessionchange", sync);
-  mustQuery("#app").addEventListener("presentationchange", sync);
+  shell.addEventListener("xrsessionchange", sync);
+  shell.addEventListener("presentationchange", sync);
   sync();
 }

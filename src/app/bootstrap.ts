@@ -9,6 +9,7 @@ import { bindXr } from "./bind-xr";
 import { bindTabletop } from "./bind-tabletop";
 import { mustQuery } from "./dom";
 import { DesktopPlayerView } from "./desktop-player-view";
+import { DrivingView } from "./driving-view";
 import { paintFrame } from "./frame-ui";
 import { formatReplayTime } from "./format";
 import { LoadingView } from "./loading-view";
@@ -81,7 +82,6 @@ export function startReplayApplication() {
   );
   let lastTick = performance.now();
   const resetClock = () => { lastTick = performance.now(); };
-  appShell.addEventListener("xrsessionchange", resetClock);
   const loadingFrames = new AnimationFrames();
   const loadingView = new LoadingView(loadingFrames);
   const syncPlayButton = (playing: boolean) => {
@@ -94,6 +94,15 @@ export function startReplayApplication() {
     mustQuery("#playback-state").textContent = playing ? "REPRODUCIENDO" : "EN PAUSA";
     appShell.dispatchEvent(new Event("playbackchange"));
   };
+  const driving = new DrivingView(appShell, canvas, () => {
+    resetClock();
+    if (!driving.getSession()?.isRunning) engine.silence();
+  }, openRaces);
+  appShell.addEventListener("xrsessionchange", () => {
+    resetClock();
+    const drivingInVr = driving.getSession() && scene.isXrPresenting() && !scene.isArPresenting();
+    driving.setXrSession(drivingInVr ? scene.getRenderer().xr.getSession() : null);
+  });
 
   const render = (frame: Parameters<typeof paintFrame>[0]) => {
     const controller = replay.getController();
@@ -126,13 +135,32 @@ export function startReplayApplication() {
   }, showInspector, radioPlayer, milestones);
 
   const raceLoader = createRaceLoader({
-    appShell, changeRaceButton, racePicker, ui, scene, replay,
+    appShell, changeRaceButton, racePicker, ui, scene, replay, driving,
     timingTower, desktopPlayer, loadingView, radioPlayer, render, syncPlayButton, resetClock,
   });
+
+  function openRaces() {
+    radioBroadcast.update(null);
+    const closeDrivingVr = driving.getSession() && scene.isXrPresenting() ? scene.exitVr() : Promise.resolve();
+    void closeDrivingVr.then(() => raceLoader.chooseAndLoadRace({ allowQueryShortcut: false })).catch((error) => {
+      appShell.hidden = false;
+      ui.statusPill.classList.remove("is-ready");
+      ui.statusPill.textContent = error instanceof Error ? error.message : "No se pudo cargar la carrera.";
+    });
+  }
 
   function tick(now: number) {
     if (raceLoader.isLoading() || appShell.hidden) {
       if (scene.isXrPresenting()) scene.render();
+      return;
+    }
+    const deltaMs = now - lastTick;
+    lastTick = now;
+    const session = driving.getSession();
+    if (session) {
+      driving.update(scene, deltaMs);
+      if (session.isRunning) engine.update(() => scene.getEngineAudioView(), false);
+      else engine.silence();
       return;
     }
     if (!replay.getController()) {
@@ -140,8 +168,7 @@ export function startReplayApplication() {
       scene.render();
       return;
     }
-    const frame = replay.tick(scene.isXrPresenting() ? Math.min(100, Math.max(0, now - lastTick)) : now - lastTick);
-    lastTick = now;
+    const frame = replay.tick(scene.isXrPresenting() ? Math.min(100, Math.max(0, deltaMs)) : deltaMs);
     if (frame) {
       render(frame);
       syncPlayButton(replay.playing);
@@ -153,13 +180,7 @@ export function startReplayApplication() {
   async function bootstrap() {
     bindControls(replay, ui, render, syncPlayButton);
     window.addEventListener("resize", () => scene.resize());
-    changeRaceButton.addEventListener("click", () => {
-      void raceLoader.chooseAndLoadRace({ allowQueryShortcut: false }).catch((error) => {
-        appShell.hidden = false;
-        ui.statusPill.classList.remove("is-ready");
-        ui.statusPill.textContent = error instanceof Error ? error.message : "No se pudo cargar la carrera.";
-      });
-    });
+    changeRaceButton.addEventListener("click", openRaces);
 
     try {
       ui.statusPill.textContent = "Cargando modelos 3D...";

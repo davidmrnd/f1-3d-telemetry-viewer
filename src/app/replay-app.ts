@@ -12,11 +12,11 @@ export class ReplayApp {
     private readonly onDiscontinuity: () => void,
   ) {}
 
-  setController(controller: ReplayController) {
+  setController(controller: ReplayController | null) {
     this.onDiscontinuity();
     this.controller = controller;
     this.currentTime = 0;
-    this.playing = true;
+    this.playing = controller !== null;
   }
 
   getController() {

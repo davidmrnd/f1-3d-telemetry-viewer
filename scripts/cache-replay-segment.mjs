@@ -6,6 +6,7 @@ import { fetchRaceTotalLaps } from "./race-total-laps.mjs";
 import { buildRaceOperations, enrichExistingSnapshots } from "./race-operations.mjs";
 import { decodeReplaySegmentBinary, encodeReplaySegmentBinary } from "./replay-segment-binary.mjs";
 import { cacheTeamRadio, writeAtomically } from "./cache-team-radio.mjs";
+import { cacheGhostLaps } from "./cache-ghost-laps.mjs";
 
 const OPEN_F1_BASE = "https://api.openf1.org/v1";
 const DEFAULT_COUNTRY = "Spain";
@@ -1010,6 +1011,11 @@ async function main() {
   }
   if (process.argv.includes("--enrich-existing")) {
     await enrichExistingSnapshots(dataRoot, fetchJson, buildUrl);
+    return;
+  }
+  if (process.argv.includes("--ghosts-only")) {
+    const sessionKey = process.argv.find(arg => arg.startsWith("--session-key="))?.split("=")[1];
+    await cacheGhostLaps(dataRoot, sessionKey, fetchJson, buildUrl, buildSampleSeries);
     return;
   }
   const options = parseCliOptions();

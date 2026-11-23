@@ -1,6 +1,7 @@
 import { isImmersiveArSupported, isImmersiveVrSupported } from "../scene/xr/xr-session";
 import type { RaceScene, RaceSceneXrHooks } from "../scene/race-scene";
 import type { GraphicsSettingsController } from "./bind-graphics-settings";
+import { mustQuery } from "./dom";
 import { loadWristTimingVisible, saveWristTimingVisible } from "./xr-ui-preferences";
 
 export type XrUiElements = {
@@ -11,16 +12,18 @@ export type XrUiElements = {
 export function bindXr(scene: RaceScene, elements: XrUiElements, graphics: GraphicsSettingsController, onTogglePlay: () => void,
   playback: Pick<RaceSceneXrHooks, "getPlaybackState" | "onJump" | "onSeek" | "onSetSpeed">) {
   const { enterVrButton, enterArButton } = elements;
+  const shell = mustQuery<HTMLElement>("#app");
+  const isDriving = () => shell.classList.contains("is-driving");
   let vrSupported = false;
   let arSupported = false;
   let pending = false;
   const syncButtons = () => {
     const presenting = scene.isXrPresenting();
     const ar = scene.isArPresenting();
-    enterVrButton.textContent = presenting && !ar ? "Salir de VR" : "Entrar en VR";
+    enterVrButton.textContent = presenting && !ar ? "Salir de VR" : isDriving() ? "Conducir en VR" : "Entrar en VR";
     enterArButton.textContent = ar ? "Salir de AR" : "Entrar en AR";
     enterVrButton.hidden = !vrSupported && !(presenting && !ar);
-    enterArButton.hidden = !arSupported && !ar;
+    enterArButton.hidden = isDriving() || (!arSupported && !ar);
     enterVrButton.disabled = pending || (presenting && ar);
     enterArButton.disabled = pending || (!arSupported && !ar) || (presenting && !ar);
     enterVrButton.classList.toggle("is-xr-active", presenting && !ar);
@@ -33,18 +36,18 @@ export function bindXr(scene: RaceScene, elements: XrUiElements, graphics: Graph
     onTogglePlay,
     onSessionStart: () => {
       syncButtons();
-      document.querySelector("#app")?.dispatchEvent(new Event("xrsessionchange"));
+      shell.dispatchEvent(new Event("xrsessionchange"));
     },
     onSessionEnd: () => {
       graphics.activateDefault();
       syncButtons();
-      document.querySelector("#app")?.dispatchEvent(new Event("xrsessionchange"));
+      shell.dispatchEvent(new Event("xrsessionchange"));
     },
   });
 
   const enter = (mode: "vr" | "ar") => {
     void (async () => {
-      if (pending) return;
+      if (pending || (mode === "ar" && isDriving())) return;
       pending = true;
       syncButtons();
       const status = document.querySelector<HTMLElement>("#vr-status");
@@ -81,6 +84,7 @@ export function bindXr(scene: RaceScene, elements: XrUiElements, graphics: Graph
   };
   enterVrButton.addEventListener("click", () => enter("vr"));
   enterArButton.addEventListener("click", () => enter("ar"));
+  shell.addEventListener("presentationchange", syncButtons);
 
   const refreshAvailability = async () => {
     [vrSupported, arSupported] = await Promise.all([isImmersiveVrSupported(), isImmersiveArSupported()]);

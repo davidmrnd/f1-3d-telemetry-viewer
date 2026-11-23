@@ -1,0 +1,310 @@
+.race-setup .picker-topline {
+  align-items: center;
+}
+.race-setup .picker-topline .control-button {
+  width: auto;
+  min-width: 100px;
+  font-size: 12px;
+}
+.race-mode-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.race-mode-options .race-picker-card {
+  min-height: 190px;
+  gap: 8px;
+}
+.race-mode-options .icon {
+  width: 29px;
+  height: 29px;
+  color: #eb5d65;
+}
+.race-mode-options .race-picker-card-meeting {
+  margin: 0;
+  color: #aeb0ba;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.race-driver-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 10px;
+}
+.race-driver-choice {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 65px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--team-color, #6e727e);
+  border-radius: 4px;
+  background: #101115;
+  text-align: left;
+}
+.race-driver-choice:hover, .race-driver-choice:focus-visible {
+  background: #1c1e24;
+}
+.race-driver-number, .race-driver-time {
+  color: #f3f3f6;
+  font-family: "Barlow Condensed", "Bahnschrift", sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-size: 17px;
+}
+.race-driver-choice strong, .race-driver-choice small {
+  display: block;
+}
+.race-driver-choice strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+.race-driver-choice small {
+  margin-top: 3px;
+  color: #a2a6b0;
+  font-size: 10px;
+}
+.race-driver-record {
+  text-align: right;
+  white-space: nowrap;
+}
+.is-driving :is(.classification-panel, .inspector-panel, .timeline-meta, .timeline-wrap,
+  .speed-wrap, #play-toggle, #reset-button, #camera-modes, .panel-toggle, #theater-button,
+  #enter-ar, #help-button, #timing-lap-tag, #event-pill) {
+  display: none;
+}
+.is-driving .scene-shade {
+  background: linear-gradient(180deg, #040507b8, transparent 27%, transparent 65%, #060709bd);
+}
+.is-driving .player-controls {
+  right: var(--edge);
+  bottom: 16px;
+  left: auto;
+  width: min(340px, calc(100% - 2 * var(--edge)));
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #101217ed;
+  z-index: 7;
+}
+.is-driving .control-bar {
+  flex-wrap: nowrap;
+  min-height: 38px;
+  padding-top: 5px;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+}
+.is-driving .view-controls {
+  flex-basis: auto;
+  flex-shrink: 1;
+}
+.is-driving .control-bar .icon-button {
+  height: 34px;
+}
+.is-driving #settings-button {
+  width: auto;
+  padding: 0 7px;
+  gap: 5px;
+}
+.engine-volume-readout, .driving-settings-label {
+  display: none;
+}
+.is-driving :is(.engine-volume-readout, .driving-settings-label) {
+  display: inline;
+  font-size: 11px;
+}
+.engine-volume-readout {
+  min-width: 31px;
+  margin-left: 4px;
+  color: #c5cad5;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.is-driving .engine-status {
+  margin: 5px 0;
+}
+.is-driving .topbar .vr-button {
+  width: auto;
+}
+.is-driving .vr-status {
+  z-index: 8;
+}
+.is-driving :is(.topbar, .race-heading, .player-controls) {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.is-driving .race-heading {
+  pointer-events: none;
+}
+.driving-hud {
+  position: absolute;
+  inset: calc(var(--top) + 82px) var(--edge) 58px;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+.driving-timing {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: max-content;
+  max-width: 100%;
+  padding: 12px 14px;
+}
+.driving-driver {
+  margin: 0;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+}
+.driving-metrics {
+  display: flex;
+  gap: 15px;
+  margin-top: 10px;
+}
+.driving-metrics span, .driving-speed span {
+  display: block;
+  color: #a9adb8;
+  font-size: 10px;
+}
+.driving-metrics strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+#driving-delta[data-ahead="true"] { color: #9be1a8; }
+#driving-delta[data-ahead="false"] { color: #ffc285; }
+#driving-progress, #driving-note {
+  margin: 8px 0 0;
+  color: #b1b4bf;
+  font-size: 11px;
+}
+#driving-note {
+  color: #ffcb89;
+}
+.driving-speed {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  display: flex;
+  gap: 20px;
+  padding: 10px 16px;
+  align-items: end;
+}
+.driving-speed strong {
+  display: block;
+  min-width: 2ch;
+  font: 650 30px/1 "Barlow Condensed", "Bahnschrift", sans-serif;
+}
+.driving-speed span {
+  margin-top: 4px;
+}
+.driving-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  margin-bottom: 6px;
+}
+.driving-actions :is(label, button) {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.driving-actions button { justify-content: center; }
+.driving-actions .icon { width: 16px; height: 16px; }
+.driving-actions button[aria-pressed="true"] { background: #3a2228; border-color: #9c5058; }
+.driving-actions label {
+  grid-column: 1 / -1;
+  min-height: 27px;
+  padding: 2px 6px;
+  color: #c9cbd4;
+  cursor: pointer;
+}
+.driving-actions input {
+  accent-color: var(--accent);
+}
+.driving-actions button:hover, .driving-actions label:hover {
+  background: #2b2d35;
+}
+.driving-actions button:disabled {
+  opacity: .45;
+  cursor: default;
+}
+.driving-overlay {
+  position: absolute;
+  z-index: 6;
+  inset: calc(var(--top) + 12px) 0 132px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: center;
+  justify-items: center;
+  padding: 12px;
+  pointer-events: none;
+}
+.driving-result {
+  width: min(440px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 22px 28px;
+  border-top: 2px solid var(--accent);
+  pointer-events: auto;
+}
+.driving-result h2 {
+  margin: 0 0 8px;
+  font-size: clamp(20px, 3vw, 30px);
+}
+.driving-result p {
+  margin: 8px 0;
+  color: #c9cbd4;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.driving-result .driving-keys {
+  padding: 12px 0;
+  color: #aeb2bd;
+  font-size: 11px;
+  line-height: 2.15;
+}
+.driving-keys kbd {
+  padding: 2px 4px;
+}
+.driving-result-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+}
+.driving-result-actions button {
+  font-size: 12px;
+}
+#driving-start {
+  background: #bd1923;
+}
+#driving-start:hover {
+  background: #da2430;
+}
+@media (max-width: 650px) {
+  .race-mode-options { grid-template-columns: 1fr; }
+  .race-mode-options .race-picker-card { min-height: 112px; }
+  .race-mode-options .icon { width: 21px; height: 21px; }
+  .driving-hud { inset-inline: 12px; }
+  .driving-speed { gap: 8px; padding-inline: 8px; }
+  .is-driving .topbar .vr-button { padding: 7px 8px; font-size: 10px; }
+}
+@media (max-width: 540px) {
+  .is-driving .topbar { gap: 12px; }
+  .is-driving .main-nav { gap: 10px; }
+  .is-driving .player-controls { left: var(--edge); bottom: 12px; width: auto; }
+  .driving-timing { max-width: calc(100% - 83px); }
+  .driving-metrics { flex-wrap: wrap; gap: 6px 11px; }
+  .driving-speed { top: 0; right: 0; bottom: auto; left: auto; flex-direction: column; align-items: start; }
+}
+@media (max-width: 540px) and (min-height: 680px) {
+  .driving-overlay { top: calc(var(--top) + 213px); }
+}
+@media (max-width: 540px) and (max-height: 679px) {
+  .is-driving .player:has(.driving-overlay:not([hidden])) .driving-hud { visibility: hidden; }
+}

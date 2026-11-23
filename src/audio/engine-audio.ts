@@ -91,23 +91,25 @@ export class EngineAudio {
       const distance = Math.hypot(position.x, position.y, position.z);
       const subject = driver === view.subject;
       const ownCar = cockpit && subject;
-      if (!Number.isFinite(distance) || (distance >= mix.range && !ownCar)) return [];
+      const player = driver === view.player;
+      if (!Number.isFinite(distance) || (distance >= mix.range && !ownCar && !player)) return [];
       const retained = voices.some(voice => voice.previous?.driver === driver);
-      const score = ownCar ? -1 : distance * (retained ? .8 : 1) * (subject ? .75 : 1);
-      return [{ sample, position, distance, ownCar, score }];
+      const score = ownCar || player ? -1 : distance * (retained ? .8 : 1) * (subject ? .75 : 1);
+      return [{ sample, position, distance, ownCar, player, score }];
     }).sort((a, b) => a.score - b.score).slice(0, VOICE_COUNT);
 
     for (const voice of voices) {
       if (!candidates.some(({ sample }) => sample.driverNumber === voice.previous?.driver)) releaseVoice(voice);
     }
 
-    for (const { sample, position, distance, ownCar } of candidates) {
+    for (const { sample, position, distance, ownCar, player } of candidates) {
       const driver = sample.driverNumber;
       const voice = voices.find(item => item.previous?.driver === driver) ?? voices.find(item => item.previous === null);
       if (!voice) continue;
 
-      const { gear, ...target } = getEngineTarget(sample);
-      const shift = voice.previous ? Math.sign(gear - voice.previous.gear) : 0;
+      const { gear, ...target } = getEngineTarget(sample, player);
+      const previousGear = voice.previous?.gear ?? 0;
+      const shift = voice.previous && (!player || (gear > 0 && previousGear > 0)) ? Math.sign(gear - previousGear) : 0;
       voice.source.port.postMessage({ ...target, shift, reset: !voice.previous });
       voice.previous = { driver, gear };
 
@@ -117,7 +119,7 @@ export class EngineAudio {
       panner.positionZ.setTargetAtTime(position.z, now, .025);
       const normalized = distance / mix.reference;
       const distanceGain = Math.max(0, 1 - distance / mix.range) / (1 + normalized * normalized);
-      const level = ownCar ? .95 : distanceGain * (cockpit ? .48 : .9);
+      const level = ownCar ? .95 : player ? .82 : distanceGain * (cockpit ? .48 : .9);
       const cutoff = ownCar ? 4700 : mix.cutoff / (1 + distance / mix.absorption);
       gain.gain.setTargetAtTime(level, now, .045);
       lowpass.frequency.setTargetAtTime(Math.max(480, cutoff), now, .045);

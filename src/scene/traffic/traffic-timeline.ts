@@ -39,19 +39,25 @@ function laneLimits(roads: TrafficRoad[]) {
 export class TrafficTimeline {
   constructor(private readonly duration: number, private readonly posesByDriver: Map<number, Float32Array>) {}
 
-  sample(frame: ReplayFrame): BaseCarPlacement[] {
-    const index = Math.floor(frame.now / STEP_MS);
+  poseAt(driverNumber: number, at: number): TrafficPose | null {
+    const now = MathUtils.clamp(at, 0, this.duration);
+    const index = Math.floor(now / STEP_MS);
     const time = index * STEP_MS;
-    const u = MathUtils.clamp((frame.now - time) / Math.max(1, Math.min(STEP_MS, this.duration - time)), 0, 1);
+    const u = MathUtils.clamp((now - time) / Math.max(1, Math.min(STEP_MS, this.duration - time)), 0, 1);
+    const poses = this.posesByDriver.get(driverNumber);
+    if (!poses) return null;
+    const from = index * POSE_SIZE;
+    const to = u === 0 ? from : Math.min(from + POSE_SIZE, poses.length - POSE_SIZE);
+    if (!Number.isFinite(poses[from]) || !Number.isFinite(poses[to])) return null;
+    const value = (axis: number) => MathUtils.lerp(poses[from + axis], poses[to + axis], u);
+    return { x: value(0), y: value(1), z: value(2), pitch: value(4),
+      heading: poses[from + 3] + angleDelta(poses[from + 3], poses[to + 3]) * u };
+  }
+
+  sample(frame: ReplayFrame): BaseCarPlacement[] {
     return frame.cars.flatMap(car => {
-      const poses = this.posesByDriver.get(car.driver.driverNumber);
-      if (!poses) return [];
-      const from = index * POSE_SIZE;
-      const to = u === 0 ? from : Math.min(from + POSE_SIZE, poses.length - POSE_SIZE);
-      if (!Number.isFinite(poses[from]) || !Number.isFinite(poses[to])) return [];
-      const value = (axis: number) => MathUtils.lerp(poses[from + axis], poses[to + axis], u);
-      const heading = poses[from + 3] + angleDelta(poses[from + 3], poses[to + 3]) * u;
-      return [{ car: { ...car, pitch: value(4) }, position: new Vector3(value(0), value(1), value(2)), heading }];
+      const pose = this.poseAt(car.driver.driverNumber, frame.now);
+      return pose ? [{ car: { ...car, pitch: pose.pitch }, position: new Vector3(pose.x, pose.y, pose.z), heading: pose.heading }] : [];
     });
   }
 }

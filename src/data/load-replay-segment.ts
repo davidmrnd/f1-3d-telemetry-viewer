@@ -1,6 +1,6 @@
-import type { ReplaySegment } from "../types";
+import type { GhostCapture, ReplaySegment } from "../types";
 import type { RaceCatalogEntry } from "./races-catalog";
-import { decodeReplaySegmentBinary } from "./replay-segment-binary";
+import { decodeGhostCaptureBinary, decodeReplaySegmentBinary } from "./replay-segment-binary";
 import { resolveStartingGrid } from "./starting-grid";
 
 export type ReplayLoadProgress = (loadedBytes: number, totalBytes: number | null) => void;
@@ -72,4 +72,14 @@ export async function loadReplayCapture(entry: RaceCatalogEntry, onProgress?: Re
       },
     },
   };
+}
+
+export async function loadGhostCapture(entry: RaceCatalogEntry): Promise<GhostCapture> {
+  const response = await fetch(`/data/ghost-laps/${entry.sessionKey}.bin`);
+  if (!response.ok) throw new Error("Todavía no hay vueltas fantasma para esta carrera.");
+  const capture = decodeGhostCaptureBinary(await response.arrayBuffer());
+  if (capture.sessionRef.sessionKey !== entry.sessionKey || capture.ghostLaps.length === 0) {
+    throw new Error("No hay vueltas válidas con trayectoria completa para esta carrera.");
+  }
+  return capture;
 }

@@ -1,4 +1,4 @@
-import type { CarSample, ReplaySegment } from "../types";
+import type { CarSample, GhostCapture, ReplaySegment } from "../types";
 
 const MAGIC = 0x53523146;
 const VERSION = 1;
@@ -10,7 +10,7 @@ function align(offset: number, size: number): number {
   return (offset + mask) & ~mask;
 }
 
-export function decodeReplaySegmentBinary(buffer: ArrayBuffer | Uint8Array): ReplaySegment {
+function decodeRaceBinary(buffer: ArrayBuffer | Uint8Array) {
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (bytes.byteLength < 12 || view.getUint32(0, true) !== MAGIC) {
@@ -26,11 +26,7 @@ export function decodeReplaySegmentBinary(buffer: ArrayBuffer | Uint8Array): Rep
   if (metaEnd > bytes.byteLength) {
     throw new Error("Metadatos binarios truncados.");
   }
-  const meta = JSON.parse(new TextDecoder().decode(bytes.subarray(metaStart, metaEnd))) as Omit<
-    ReplaySegment,
-    "samples"
-  > &
-    Record<string, unknown>;
+  const metadata: unknown = JSON.parse(new TextDecoder().decode(bytes.subarray(metaStart, metaEnd)));
 
   let cursor = align(metaEnd, 8);
   const compoundCount = view.getUint16(cursor, true);
@@ -145,11 +141,26 @@ export function decodeReplaySegmentBinary(buffer: ArrayBuffer | Uint8Array): Rep
     samples[driverNumber] = series;
   }
 
+  return { metadata, samples };
+}
+
+export function decodeReplaySegmentBinary(buffer: ArrayBuffer | Uint8Array): ReplaySegment {
+  const { metadata, samples } = decodeRaceBinary(buffer);
+  const meta = metadata as Omit<ReplaySegment, "samples">;
   return {
-    ...(meta as Omit<ReplaySegment, "samples">),
+    ...meta,
     samples,
     raceControl: meta.raceControl ?? [],
     startingGrid: meta.startingGrid ?? [],
     trackStatus: meta.trackStatus ?? [],
   };
+}
+
+export function decodeGhostCaptureBinary(buffer: ArrayBuffer | Uint8Array): GhostCapture {
+  const { metadata, samples } = decodeRaceBinary(buffer);
+  const { sessionRef, drivers, ghostLaps } = metadata as Omit<GhostCapture, "samples">;
+  if (!sessionRef || !Array.isArray(drivers) || !Array.isArray(ghostLaps)) {
+    throw new Error("Los datos de vueltas fantasma no son válidos.");
+  }
+  return { sessionRef, drivers, ghostLaps, samples };
 }

@@ -33,6 +33,7 @@ interface StartFinishPose {
 
 export interface StartFinishDecor {
   group: THREE.Group;
+  pose: StartFinishPose;
   placeCars(placements: BaseCarPlacement[], now: number): BaseCarPlacement[];
   update(now: number): void;
 }
@@ -105,6 +106,7 @@ export function createStartFinishDecor(
 
   return {
     group,
+    pose,
     placeCars: (placements, now) => gridPlacement.apply(placements, now),
     update(now) {
       lights.setModes(resolveLightModes(now, greenAt));

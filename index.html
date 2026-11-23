@@ -35,16 +35,31 @@
     <div id="race-picker" class="race-picker" hidden>
       <div class="race-picker-panel">
         <div class="picker-topline"><span class="wordmark">APEX<span class="brand-slash"></span></span><span class="eyebrow">EL ARCHIVO DE CARRERAS</span></div>
-        <div class="picker-heading"><div><p class="section-label">FÓRMULA 1 · REPLAY 3D</p><h1>La carrera, desde dentro.</h1><p class="race-picker-hint">Elige un Gran Premio. Tú decides cómo vivirlo.</p></div><button id="close-race-picker" class="icon-button" type="button" aria-label="Volver al replay" hidden><svg class="icon"><use href="#i-close" /></svg></button></div>
+        <div class="picker-heading"><div><p class="section-label">FÓRMULA 1 · REPLAY 3D</p><h1>La carrera, desde dentro.</h1><p class="race-picker-hint">Elige un Gran Premio. Tú decides cómo vivirlo.</p></div><button id="close-race-picker" class="icon-button" type="button" aria-label="Volver a la sesión" hidden><svg class="icon"><use href="#i-close" /></svg></button></div>
         <div id="race-picker-grid" class="race-picker-grid"></div>
         <p id="race-picker-empty" class="race-picker-empty" hidden>No hay carreras disponibles todavía.</p>
         <div class="picker-footer"><span class="source-dot"></span> DATOS DE OPENF1</div>
       </div>
     </div>
+    <section id="race-setup" class="race-picker race-setup" aria-labelledby="race-setup-title" hidden>
+      <div class="race-picker-panel">
+        <div class="picker-topline"><span class="wordmark">APEX<span class="brand-slash"></span></span><button id="race-setup-back" class="control-button" type="button">Volver</button></div>
+        <div class="picker-heading">
+          <div><p id="race-setup-circuit" class="section-label"></p><h1 id="race-setup-title" tabindex="-1">Elige un modo</h1><p id="race-setup-hint" class="race-picker-hint"></p></div>
+        </div>
+        <div id="race-mode-options" class="race-picker-grid race-mode-options">
+          <button class="race-picker-card" type="button" data-mode="replay"><svg class="icon" aria-hidden="true"><use href="#i-play" /></svg><strong class="race-picker-card-title">Ver replay</strong><span class="race-picker-card-meeting">Sigue la carrera desde las cámaras disponibles.</span></button>
+          <button class="race-picker-card" type="button" data-mode="race"><svg class="icon" aria-hidden="true"><use href="#i-driver" /></svg><strong class="race-picker-card-title">Conducir en carrera</strong><span class="race-picker-card-meeting">Toma el control de un piloto y rueda junto a los demás.</span></button>
+          <button class="race-picker-card" type="button" data-mode="ghost"><svg class="icon" aria-hidden="true"><use href="#i-flag" /></svg><strong class="race-picker-card-title">Contrarreloj</strong><span class="race-picker-card-meeting">Completa una vuelta contra la mejor vuelta válida de un piloto.</span></button>
+        </div>
+        <div id="race-driver-options" class="race-driver-options" hidden></div>
+        <p id="race-setup-status" class="race-picker-empty" role="status" hidden></p>
+      </div>
+    </section>
     <section id="race-loading" class="race-loading" aria-label="Cargando circuito" aria-busy="true" hidden>
       <div class="loading-brand"><span class="wordmark">APEX<span class="brand-slash"></span></span><span class="section-label">FÓRMULA 1 · REPLAY 3D</span></div>
       <div class="loading-content">
-        <p class="section-label">PREPARANDO TU REPLAY</p>
+        <p class="section-label">PREPARANDO EL CIRCUITO</p>
         <h1 id="loading-title">Circuito</h1>
         <p id="loading-subtitle" class="loading-subtitle"></p>
         <img id="loading-track" class="loading-track" alt="" />
@@ -58,11 +73,11 @@
         <div class="scene-shade" aria-hidden="true"></div>
         <header class="topbar player-chrome">
           <a class="wordmark" href="./" aria-label="APEX, elegir carrera">APEX<span class="brand-slash"></span></a>
-          <nav class="main-nav" aria-label="Navegación principal"><span class="nav-active">REPLAY 3D</span><button id="change-race-button" type="button">CARRERAS</button></nav>
+          <nav class="main-nav" aria-label="Navegación principal"><span id="active-race-mode" class="nav-active">REPLAY 3D</span><button id="change-race-button" type="button">CARRERAS</button></nav>
           <div class="topbar-right"><button id="enter-vr" class="control-button vr-button" type="button" hidden>Entrar en VR</button><button id="enter-ar" class="control-button vr-button ar-button" type="button" hidden disabled>Entrar en AR</button><output id="vr-status" class="vr-status" role="status" hidden></output><span class="data-source"><span class="source-dot"></span> DATOS OPENF1</span><span class="topbar-divider"></span><button id="help-button" class="icon-button" aria-label="Ayuda y atajos de teclado" title="Ayuda y atajos (?)" type="button"><svg class="icon"><use href="#i-info" /></svg></button></div>
         </header>
         <section class="race-heading player-chrome" aria-label="Información de la carrera">
-          <div class="race-badges"><span class="replay-badge"><span></span> REPLAY</span><span id="timing-lap-tag" class="lap-badge" hidden></span><div id="event-pill" class="event-pill" hidden></div></div>
+          <div class="race-badges"><span class="replay-badge"><span></span><span id="race-mode-badge">REPLAY</span></span><span id="timing-lap-tag" class="lap-badge" hidden></span><div id="event-pill" class="event-pill" hidden></div></div>
           <div class="race-title"><p id="session-season" class="section-label">FÓRMULA 1</p><h1 id="session-title">Cargando carrera…</h1><div class="race-subtitle"><span id="session-circuit">—</span></div></div>
         </section>
         <aside id="classification-panel" class="classification-panel floating-panel player-chrome" aria-label="Clasificación de la carrera">
@@ -111,9 +126,40 @@
         </aside>
         <div id="radio-broadcast" class="radio-broadcast" hidden><canvas aria-hidden="true"></canvas></div>
         <span id="radio-announcement" class="sr-only" role="status"></span>
+        <section id="driving-hud" class="driving-hud" aria-label="Información de conducción" hidden>
+          <div class="driving-timing floating-panel">
+            <p id="driving-driver" class="driving-driver"></p>
+            <div class="driving-metrics">
+              <div id="driving-position-panel" hidden><span>Posición</span><strong id="driving-position">—</strong></div>
+              <div><span id="driving-time-label">Tiempo</span><strong id="driving-time">0:00.000</strong></div>
+              <div id="driving-reference" hidden><span id="driving-reference-label">Vuelta fantasma</span><strong id="driving-reference-time"></strong></div>
+              <div id="driving-delta-panel" hidden><span>Diferencia</span><strong id="driving-delta">—</strong></div>
+            </div>
+            <p id="driving-progress"></p>
+            <p id="driving-note" role="status" hidden></p>
+          </div>
+          <div class="driving-speed floating-panel">
+            <div><strong id="driving-speed">0</strong><span>KM/H</span></div>
+            <div><strong id="driving-gear">1</strong><span>MARCHA</span></div>
+          </div>
+        </section>
+        <div id="driving-overlay" class="driving-overlay" hidden>
+          <section class="driving-result floating-panel" aria-labelledby="driving-overlay-title">
+            <h2 id="driving-overlay-title"></h2>
+            <p id="driving-overlay-detail"></p>
+            <p id="driving-keys" class="driving-keys"><kbd>W</kbd> / <kbd>↑</kbd> Acelerar · <kbd>S</kbd> / <kbd>↓</kbd> Frenar y marcha atrás<br /><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd> Girar<br /><kbd>V</kbd> Cambiar cámara · <kbd>Esc</kbd> Pausa · <kbd>R</kbd> Reiniciar</p>
+            <div class="driving-result-actions"><button id="driving-start" class="control-button" type="button">Empezar</button><button id="driving-home" class="control-button" type="button">Volver al inicio</button></div>
+          </section>
+        </div>
         <div id="status-pill" class="status-pill" role="status">Preparando experiencia…</div>
         <output id="graphics-stats" class="graphics-stats" aria-label="Rendimiento de la escena" hidden></output>
-        <footer class="player-controls player-chrome" aria-label="Controles del reproductor">
+        <footer class="player-controls player-chrome" aria-label="Controles">
+          <div id="driving-actions" class="driving-actions" hidden>
+            <button id="driving-camera" class="control-button" type="button" aria-pressed="false" title="Cambiar entre cabina y exterior (V)"><svg class="icon" aria-hidden="true"><use href="#i-camera" /></svg>Cabina</button>
+            <button id="driving-pause" class="control-button" type="button" title="Pausa (Escape)">Pausa</button>
+            <button id="driving-restart" class="control-button" type="button" title="Reiniciar (R)">Reiniciar</button>
+            <label id="driving-original" hidden><input id="driving-ghost-toggle" type="checkbox" /> Mostrar coche original</label>
+          </div>
           <p id="engine-status" class="engine-status" role="status" hidden>No se pudo activar el sonido del motor.</p>
           <div class="timeline-meta"><span id="playback-state">EN PAUSA</span><span id="time-readout">00:00.0 / 00:00.0</span></div>
           <div class="timeline-wrap"><input id="timeline" type="range" min="0" max="1000" value="0" aria-label="Posición del replay" /></div>
@@ -124,11 +170,12 @@
               <div class="engine-volume" role="group" aria-label="Sonido del circuito">
                 <button id="engine-mute" class="icon-button" type="button" aria-label="Silenciar circuito" title="Silenciar circuito"><svg class="icon" aria-hidden="true"><use href="#i-volume" /></svg></button>
                 <input id="engine-volume" type="range" min="0" max="100" value="50" aria-label="Volumen del circuito" />
+                <output id="engine-volume-readout" class="engine-volume-readout" for="engine-volume" aria-hidden="true">50 %</output>
               </div>
               <label class="speed-wrap"><span class="sr-only">Velocidad de reproducción</span><select id="speed-select" class="menu-select"><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="1.5">1,5×</option><option value="2">2×</option></select></label>
               <div id="camera-modes" class="camera-modes" role="group" aria-label="Cámara de pista"><button id="camera-auto" type="button" aria-pressed="true" title="Realización automática">Auto</button><button id="camera-free" type="button" aria-pressed="false" title="Cámara libre · WASD y ratón">Libre</button></div>
             </div>
-            <div class="view-controls"><button class="icon-button panel-toggle" data-toggle-panel="classification" type="button" aria-label="Mostrar u ocultar clasificación" aria-controls="classification-panel" aria-expanded="true" title="Clasificación (C)"><svg class="icon"><use href="#i-flag" /></svg></button><button class="icon-button panel-toggle" data-toggle-panel="inspector" type="button" aria-label="Mostrar u ocultar panel de carrera" aria-controls="inspector-panel" aria-expanded="true" title="Panel de carrera (P)"><svg class="icon"><use href="#i-driver" /></svg></button><button id="theater-button" class="icon-button" type="button" aria-label="Modo cine" aria-pressed="false" title="Modo cine (T)"><svg class="icon"><use href="#i-theater" /></svg></button><button id="settings-button" class="icon-button" type="button" aria-label="Ajustes de reproducción" aria-haspopup="dialog" aria-controls="settings-panel" aria-expanded="false" title="Ajustes"><svg class="icon"><use href="#i-settings" /></svg></button><button id="fullscreen-button" class="icon-button" type="button" aria-label="Pantalla completa" title="Pantalla completa (F)"><svg class="icon"><use href="#i-fullscreen" /></svg></button></div>
+            <div class="view-controls"><button class="icon-button panel-toggle" data-toggle-panel="classification" type="button" aria-label="Mostrar u ocultar clasificación" aria-controls="classification-panel" aria-expanded="true" title="Clasificación (C)"><svg class="icon"><use href="#i-flag" /></svg></button><button class="icon-button panel-toggle" data-toggle-panel="inspector" type="button" aria-label="Mostrar u ocultar panel de carrera" aria-controls="inspector-panel" aria-expanded="true" title="Panel de carrera (P)"><svg class="icon"><use href="#i-driver" /></svg></button><button id="theater-button" class="icon-button" type="button" aria-label="Modo cine" aria-pressed="false" title="Modo cine (T)"><svg class="icon"><use href="#i-theater" /></svg></button><button id="settings-button" class="icon-button" type="button" aria-label="Ajustes" aria-haspopup="dialog" aria-controls="settings-panel" aria-expanded="false" title="Ajustes"><svg class="icon" aria-hidden="true"><use href="#i-settings" /></svg><span class="driving-settings-label" aria-hidden="true">Ajustes</span></button><button id="fullscreen-button" class="icon-button" type="button" aria-label="Pantalla completa" title="Pantalla completa (F)"><svg class="icon"><use href="#i-fullscreen" /></svg></button></div>
           </div>
         </footer>
         <dialog id="settings-panel" class="settings-panel" aria-labelledby="settings-title">
