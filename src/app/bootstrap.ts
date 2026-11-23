@@ -31,6 +31,8 @@ import { createRaceLoader } from "./race-loader";
 import { loadRacesCatalog } from "../data/races-catalog";
 import type { RaceMilestoneControls } from "../types";
 
+const AR_AUDIO_INTERVAL_MS = 1000 / 30;
+
 export function startReplayApplication() {
   const canvas = mustQuery<HTMLCanvasElement>("#race-canvas");
   const appShell = mustQuery<HTMLElement>("#app");
@@ -81,6 +83,7 @@ export function startReplayApplication() {
     mustQuery<HTMLElement>("#timing-lap-tag"),
   );
   let lastTick = performance.now();
+  let nextArAudioUpdate = 0;
   const resetClock = () => { lastTick = performance.now(); };
   const loadingFrames = new AnimationFrames();
   const loadingView = new LoadingView(loadingFrames);
@@ -100,6 +103,7 @@ export function startReplayApplication() {
   }, openRaces);
   appShell.addEventListener("xrsessionchange", () => {
     resetClock();
+    nextArAudioUpdate = 0;
     const drivingInVr = driving.getSession() && scene.isXrPresenting() && !scene.isArPresenting();
     driving.setXrSession(drivingInVr ? scene.getRenderer().xr.getSession() : null);
   });
@@ -119,11 +123,13 @@ export function startReplayApplication() {
       paintFrame(frame, controller.getDuration(), scene, timingTower, ui);
       desktopPlayer.update(frame, mode, scene.getFollowDriver());
     }
-    if (scene.isArPresenting() || scene.getPresentationMode() === "tabletop") {
-      engine.silence();
-    } else if (replay.playing) {
-      engine.update(() => scene.getEngineAudioView(), Boolean(broadcast));
+    if (!replay.playing) return;
+    if (scene.getPresentationMode() === "tabletop") {
+      const now = performance.now();
+      if (now < nextArAudioUpdate) return;
+      nextArAudioUpdate = now + AR_AUDIO_INTERVAL_MS;
     }
+    engine.update(() => scene.getEngineAudioView(), Boolean(broadcast));
   };
   const { showInspector } = bindPlayerChrome(replay, render);
   const desktopPlayer = new DesktopPlayerView((mode, driver) => {

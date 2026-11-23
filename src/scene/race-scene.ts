@@ -648,6 +648,7 @@ export class RaceScene {
       position => position.clone().applyMatrix4(this.listenerSpace),
     ) ?? [];
     return { perspective, sources, grandstands, player,
+      tabletopWidthMeters: tabletop ? this.tabletop.getWidth() : undefined,
       subject: tabletop ? null : player ?? this.cameraController.getSubjectNumber() };
   }
 

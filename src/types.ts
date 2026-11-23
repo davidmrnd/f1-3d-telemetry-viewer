@@ -232,6 +232,7 @@ export interface FrameCarState {
 
 export interface EngineAudioView {
   perspective: "trackside" | "free" | "cockpit" | "tabletop";
+  tabletopWidthMeters?: number;
   subject: number | null;
   player?: number;
   sources: readonly { sample: CarSample; position: TrackPoint3D }[];

@@ -3,11 +3,14 @@ import type { EngineAudioView } from "../types";
 import { getEngineTarget } from "./engine-telemetry";
 
 const VOICE_COUNT = 3;
+const TABLETOP_VOICE_COUNT = 2;
+const TABLETOP_REFERENCE_WIDTH_METERS = 1.2;
+const TABLETOP_MAX_GAIN = 1.4;
 const VIEW_MIX = {
   trackside: { range: 260, reference: 18, cutoff: 8200, absorption: 55 },
   free: { range: 220, reference: 14, cutoff: 7600, absorption: 42 },
   cockpit: { range: 120, reference: 16, cutoff: 3000, absorption: 38 },
-  tabletop: { range: 12, reference: 2.4, cutoff: 5500, absorption: 3 },
+  tabletop: { range: 5, reference: 1.25, cutoff: 6800, absorption: 2.5 },
 };
 
 interface EngineVoice {
@@ -86,6 +89,11 @@ export class EngineAudio {
   private updateVoices(view: EngineAudioView, voices: EngineVoice[], now: number) {
     const mix = VIEW_MIX[view.perspective];
     const cockpit = view.perspective === "cockpit";
+    const tabletop = view.perspective === "tabletop";
+    const voiceCount = tabletop ? TABLETOP_VOICE_COUNT : VOICE_COUNT;
+    const retention = tabletop ? .92 : .8;
+    const width = view.tabletopWidthMeters ?? TABLETOP_REFERENCE_WIDTH_METERS;
+    const sizeGain = tabletop ? Math.min(TABLETOP_MAX_GAIN, Math.sqrt(width / TABLETOP_REFERENCE_WIDTH_METERS)) : 1;
     const candidates = view.sources.flatMap(({ sample, position }) => {
       const driver = sample.driverNumber;
       const distance = Math.hypot(position.x, position.y, position.z);
@@ -94,9 +102,9 @@ export class EngineAudio {
       const player = driver === view.player;
       if (!Number.isFinite(distance) || (distance >= mix.range && !ownCar && !player)) return [];
       const retained = voices.some(voice => voice.previous?.driver === driver);
-      const score = ownCar || player ? -1 : distance * (retained ? .8 : 1) * (subject ? .75 : 1);
+      const score = ownCar || player ? -1 : distance * (retained ? retention : 1) * (subject ? .75 : 1);
       return [{ sample, position, distance, ownCar, player, score }];
-    }).sort((a, b) => a.score - b.score).slice(0, VOICE_COUNT);
+    }).sort((a, b) => a.score - b.score).slice(0, voiceCount);
 
     for (const voice of voices) {
       if (!candidates.some(({ sample }) => sample.driverNumber === voice.previous?.driver)) releaseVoice(voice);
@@ -121,7 +129,7 @@ export class EngineAudio {
       const distanceGain = Math.max(0, 1 - distance / mix.range) / (1 + normalized * normalized);
       const level = ownCar ? .95 : player ? .82 : distanceGain * (cockpit ? .48 : .9);
       const cutoff = ownCar ? 4700 : mix.cutoff / (1 + distance / mix.absorption);
-      gain.gain.setTargetAtTime(level, now, .045);
+      gain.gain.setTargetAtTime(level * sizeGain, now, .045);
       lowpass.frequency.setTargetAtTime(Math.max(480, cutoff), now, .045);
     }
   }
