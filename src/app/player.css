@@ -22,7 +22,7 @@
 .race-title .section-label { font-size: 8px; letter-spacing: 1.8px; margin-bottom: 5px; color: #a1a3ac; }
 .race-title h1 { font-family: "Barlow Condensed", "Bahnschrift SemiCondensed", "Arial Narrow", sans-serif; font-size: 20px; font-weight: 650; line-height: 1.2; margin: 0; letter-spacing: .35px; text-transform: uppercase; }
 .race-subtitle { display: flex; justify-content: end; gap: 8px; color: #9597a1; font-size: 9px; letter-spacing: .5px; margin-top: 7px; text-transform: uppercase; }
-.floating-panel { background: rgba(9,10,13,.88); border: 1px solid var(--line); border-radius: 5px; backdrop-filter: blur(16px); }
+.floating-panel, .is-driving .player-controls { background: rgba(9,10,13,.88); border: 1px solid var(--line); border-radius: 5px; backdrop-filter: blur(16px); }
 .classification-panel { position: absolute; top: var(--panel-top); bottom: var(--bottom); left: var(--panel-edge); width: var(--tower-width); max-height: calc(100% - var(--panel-top) - var(--bottom)); display: flex; flex-direction: column; overflow: hidden; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 10px 14px; border-bottom: 1px solid var(--line); }
 .panel-heading h2 { margin: 0; color: #e0e1e5; font-size: 10px; font-weight: 600; letter-spacing: 1.2px; }

@@ -31,10 +31,10 @@
 }
 .race-driver-choice {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
-  min-height: 65px;
+  min-height: 74px;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-left: 3px solid var(--team-color, #6e727e);
@@ -45,11 +45,32 @@
 .race-driver-choice:hover, .race-driver-choice:focus-visible {
   background: #1c1e24;
 }
+.race-driver-portrait {
+  position: relative;
+}
+.race-driver-portrait .driver-portrait {
+  height: 52px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
 .race-driver-number, .race-driver-time {
   color: #f3f3f6;
   font-family: "Barlow Condensed", "Bahnschrift", sans-serif;
   font-variant-numeric: tabular-nums;
   font-size: 17px;
+}
+.race-driver-number {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  min-width: 19px;
+  padding: 1px 3px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #121319;
+  font-size: 13px;
+  line-height: 1;
+  text-align: center;
 }
 .race-driver-choice strong, .race-driver-choice small {
   display: block;
@@ -62,6 +83,9 @@
   margin-top: 3px;
   color: #a2a6b0;
   font-size: 10px;
+}
+.race-driver-identity {
+  overflow-wrap: anywhere;
 }
 .race-driver-record {
   text-align: right;
@@ -81,10 +105,8 @@
   left: auto;
   width: min(340px, calc(100% - 2 * var(--edge)));
   padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: #101217ed;
   z-index: 7;
+  font-variant-numeric: tabular-nums;
 }
 .is-driving .control-bar {
   flex-wrap: nowrap;
@@ -115,8 +137,6 @@
 .engine-volume-readout {
   min-width: 31px;
   margin-left: 4px;
-  color: #c5cad5;
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .is-driving .engine-status {
@@ -163,8 +183,10 @@
 }
 .driving-metrics span, .driving-speed span {
   display: block;
-  color: #a9adb8;
   font-size: 10px;
+}
+.driving-metrics span, .driving-speed span, .driving-actions label, .engine-volume-readout {
+  color: #a9adb8;
 }
 .driving-metrics strong {
   display: block;
@@ -214,21 +236,27 @@
   border-radius: 4px;
   font-size: 11px;
 }
-.driving-actions button { justify-content: center; }
+.driving-actions button {
+  justify-content: center;
+  background: #ffffff08;
+  font-weight: 600;
+}
 .driving-actions .icon { width: 16px; height: 16px; }
-.driving-actions button[aria-pressed="true"] { background: #3a2228; border-color: #9c5058; }
 .driving-actions label {
   grid-column: 1 / -1;
   min-height: 27px;
   padding: 2px 6px;
-  color: #c9cbd4;
   cursor: pointer;
 }
 .driving-actions input {
   accent-color: var(--accent);
 }
-.driving-actions button:hover, .driving-actions label:hover {
-  background: #2b2d35;
+.driving-actions button:hover:not(:disabled, [aria-pressed="true"]), .driving-actions label:hover {
+  background: #ffffff12;
+}
+.driving-actions button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
 }
 .driving-actions button:disabled {
   opacity: .45;

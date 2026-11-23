@@ -3,6 +3,7 @@ import type { DriverInfo, GhostLap } from "../types";
 import { setAppTitle } from "./document-title";
 import { mustQuery } from "./dom";
 import type { DrivingMode } from "./driving-session";
+import { driverPortrait } from "./driver-portrait";
 import { formatLapTime } from "./format";
 
 export type RaceMode = "replay" | DrivingMode;
@@ -103,13 +104,17 @@ export class RaceSetupView {
     const number = document.createElement("span");
     number.className = "race-driver-number";
     number.textContent = String(driver.driverNumber);
+    const portrait = document.createElement("span");
+    portrait.className = "race-driver-portrait";
+    portrait.append(driverPortrait(driver), number);
     const identity = document.createElement("span");
+    identity.className = "race-driver-identity";
     const name = document.createElement("strong");
     name.textContent = driver.fullName;
     const team = document.createElement("small");
     team.textContent = driver.teamName;
     identity.append(name, team);
-    button.append(number, identity);
+    button.append(portrait, identity);
     if (lap) {
       const record = document.createElement("span");
       record.className = "race-driver-record";

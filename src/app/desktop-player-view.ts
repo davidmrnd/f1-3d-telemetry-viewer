@@ -3,6 +3,7 @@ import type { DriverInfo, RaceMilestoneControls, ReplayFrame, ReplaySegment, Tea
 import { MilestoneListView } from "./milestone-list-view";
 import { projectCircuit } from "./circuit-map";
 import { mustQuery } from "./dom";
+import { driverPortrait } from "./driver-portrait";
 import { formatDelta, formatReplayTime } from "./format";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -19,21 +20,6 @@ function label(tag: string, className: string, text: string) {
 
 function driverName(name: string) {
   return name.toLocaleLowerCase("es").replace(/(^|[ '-])\p{L}/gu, (letter) => letter.toLocaleUpperCase("es"));
-}
-
-function driverPortrait(driver: DriverInfo) {
-  const portrait = label("span", "driver-portrait", driver.acronym);
-  portrait.setAttribute("aria-hidden", "true");
-  if (driver.headshotUrl) {
-    const image = document.createElement("img");
-    image.alt = "";
-    image.decoding = "async";
-    image.loading = "lazy";
-    image.addEventListener("load", () => { image.classList.add("is-loaded"); }, { once: true });
-    image.src = driver.headshotUrl;
-    portrait.append(image);
-  }
-  return portrait;
 }
 
 export class DesktopPlayerView {
