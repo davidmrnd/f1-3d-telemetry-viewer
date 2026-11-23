@@ -74,6 +74,16 @@
         <header class="topbar player-chrome">
           <a class="wordmark" href="./" aria-label="APEX, elegir carrera">APEX<span class="brand-slash"></span></a>
           <nav class="main-nav" aria-label="Navegación principal"><span id="active-race-mode" class="nav-active">REPLAY 3D</span><button id="change-race-button" type="button">CARRERAS</button></nav>
+          <section id="graphics-stats" class="graphics-stats" aria-label="Rendimiento de la escena" hidden>
+            <span id="graphics-stats-mode" class="graphics-stats-mode" hidden></span>
+            <dl>
+              <div class="graphics-stats-fps"><dt>FPS</dt><dd id="graphics-stats-fps">—</dd></div>
+              <div><dt><abbr title="Milisegundos por fotograma">ms/fot.</abbr></dt><dd id="graphics-stats-frame-time">—</dd></div>
+              <div><dt>Resolución</dt><dd id="graphics-stats-resolution">—</dd></div>
+              <div><dt title="Llamadas de dibujo">Llamadas</dt><dd id="graphics-stats-calls">—</dd></div>
+              <div><dt>Triángulos</dt><dd id="graphics-stats-triangles">—</dd></div>
+            </dl>
+          </section>
           <div class="topbar-right"><button id="enter-vr" class="control-button vr-button" type="button" hidden>Entrar en VR</button><button id="enter-ar" class="control-button vr-button ar-button" type="button" hidden disabled>Entrar en AR</button><output id="vr-status" class="vr-status" role="status" hidden></output><span class="data-source"><span class="source-dot"></span> DATOS OPENF1</span><span class="topbar-divider"></span><button id="help-button" class="icon-button" aria-label="Ayuda y atajos de teclado" title="Ayuda y atajos (?)" type="button"><svg class="icon"><use href="#i-info" /></svg></button></div>
         </header>
         <section class="race-heading player-chrome" aria-label="Información de la carrera">
@@ -152,7 +162,6 @@
           </section>
         </div>
         <div id="status-pill" class="status-pill" role="status">Preparando experiencia…</div>
-        <output id="graphics-stats" class="graphics-stats" aria-label="Rendimiento de la escena" hidden></output>
         <footer class="player-controls player-chrome" aria-label="Controles">
           <div id="driving-actions" class="driving-actions" hidden>
             <button id="driving-camera" class="control-button" type="button" aria-pressed="false" title="Cambiar entre cabina y exterior (V)"><svg class="icon" aria-hidden="true"><use href="#i-camera" /></svg>Cabina</button>
@@ -232,7 +241,7 @@
                 <label class="settings-field"><span>Iluminación</span><select class="menu-select" data-graphics="lighting"><option value="day">Día natural</option><option value="warm">Tarde cálida</option><option value="overcast">Luz nublada</option></select></label>
                 <label class="settings-field"><span>Exposición</span><select class="menu-select" data-graphics="exposure"><option value="0.8">Suave · 0,8</option><option value="1">Normal · 1</option><option value="1.2">Luminosa · 1,2</option></select></label>
                 <label class="settings-field"><span>Cielo detallado</span><select class="menu-select" data-graphics="sky"><option value="on">Activado</option><option value="off">Cielo sencillo</option></select></label>
-                <label class="settings-field"><span>Estilo de cielo</span><select class="menu-select" data-graphics="skyStyle"><option value="clear">Despejado</option><option value="hdri">Nubes · HDR</option></select></label>
+                <label class="settings-field"><span>Estilo de cielo</span><select class="menu-select" data-graphics="skyStyle"><option value="clear">Despejado</option><option value="hdri" selected>Nubes · HDR</option></select></label>
                 <label class="settings-field"><span>Reflejos del entorno</span><select id="graphics-environment-select" class="menu-select" data-graphics="environment"><option value="on">Activados</option><option value="off">Desactivados</option></select></label>
                 <label class="settings-field"><span>Intensidad de reflejos</span><select class="menu-select" data-graphics="environmentIntensity"><option value="0.3">Suave</option><option value="0.6">Natural</option><option value="1">Intensa</option></select></label>
               </section>

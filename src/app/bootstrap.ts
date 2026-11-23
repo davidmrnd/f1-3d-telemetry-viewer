@@ -74,7 +74,7 @@ export function startReplayApplication() {
     },
   };
   const scene = new RaceScene(canvas, radioPlayer, milestones);
-  const graphicsPerformance = new GraphicsPerformanceView(mustQuery<HTMLOutputElement>("#graphics-stats"));
+  const graphicsPerformance = new GraphicsPerformanceView(mustQuery<HTMLElement>("#graphics-stats"));
   const replay = new ReplayApp(radioPlayer, () => engine.silence());
   const timingTower = new TimingTowerView(
     mustQuery<HTMLDivElement>("#timing-tower"),

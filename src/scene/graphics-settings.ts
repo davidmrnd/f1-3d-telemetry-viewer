@@ -49,7 +49,7 @@ const BASE: GraphicsSettingsValues = {
   maxPixelRatio: 1.25, shadows: "medium", shadowDistance: 120,
   environment: true, environmentIntensity: 0.6, fog: true, drawDistance: 3200,
   xrScale: 1.25, xrFoveation: 0, carMaterials: "pbr", carShadows: true,
-  detailedCarDistance: 120, contactShadows: true, surfaceDetail: true, anisotropy: 8, sky: true, skyStyle: "clear",
+  detailedCarDistance: 120, contactShadows: true, surfaceDetail: true, anisotropy: 8, sky: true, skyStyle: "hdri",
   exposure: 1, lighting: "day", runoffs: true,
   trackside: true, tyreMarks: true, showStats: false,
 };

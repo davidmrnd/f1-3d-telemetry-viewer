@@ -287,7 +287,32 @@
 .graphics-reset { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 4px 9px; border: 1px solid var(--line); border-radius: 4px; color: #c9ccd5; font-size: 11px; white-space: nowrap; }
 .graphics-reset:hover { border-color: #ffffff35; background: #ffffff09; color: #fff; }
 .graphics-reset .icon { width: 14px; height: 14px; }
-.graphics-stats { position: absolute; top: 76px; left: 50%; transform: translateX(-50%); z-index: 4; padding: 8px 12px; border: 1px solid #38414c; border-radius: 4px; background: rgba(10,14,18,.92); color: #cee0ce; font: 10px/1.6 monospace; white-space: pre-line; pointer-events: none; }
+.graphics-stats {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  width: max-content;
+  max-width: 100%;
+  padding: 5px 3px 5px 9px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  border-radius: 4px;
+  background: linear-gradient(105deg, #241117, #101217 34%);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.graphics-stats-mode { color: #ffd3d5; font: 700 10px/1 Inter, sans-serif; letter-spacing: .06em; }
+.graphics-stats dl { display: flex; align-items: center; margin: 0; }
+.graphics-stats dl > div { display: grid; gap: 2px; padding-inline: 9px; }
+.graphics-stats dl > div + div { border-left: 1px solid var(--line); }
+.graphics-stats dt { color: #a9adb8; font-size: 8px; font-weight: 600; line-height: 1; letter-spacing: .045em; text-transform: uppercase; }
+.graphics-stats abbr { text-decoration: none; }
+.graphics-stats dd { margin: 0; color: #f5f5f6; font-size: 11px; font-weight: 600; line-height: 1; }
+.graphics-stats dl > .graphics-stats-fps { grid-template-columns: minmax(2.2ch, auto) auto; align-items: baseline; gap: 4px; }
+.graphics-stats-fps dt { order: 1; color: #ffd3d5; }
+.graphics-stats-fps dd { font-family: "Barlow Condensed", "Bahnschrift SemiCondensed", "Arial Narrow", sans-serif; font-size: 24px; font-weight: 700; text-align: right; }
+.topbar:has(.graphics-stats:not([hidden])) { column-gap: clamp(12px, 1.7vw, 30px); }
+.topbar:has(.graphics-stats:not([hidden])) .topbar-right { margin-left: 0; }
 .is-theater .classification-panel, .is-theater .inspector-panel { opacity: 0; transform: translateY(8px); pointer-events: none; visibility: hidden; }
 .is-theater .topbar { background: transparent; border-color: transparent; }
 .is-idle .player-chrome:not(.floating-panel) { opacity: 0; pointer-events: none; }
@@ -295,6 +320,8 @@
 .is-idle .classification-panel, .is-idle .inspector-panel { top: var(--panel-edge); bottom: var(--panel-edge); max-height: calc(100% - var(--panel-edge) - var(--panel-edge)); }
 .is-idle { cursor: none; }
 .is-idle .player-chrome:has(:focus-visible) { opacity: 1; pointer-events: auto; }
+.is-idle:not(.is-driving) .topbar:has(.graphics-stats:not([hidden])):not(:has(:focus-visible)) { opacity: 1; background: transparent; border-color: transparent; }
+.is-idle:not(.is-driving) .topbar:has(.graphics-stats:not([hidden])):not(:has(:focus-visible)) > :not(.graphics-stats) { opacity: 0; }
 .shell:fullscreen, .shell.is-fullscreen { height: 100dvh; width: 100%; }
 @media (min-width: 1800px) {
   :root { --tower-width: 278px; --inspector-width: 340px; --panel-top: 190px; --bottom: 155px; --top: 88px; }
@@ -379,4 +406,27 @@
   .timing-row { min-height: 23px; }
   .player-controls { padding-bottom: 12px; }
   .timeline-wrap { height: 20px; margin-bottom: 2px; }
+}
+
+@media (max-width: 1240px) {
+  .topbar:has(.graphics-stats:not([hidden])) {
+    display: grid;
+    grid-template: minmax(0, 1fr) 26px / auto auto 1fr;
+  }
+  .topbar:has(.graphics-stats:not([hidden])) .topbar-right { justify-self: end; }
+  .topbar:has(.graphics-stats:not([hidden])) .topbar-right .icon-button { height: 30px; }
+  .topbar:has(.graphics-stats:not([hidden])) .vr-button { padding-block: 5px; }
+  .graphics-stats {
+    grid-area: 2 / 1 / 3 / -1;
+    justify-self: center;
+    margin: 0;
+    padding-block: 2px;
+  }
+  .graphics-stats-fps dd { font-size: 19px; }
+}
+@media (max-width: 470px) {
+  .graphics-stats dl > div { padding-inline: 5px; }
+  .graphics-stats dt { letter-spacing: 0; }
+  .graphics-stats dd { font-size: 10px; }
+  .graphics-stats-fps dd { font-size: 18px; }
 }
