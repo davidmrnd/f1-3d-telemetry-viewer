@@ -9,6 +9,7 @@ import {
   resolveCarLivery,
 } from "./car-livery";
 import type { DriverInfo } from "../types";
+import { prepareCarWheels } from "./car-wheels";
 
 export const CAR_TEMPLATE_LENGTH = 0.32;
 export const CAR_MODEL_YAW_OFFSET = Math.PI / 2;
@@ -287,6 +288,7 @@ export function preloadCarModels(): Promise<void> {
       ]);
       limitObjectTextures(detailedScene, DETAILED_CAR_MAX_TEXTURE_SIZE);
       await Promise.all(getLiveryTextureUrls().map(loadLiveryBodyTexture));
+      prepareCarWheels(detailedScene);
       preparedTemplate = finalizeTemplate(detailedScene);
       preparedLowPolyTemplate = finalizeTemplate(lowPolyScene);
     })

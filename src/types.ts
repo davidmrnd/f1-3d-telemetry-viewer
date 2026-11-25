@@ -35,6 +35,7 @@ export interface PlayerVehicle extends VehiclePose {
   speed: number;
   lateralSpeed: number;
   steering: number;
+  steeringAngle: number;
 }
 
 export interface DrivingSurface {

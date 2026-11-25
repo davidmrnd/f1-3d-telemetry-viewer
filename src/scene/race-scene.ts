@@ -35,7 +35,7 @@ import {
   createStartFinishDecor,
   type StartFinishDecor,
 } from "./start-finish";
-import type { DriverInfo, EngineAudioView, FrameCarState, RaceMilestoneControls, RadioBroadcastState, ReplayFrame, ReplaySegment, StartingGridSlot, TeamRadioClip, TeamRadioControls, VehiclePose } from "../types";
+import type { DriverInfo, EngineAudioView, FrameCarState, PlayerVehicle, RaceMilestoneControls, RadioBroadcastState, ReplayFrame, ReplaySegment, StartingGridSlot, TeamRadioClip, TeamRadioControls, VehiclePose } from "../types";
 import { DrivingTrack } from "./driving-track";
 import { GhostCar } from "./ghost-car";
 import { paintRadioBroadcast, RADIO_CARD_HEIGHT, RADIO_CARD_WIDTH } from "./radio-broadcast-graphic";
@@ -284,6 +284,7 @@ export class RaceScene {
     this.tabletopControls.enabled = mode === "tabletop";
     if (mode === "tabletop") this.controls.enabled = false;
     else this.cameraController.setMode(this.getCameraMode(), this.controls);
+    this.resetWheelMotion();
     this.tabletop.resetTrails();
   }
 
@@ -539,7 +540,7 @@ export class RaceScene {
   }
 
   updateDriving(
-    recorded: BaseCarPlacement[], player: FrameCarState, pose: VehiclePose, ghost: VehiclePose | null, time: number, snap: boolean,
+    recorded: BaseCarPlacement[], player: FrameCarState, pose: PlayerVehicle, ghost: VehiclePose | null, time: number, snap: boolean,
     cockpit: boolean,
   ) {
     const now = performance.now();
@@ -560,8 +561,10 @@ export class RaceScene {
     this.drivingCamera.update(pose, this.camera, this.controls.target, dt, snap, this.drivingCockpit, vr);
     if (vr) this.xrRig.applyDesiredCamera(this.camera);
     this.lighting.update(this.controls.target);
-    this.cars.updateDetail(this.camera, vr, this.graphicsSettings.detailedCarDistance,
-      this.drivingCockpit ? player.driver.driverNumber : undefined);
+    if (snap) this.resetWheelMotion();
+    this.cars.updateDetail(this.camera, vr, this.graphicsSettings.detailedCarDistance, time, this.traffic, {
+      driverNumber: player.driver.driverNumber, steeringAngle: pose.steeringAngle, cockpit: this.drivingCockpit,
+    });
   }
 
   async prepareTraffic(
@@ -670,6 +673,10 @@ export class RaceScene {
     return this.cameraController.getActiveLabel();
   }
 
+  resetWheelMotion() {
+    this.cars.resetWheelMotion();
+  }
+
   update(frame: ReplayFrame) {
     const nowMs = performance.now();
     const deltaSeconds = Math.min((nowMs - this.lastUpdateMs) / 1000, 0.1);
@@ -726,7 +733,7 @@ export class RaceScene {
       }
     }
     this.lighting.update(this.controls.target);
-    this.cars.updateDetail(this.camera, xrPresenting, this.graphicsSettings.detailedCarDistance);
+    this.cars.updateDetail(this.camera, xrPresenting, this.graphicsSettings.detailedCarDistance, frame.now, this.traffic);
 
     if (xrPresenting) {
       this.xrRig.applyDesiredCamera(this.camera);

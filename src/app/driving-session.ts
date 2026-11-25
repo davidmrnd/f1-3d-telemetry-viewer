@@ -53,7 +53,7 @@ export class DrivingSession {
       this.opponents = frame.cars.map(car => car.driver.driverNumber).filter(number => number !== driverNumber);
       this.raceOrder = track.createRaceOrder(source.replay.getSegment(), source.start, placements, driverNumber);
     }
-    this.startVehicle = { ...pose, speed: this.startCar.sample.speed / 3.6, lateralSpeed: 0, steering: 0 };
+    this.startVehicle = { ...pose, speed: this.startCar.sample.speed / 3.6, lateralSpeed: 0, steering: 0, steeringAngle: 0 };
     this.player = { ...this.startVehicle };
     this.reset();
   }
