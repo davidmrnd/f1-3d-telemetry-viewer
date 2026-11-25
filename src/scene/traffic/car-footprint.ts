@@ -6,7 +6,7 @@ export type TrafficPose = VehiclePose;
 const HALF_LENGTH = F1_CAR_LENGTH_METERS / 2 + 0.07;
 export const HALF_WIDTH = 1.12;
 const MODEL_HEIGHT = 1.2;
-const CORNER_RADIUS = Math.hypot(HALF_LENGTH + MODEL_HEIGHT, HALF_WIDTH);
+export const CAR_FOOTPRINT_RADIUS = Math.hypot(HALF_LENGTH + MODEL_HEIGHT, HALF_WIDTH);
 
 export function angleDelta(from: number, to: number): number {
   const delta = to - from;
@@ -47,8 +47,22 @@ function projectionRadius(length: number, fx: number, fz: number, x: number, z: 
   return length * Math.abs(x * fx + z * fz) + HALF_WIDTH * Math.abs(z * fx - x * fz);
 }
 
+export function sweptClearanceAlong(
+  a: CarMotion, b: CarMotion, x: number, z: number, maxSideShift: number, headingChord: number,
+): number {
+  const start = (b.from.x - a.from.x) * x + (b.from.z - a.from.z) * z;
+  const end = (b.to.x - a.to.x) * x + (b.to.z - a.to.z) * z;
+  const sign = Math.sign(start);
+  const clearance = (gap: number, ax: number, az: number, bx: number, bz: number) =>
+    sign * gap - projectionRadius(a.length, ax, az, x, z) - projectionRadius(b.length, bx, bz, x, z)
+    - maxSideShift * (Math.abs(ax * z - az * x) + Math.abs(bx * z - bz * x));
+  const headingMargin = headingChord * (Math.hypot(a.length, HALF_WIDTH) + Math.hypot(b.length, HALF_WIDTH));
+  return Math.min(clearance(start, a.ax, a.az, b.ax, b.az), clearance(end, a.bx, a.bz, b.bx, b.bz))
+    - a.rotationMargin - b.rotationMargin - headingMargin;
+}
+
 function mayConflict(a: CarMotion, b: CarMotion): boolean {
-  const reach = 2 * CORNER_RADIUS;
+  const reach = 2 * CAR_FOOTPRINT_RADIUS;
   if (a.minX - b.maxX > reach || b.minX - a.maxX > reach ||
     a.minZ - b.maxZ > reach || b.minZ - a.maxZ > reach) return false;
 
@@ -95,7 +109,7 @@ export function motionsConflict(a: CarMotion, b: CarMotion, depth = 2): boolean 
 }
 
 export function separatingContact(a: TrafficPose, b: TrafficPose) {
-  if (Math.abs(a.x - b.x) > 2 * CORNER_RADIUS || Math.abs(a.z - b.z) > 2 * CORNER_RADIUS) return null;
+  if (Math.abs(a.x - b.x) > 2 * CAR_FOOTPRINT_RADIUS || Math.abs(a.z - b.z) > 2 * CAR_FOOTPRINT_RADIUS) return null;
   const am = carMotion(a, a);
   const bm = carMotion(b, b);
   if (Math.abs(a.y - b.y) >= MODEL_HEIGHT + am.verticalMargin + bm.verticalMargin) return null;

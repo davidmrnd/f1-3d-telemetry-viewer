@@ -575,9 +575,22 @@ export class RaceScene {
     grid.reset(this.gridHolds);
     const steps = buildTrafficTimelineSteps(duration, (now) => {
       const frame = frameAt(now);
-      const base = buildVisualPlacements(frame, transform, grid.resolve(frame));
+      const gridOffsets = grid.resolve(frame);
+      const base = buildVisualPlacements(frame, transform, gridOffsets);
+      const recorded = new Set(base);
       const placements = this.startFinish?.placeCars(base, now) ?? base;
-      return this.pitPlacement?.apply(placements, now) ?? placements;
+      const onTrack = this.pitPlacement?.apply(placements, now) ?? placements;
+      const phase = frame.trackStatus?.phase;
+      const onCircuit = phase !== "standing_start" && phase !== "red" && phase !== "finished";
+      return onTrack.map(placement => {
+        const id = placement.car.driver.driverNumber;
+        return {
+          ...placement,
+          allowLineVariation: onCircuit && recorded.has(placement)
+            && Math.abs(gridOffsets.offsets.get(id) ?? 0) < 0.05
+            && !placement.car.retirement && !frame.activeEvent?.drivers.includes(id),
+        };
+      });
     }, this.trafficRoads, () => grid.reset(this.gridHolds));
     let step = steps.next();
     while (!step.done) {

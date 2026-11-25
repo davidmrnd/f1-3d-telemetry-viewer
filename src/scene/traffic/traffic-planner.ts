@@ -3,7 +3,7 @@ import { angleDelta, carMotion, interpolatePose, motionsConflict, type CarMotion
 const LANE_SPACING = 2.55;
 const MAX_LANE_SHIFT = 5;
 const LOOKAHEAD_SECONDS = 1;
-const SIDE_BY_SIDE_DISTANCE = 6.7;
+export const SIDE_BY_SIDE_DISTANCE = 6.7;
 const MAX_SIDE_SPEED = 3.8;
 const MAX_SPEED = 105;
 
